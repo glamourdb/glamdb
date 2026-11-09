@@ -16,6 +16,6 @@ concurrency, or performance. Write "Not applicable" when none are affected.
 
 Describe dependency changes and any migration or release-note requirements.
 
-Two approvals from distinct members of `@glamourdb/maintainers` and all required
-checks are necessary before merge. Report security vulnerabilities privately as
-described in [SECURITY.md](../SECURITY.md).
+One approval from a member of `@glamourdb/maintainers` other than the author and
+all required checks are necessary before merge. Report security vulnerabilities
+privately as described in [SECURITY.md](../SECURITY.md).

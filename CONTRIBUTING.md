@@ -12,10 +12,13 @@ Dependency updates follow the same fork and pull request process.
 
 ## Review and merge requirements
 
-Every pull request needs at least **two approvals from distinct members of
-`@glamourdb/maintainers`**. The author cannot approve their own pull request.
-For a pull request authored by one of the three current maintainers, both other
-maintainers must approve it.
+Every pull request needs at least **one approval from a member of
+`@glamourdb/maintainers` other than its author**.
+
+Organization membership does not automatically add someone to this team.
+Organization owners or team maintainers add members explicitly. When inviting
+someone new, they can invite that person through the team so membership is
+assigned when the invitation is accepted.
 
 - New changes dismiss earlier approvals. The latest reviewable push also needs
   approval from someone other than its pusher.
@@ -25,8 +28,8 @@ maintainers must approve it.
 - These requirements also apply to workflow, dependency, release, policy, and
   CODEOWNERS changes. There is no normal administrator or bot bypass.
 
-The repository ruleset enforces the two team approvals. CODEOWNERS requests the
-maintainers' review but does not enforce that count on its own.
+The repository ruleset enforces the required maintainer approval. CODEOWNERS
+requests the maintainers' review but does not enforce that count on its own.
 
 ## Checks and testing
 
