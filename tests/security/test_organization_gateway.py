@@ -159,7 +159,6 @@ def test_metrics_are_on_a_dedicated_listener_with_bounded_request_labels(organiz
             client.request(f"CUSTOM-METHOD-{index}", f"/databases/alpha/v0/missing-{index}")
     with httpx.Client(trust_env=False) as client:
         metrics = client.get(f"http://127.0.0.1:{gateway.metrics_port}/metrics")
-        (ROOT / "artifacts/platform-operations/actual-caddy.prom").write_text(metrics.text)
         assert metrics.status_code == 200
         assert "caddy_http_request_duration_seconds_count" in metrics.text
         assert 'handler="subroute"' in metrics.text
