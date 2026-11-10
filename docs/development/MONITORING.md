@@ -51,6 +51,11 @@ if not p.exists():
     with os.fdopen(fd, 'w') as f:
         f.write(secrets.token_urlsafe(32))
 PY
+# Linux Docker: install a separate secret readable by the image's UID472.
+# Run from your normal shell; only install needs sudo to set numeric ownership.
+sudo install -m 0400 -o 472 -g 0 \
+  artifacts/monitoring/grafana-password artifacts/monitoring/grafana-password.container
+export GLAMDB_GRAFANA_PASSWORD_FILE="$PWD/artifacts/monitoring/grafana-password.container"
 docker network create glamdb-observability
 docker compose -f deploy/monitoring/compose.yml config --quiet
 docker compose -f deploy/monitoring/compose.yml up -d
@@ -59,6 +64,13 @@ docker compose -f deploy/monitoring/compose.yml up -d
 Create the network only if it does not already exist. Grafana is at
 `http://127.0.0.1:3000`, username `admin`, with the password in that file.
 Prometheus is at `http://127.0.0.1:9090`. Open the `GlamDB` dashboard folder.
+The original password stays caller-owned with mode0600 for operator login and
+Kubernetes secret creation. The container copy is UID472/mode0400. Compose
+file-backed secrets are bind mounts: `uid`, `gid` and `mode` in Compose do not
+remap the host file. Do not make the file world-readable; rootless engines need
+the corresponding mapped UID. Keep the containing directory trusted. Existing
+Grafana data keeps its existing administrator password after file replacement.
+See [Compose secret ownership](https://docs.docker.com/reference/compose-file/services/#secrets).
 Both published listeners bind loopback; anonymous login and sign-up are disabled.
 Use an SSH tunnel for a remote machine. Do not expose these endpoints directly
 to an untrusted network.
@@ -86,6 +98,14 @@ The separate logging stack joins the same `glamdb-observability` network. If
 using its optional standalone Grafana override, choose that Grafana or this
 one: both use local port 3000. To scrape Alloy, place its private endpoint
 (`alloy:12345`) in `targets/alloy.json`, labels `cluster` and `service` as above.
+To enable Loki WAL/disk checks, put `loki:3100` in `targets/loki.json`, with
+`cluster: local` and `service: logging`. This is optional private discovery;
+`[]` leaves it disabled. The scrape job is **`loki`**, matching the alert
+selectors, and uses Loki's `/metrics` on the same private listener. Do not
+expose its unauthenticated API publicly merely to scrape it. For native
+Prometheus use `local_config.py --loki 127.0.0.1:3100` (or an explicitly private
+reachable address). The WAL usage metric is a 0..1 fraction despite its
+`_percent` suffix; no missing target is treated as healthy.
 `prometheus-alerting.yml` adds the optional Alertmanager endpoint and alert
 transport scrape; it does not require them for the base stack.
 

@@ -1,6 +1,8 @@
 import importlib.util
 import io
 import json
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -106,6 +108,16 @@ class ResourceTests(unittest.TestCase):
 
 
 class DeploymentTests(unittest.TestCase):
+    def test_native_loki_inventory_is_optional_and_uses_the_alert_job(self):
+        result = subprocess.run([sys.executable, str(ROOT / "tools/monitoring/local_config.py"),
+                                 "--loki", "127.0.0.1:3100"], capture_output=True, text=True, check=True)
+        config = json.loads(result.stdout)
+        self.assertEqual(len(config["scrape_configs"]), 1)
+        job = config["scrape_configs"][0]
+        self.assertEqual(job["job_name"], "loki")
+        self.assertEqual(job["static_configs"][0]["targets"], ["127.0.0.1:3100"])
+        self.assertEqual(job["static_configs"][0]["labels"]["cluster"], "local")
+
     def test_actual_caddy_route_label_contract(self):
         captured = (ROOT / "tools/monitoring/tests/fixtures/caddy-2.11.9.prom").read_text()
         samples = [line for line in captured.splitlines() if line.startswith("caddy_http_request_duration_seconds_count{")]
