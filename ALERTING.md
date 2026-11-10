@@ -58,9 +58,13 @@ rejected by OAuth2 Proxy before reaching the application, including 401/403,
 429/503 and 502/504. Configure both `glamdb-gateway` and `glamdb-edge` targets.
 Native metrics come from the live private `glamdb-core` endpoint, not a CLI
 snapshot file. System checks use node_exporter and kubelet/cAdvisor metrics.
-Container checks require real namespace/pod/container labels and
-`container_last_seen`; unlabelled Compose containers do not establish Kubernetes
-pod coverage. The exact anonymous-memory check remains NODATA because the
+Container checks require real namespace/pod/container labels, exporter
+availability and fresh timestamps on the raw CPU/memory samples. Preserve
+Prometheus's `honor_timestamps: true` for cAdvisor/kubelet: their raw statistics
+carry the collector sample time. `container_last_seen` is a scrape-time clock
+in [cAdvisor 0.60.6](https://github.com/google/cadvisor/blob/v0.60.6/lib/metrics/prometheus.go#L127)
+and is not a statistics-freshness source.
+Unlabelled Compose containers do not establish Kubernetes pod coverage. The exact anonymous-memory check remains NODATA because the
 configured standard collector does not expose that field; RSS and working set
 are not substituted. The reserved administrative-anomaly source also remains
 NODATA until an actual producer exists.
