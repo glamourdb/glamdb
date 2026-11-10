@@ -10,6 +10,7 @@ if (!process.env.GLAMDB_PROTECTED_TEST_USER || !process.env.GLAMDB_PROTECTED_TES
 
 export default defineConfig({
     testDir: './tests/protected-demo',
+    testMatch: 'access.spec.mjs',
     timeout: 30000,
     expect: { timeout: 7000 },
     workers: 1,

@@ -1,0 +1,27 @@
+[Unit]
+Description=GlamDB organization workbench
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=glamdb
+Group=glamdb
+WorkingDirectory=/opt/glamdb
+ExecStart=/usr/bin/python3 -m apps.workbench_access --catalog /var/lib/glamdb/access/authorization.sqlite --host workbench.example.com --caddy /usr/local/bin/caddy --output /opt/glamdb/artifacts/workbench-access/site --state /opt/glamdb/artifacts/workbench-access/state --metrics-listen 127.0.0.1:9464
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=110
+UMask=0077
+NoNewPrivileges=true
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/glamdb/access /var/lib/glamdb/.local/state/glamdb-workbench/listeners /opt/glamdb/artifacts/workbench-access
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

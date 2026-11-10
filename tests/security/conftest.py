@@ -1,6 +1,7 @@
 """Disposable real Caddy process, TLS CA and credentials; no mock adapter."""
 
 import os
+from contextlib import ExitStack
 from pathlib import Path
 import secrets
 import shutil
@@ -17,6 +18,14 @@ from tests.integration.helpers.http_server import make_tls_material
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def loopback_connections_stay_local():
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("NO_PROXY", "127.0.0.1,localhost,::1")
+        patch.setenv("no_proxy", "127.0.0.1,localhost,::1")
+        yield
 
 
 def free_port():
@@ -112,3 +121,49 @@ def protected_site(tmp_path_factory):
             yield site
         finally:
             site.stop()
+
+
+@pytest.fixture(scope="session")
+def group_gateway(tmp_path_factory):
+    from .group_gateway import GroupGateway
+
+    caddy = shutil.which(os.environ.get("GLAMDB_DEMO_CADDY", "caddy"))
+    if caddy is None:
+        pytest.fail("Real Caddy required: python3 scripts/fetch-demo-caddy.py")
+    tls = make_tls_material(tmp_path_factory.mktemp("group-gateway-ca"))
+    (ROOT / "artifacts").mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="group-gateway-test-", dir=ROOT / "artifacts") as path:
+        with ExitStack() as stack:
+            gateway = GroupGateway(Path(path), tls, caddy)
+            gateway.start_backends(stack)
+            stack.callback(gateway.stop)
+            gateway.start()
+            yield gateway
+
+
+@pytest.fixture(scope="session")
+def organization_backends(tmp_path_factory):
+    from .group_gateway import GroupGateway
+
+    caddy = shutil.which(os.environ.get("GLAMDB_DEMO_CADDY", "caddy"))
+    if caddy is None:
+        pytest.fail("Real Caddy is required")
+    tls = make_tls_material(tmp_path_factory.mktemp("organization-ca"))
+    with tempfile.TemporaryDirectory(prefix="organization-backends-", dir=ROOT / "artifacts") as path:
+        with ExitStack() as stack:
+            fleet = GroupGateway(Path(path), tls, caddy)
+            fleet.start_backends(stack)
+            yield fleet
+
+
+@pytest.fixture
+def organization_gateway(organization_backends):
+    from .organization_gateway import OrganizationGateway
+
+    with tempfile.TemporaryDirectory(prefix="org-test-", dir=ROOT / "artifacts") as path:
+        gateway = OrganizationGateway(Path(path), organization_backends)
+        try:
+            gateway.start()
+            yield gateway
+        finally:
+            gateway.stop()

@@ -1,6 +1,7 @@
 """Synchronous network-only client for the v0 public HTTP adapter contract."""
 
 import hmac
+import ipaddress
 import math
 import re
 import ssl
@@ -75,10 +76,12 @@ class Client:
 
     ``timeout`` sets HTTP connect/read/write/pool timeouts. Each method's optional
     ``deadline`` adds a total cooperative budget, checked across body reads.
+    Set ``username`` for group HTTP Basic authentication; omitted uses Bearer.
     """
 
-    def __init__(self, base_url: str, token: str, *, verify: bool | ssl.SSLContext = True,
-                 timeout: float = 30.0, database_id: str | UUID | None = None, transport: httpx.BaseTransport | None = None,
+    def __init__(self, base_url: str, token: str, *, username: str | None = None,
+                 verify: bool | ssl.SSLContext = True, timeout: float = 30.0,
+                 database_id: str | UUID | None = None, transport: httpx.BaseTransport | None = None,
                  max_json_bytes: int = 16 * 1024**2, max_arrow_read_bytes: int = 64 * 1024**2):
         try:
             url = httpx.URL(base_url)
@@ -86,8 +89,28 @@ class Client:
             raise ValidationError("base_url must be an absolute HTTP or HTTPS URL") from exc
         if url.scheme not in ("http", "https") or not url.host or url.username or url.password or url.query or url.fragment:
             raise ValidationError("base_url must be HTTP(S), with no credentials, query, or fragment")
-        if not isinstance(token, str) or not token or any(ord(c) < 33 or ord(c) > 126 for c in token):
+        if not isinstance(token, str) or not token:
+            raise ValidationError("a nonempty credential is required")
+        if username is None and any(ord(c) < 33 or ord(c) > 126 for c in token):
             raise ValidationError("a nonempty ASCII bearer token without whitespace is required")
+        if username is not None:
+            if not isinstance(username, str) or re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", username) is None:
+                raise ValidationError("username must be 1-64 ASCII letters, digits, underscores, dots, or hyphens")
+            if any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in token):
+                raise ValidationError("organization password must not contain control characters")
+            try:
+                password_bytes = token.encode("utf-8")
+            except UnicodeError as exc:
+                raise ValidationError("organization password must be valid UTF-8") from exc
+            if len(password_bytes) > 72:
+                raise ValidationError("organization password must be at most 72 UTF-8 bytes for bcrypt authentication")
+            if url.scheme == "http" and url.host != "localhost":
+                try:
+                    loopback = ipaddress.ip_address(url.host).is_loopback
+                except ValueError:
+                    loopback = False
+                if not loopback:
+                    raise ValidationError("group authentication requires HTTPS or a loopback HTTP URL")
         if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0:
             raise ValidationError("timeout must be positive finite seconds")
         if not isinstance(verify, (bool, ssl.SSLContext)):
@@ -103,7 +126,9 @@ class Client:
         self._streams = weakref.WeakSet()
         self._cleanup = CleanupQueue()
         self._closed = False
-        self._http = httpx.Client(base_url=str(url).rstrip("/") + "/", headers={"Authorization": f"Bearer {token}"},
+        headers = {"Authorization": f"Bearer {token}"} if username is None else {}
+        auth = httpx.BasicAuth(username, token) if username is not None else None
+        self._http = httpx.Client(base_url=str(url).rstrip("/") + "/", headers=headers, auth=auth,
                                   verify=verify, timeout=timeout, transport=transport, follow_redirects=False)
 
     def __enter__(self) -> "Client":
@@ -165,7 +190,7 @@ class Client:
                 raise
             if response.is_redirect:
                 response.close()
-                raise ProtocolError("redirects are disabled to preserve endpoint and bearer identity")
+                raise ProtocolError("redirects are disabled to preserve endpoint and authentication identity")
             return response
         except httpx.HTTPError as exc:
             raise translate_transport(exc, budget) from exc

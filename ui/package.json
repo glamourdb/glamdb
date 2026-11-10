@@ -7,6 +7,8 @@
     "test": "node --test",
     "test:e2e": "playwright test",
     "test:e2e:protected": "playwright test --config playwright.protected.config.mjs",
+    "test:e2e:groups": "playwright test --config playwright.groups.config.mjs",
+    "test:e2e:organizations": "playwright test --config playwright.organizations.config.mjs",
     "test:e2e:headed": "playwright test --headed",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

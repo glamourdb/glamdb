@@ -63,6 +63,42 @@ Use `examples/quickstart.py COLLECTION_UUID OPERATION_UUID` with
 `GLAMDB_URL` and `GLAMDB_TOKEN` set for a runnable version of this flow. The
 example does not create new UUIDs or retry a write automatically.
 
+## Organization gateway authentication
+
+For an organization gateway, pass its login as username and its password as
+token. Set the base URL to an assigned database. See the
+[organization guide](../../docs/development/ORGANIZATIONS.md) for lifecycle commands.
+
+```python
+import os
+from glamdb_sdk import Client
+
+with Client(
+    "https://demo.example.com/databases/sales",
+    token=os.environ["GLAMDB_ORGANIZATION_PASSWORD"],
+    username="sales-team",
+) as client:
+    print(client.list_collections().items)
+```
+
+The gateway authenticates the credentials and checks database access on every
+request. All SDK endpoint paths are relative to the base URL, so the database
+prefix is preserved for metadata, writes, outcomes, JSON scans and Arrow scans.
+A trailing slash on the base URL is optional. Keep credentials out of URLs.
+
+Usernames must contain 1–64 ASCII letters, digits, underscores, dots or hyphens.
+In username mode passwords may contain UTF-8 text and spaces, with no control
+characters, up to bcrypt's 72-byte limit. Direct-server Bearer tokens remain
+nonempty printable ASCII without whitespace. Organization authentication
+requires HTTPS, with HTTP permitted only for
+`localhost` or literal loopback addresses during local development. TLS
+certificate verification remains enabled by default.
+
+Without `username`, or with `username=None`, the client retains its existing
+`Authorization: Bearer <token>` behavior for direct-server connections. The
+organization password's 72-byte limit does not apply to Bearer tokens. Username mode
+sends one Basic authorization header and does not send a Bearer header.
+
 ## Write outcomes and recovery
 
 `append` returns `AppendOutcome` with `outcome` equal to `committed`,

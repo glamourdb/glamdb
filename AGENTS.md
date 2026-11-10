@@ -102,6 +102,16 @@ An optional Caddy deployment protects all demo files with an HTTPS shared-passwo
 gate; see [PROTECTED_DEMO.md](docs/development/PROTECTED_DEMO.md). It requires a
 server host and does not protect or replace the existing anonymous Pages URL
 merely by merging the code. No gate secrets belong in frontend assets.
+The organization workbench gateway (`apps/workbench_access/`) adds shared
+organization credentials, exclusive database ownership, a private SQLite access
+catalog and local operator CLI. Caddy enforces permissions before proxying `/v0`
+to configured database servers. Transfers fence old gateway connections;
+already-admitted backend writes may finish. The gateway has no storage writer or
+automatic mock fallback. See [ORGANIZATIONS.md](docs/development/ORGANIZATIONS.md)
+for lifecycle, receipts, backup/recovery and deployment. Static shared-group
+configuration remains an explicit compatibility mode.
+Native HTTP/core integration remains pending; gateway mock-backend tests do not
+qualify that integration or engine durability.
 
 The first milestone is an embedded, synchronous, durable **append store** on
 local disk. A store has one owning process and one serialized writer; reads may
@@ -240,6 +250,7 @@ Preserve these boundaries when adding or changing engine behavior:
 | `tests/` | Native unit/recovery/SqlCatalog/VFS/consumer suites, `vertical/` public-API storage tests, `mock/` in-memory scan tests, verification and actual SDK HTTP/HTTPS tests. |
 | `tests/stress/` | Explicit manual native capacity campaigns; excluded from default pytest/CTest and CI. |
 | `apps/mock_server/` | Disposable Python mock, real HTTP/Arrow, no warehouse/catalog access. |
+| `apps/workbench_access/` | Authorization catalog, local operator CLI/supervisor and Caddy HTTPS organization/database routing. |
 | `fixtures/`, `tools/verification/` | Literal canonical/metadata inputs, independent row oracle and evidence helpers. |
 | `sdk/python/`, `ui/` | Standalone Python HTTP SDK; HTML/CSS/ES-module pink workbench and browser/unit tests. |
 | `tools/workload/` | Mimesis datasets, SDK/Locust workloads, per-worker SQLite outcome journals and full verification. |
@@ -301,6 +312,15 @@ For the separate real-Caddy website access tests, run
 `python3 scripts/fetch-demo-caddy.py` then `bash scripts/check-protected-demo.sh`.
 This suite requires Caddy/OpenSSL/Chromium, opens only loopback listeners, creates
 disposable TLS/credentials and never installs a test CA into OS trust stores.
+It also tests group compatibility and persistent organization lifecycle against
+separate explicit mock databases, with Chromium transfer/revocation scenarios.
+Initialize the authorization catalog explicitly, then run
+`python3 -m apps.workbench_access --catalog /outside/runtime/authorization.sqlite`.
+The host and actual backend credentials must be supplied explicitly. Metadata
+and secrets must stay outside UI, served and generated runtime-state trees.
+Use one service account with its persistent home listener leases; the child
+inherits catalog, state and listener ownership. Never delete leases to bypass
+an active gateway or edit a live catalog offline.
 Mock faults require explicit development configuration. Do not give the mock a
 production store path. Every production write must eventually use the C++ core.
 

@@ -53,6 +53,8 @@ Current work focuses on qualifying and improving the existing append engine:
 **[Open the public demo](https://nnrpi.github.io/glamdb/)** — anyone can try it.
 An optional [password-protected deployment](docs/development/PROTECTED_DEMO.md)
 requires a server host; it does not change this anonymous Pages publication.
+The [organization workbench](docs/development/ORGANIZATIONS.md) adds separate organization
+logins and server-enforced database allowlists for configured HTTP backends.
 
 ### Planned
 

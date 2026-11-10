@@ -1,3 +1,4 @@
+import base64
 import json
 import ssl
 from uuid import UUID
@@ -75,6 +76,130 @@ def test_public_reads_use_bearer_auth_exact_routes_and_preserve_cursor_parameter
         ("GET", f"/collections/{CID}/files", {"page_size": "7", "cursor": "opaque +/=", "snapshot_id": "4"}),
         ("GET", f"/collections/{CID}/files/file-1", {"snapshot_id": "4"}),
     ]
+
+
+@pytest.mark.parametrize("username", ["sales-team", "team_2.admin", "A", "a" * 64, ".-_"])
+def test_group_basic_auth_sends_one_header_with_the_exact_username_and_token(username):
+    seen = []
+    def handler(request):
+        seen.append(request)
+        return reply({"mode": "append"})
+    with client_with(handler, username=username) as client:
+        assert client.capabilities()["mode"] == "append"
+    assert len(seen) == 1
+    authorization, = seen[0].headers.get_list("authorization")
+    scheme, credentials = authorization.split(" ", 1)
+    assert scheme == "Basic"
+    assert base64.b64decode(credentials, validate=True) == username.encode("ascii") + b":secret-value"
+    assert not seen[0].url.username and not seen[0].url.password
+
+
+@pytest.mark.parametrize("trailing_slash", ["", "/"])
+@pytest.mark.parametrize("operation,args,kwargs,method,path", [
+    ("capabilities", (), {}, "GET", "/v0/capabilities"),
+    ("list_collections", (), {}, "GET", "/v0/collections"),
+    ("resolve_collection", ("exact",), {}, "GET", "/v0/collections:resolve"),
+    ("get_collection", (CID,), {}, "GET", f"/v0/collections/{CID}"),
+    ("get_schema", (CID,), {}, "GET", f"/v0/collections/{CID}/schema"),
+    ("stats", (CID,), {}, "GET", f"/v0/collections/{CID}/stats"),
+    ("snapshots", (CID,), {}, "GET", f"/v0/collections/{CID}/snapshots"),
+    ("files", (CID,), {}, "GET", f"/v0/collections/{CID}/files"),
+    ("file", (CID, "file-1"), {}, "GET", f"/v0/collections/{CID}/files/file-1"),
+    ("create_collection", ("exact", SCHEMA), {"collection_id": CID}, "POST", "/v0/collections"),
+    ("append", (CID, [{"key": "a"}]), {"operation_id": OP, "schema": SCHEMA}, "POST", f"/v0/collections/{CID}/append"),
+    ("find_append_outcome", (CID, OP), {}, "GET", f"/v0/collections/{CID}/operations/{OP}"),
+    ("explain", (CID,), {}, "POST", f"/v0/collections/{CID}/explain"),
+    ("scan_json", (CID,), {}, "POST", f"/v0/collections/{CID}/scan"),
+    ("scan_batches", (CID,), {}, "POST", f"/v0/collections/{CID}/scan"),
+])
+def test_group_auth_preserves_database_prefix_for_every_route(trailing_slash, operation, args, kwargs, method, path):
+    seen = []
+    def handler(request):
+        seen.append(request)
+        return reply({"error": {"code": "FORBIDDEN", "message": "database access denied"}}, 403)
+    with Client("https://example.test/databases/sales" + trailing_slash, "secret-value", username="sales-team",
+                transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(AuthenticationError):
+            getattr(client, operation)(*args, **kwargs)
+    assert len(seen) == 1
+    assert (seen[0].method, seen[0].url.path) == (method, "/databases/sales" + path)
+    assert seen[0].headers.get_list("authorization") == ["Basic c2FsZXMtdGVhbTpzZWNyZXQtdmFsdWU="]
+
+
+def test_username_none_keeps_bearer_auth_with_a_long_token_and_scoped_base_url():
+    seen = []
+    def handler(request):
+        seen.append(request)
+        return reply({"mode": "append"})
+    with Client("https://example.test/databases/sales", "x" * 73, username=None,
+                transport=httpx.MockTransport(handler)) as client:
+        client.capabilities()
+    assert len(seen) == 1
+    assert seen[0].headers.get_list("authorization") == ["Bearer " + "x" * 73]
+    assert seen[0].url.path == "/databases/sales/v0/capabilities"
+
+
+@pytest.mark.parametrize("username", ["", "a" * 65, "white space", "a:b", "a/b", "a@b", "team\\name", "team\n", "équipe", b"team", 1, True])
+def test_invalid_group_username_is_rejected_before_connecting(username):
+    with pytest.raises(ValidationError):
+        client_with(lambda request: pytest.fail("must not connect"), username=username)
+
+
+@pytest.mark.parametrize("token", ["", "tab\t", "line\n", "bad\x00value", "\x7f", b"token", None])
+def test_organization_password_rejects_empty_values_and_control_characters(token):
+    with pytest.raises(ValidationError):
+        Client("https://example.test", token, username="sales-team",
+               transport=httpx.MockTransport(lambda request: pytest.fail("must not connect")))
+
+
+@pytest.mark.parametrize("password", ["a long passphrase with spaces", "пароль для организации", "é" * 36])
+def test_organization_password_supports_utf8_with_the_bcrypt_byte_limit(password):
+    seen = []
+    with Client("https://example.test", password, username="organization",
+                transport=httpx.MockTransport(lambda request: seen.append(request) or reply({}))) as client:
+        client.capabilities()
+    header = seen[0].headers["authorization"]
+    assert base64.b64decode(header[6:], validate=True) == b"organization:" + password.encode("utf-8")
+
+
+def test_group_password_accepts_the_72_byte_bcrypt_limit():
+    seen = []
+    with Client("https://example.test", "x" * 72, username="sales-team",
+                transport=httpx.MockTransport(lambda request: seen.append(request) or reply({}))) as client:
+        client.capabilities()
+    authorization, = seen[0].headers.get_list("authorization")
+    assert authorization.startswith("Basic ")
+    assert base64.b64decode(authorization[6:], validate=True) == b"sales-team:" + b"x" * 72
+
+
+def test_group_password_rejects_more_than_72_bytes_before_connecting():
+    with pytest.raises(ValidationError, match="72"):
+        Client("https://example.test", "x" * 73, username="sales-team",
+               transport=httpx.MockTransport(lambda request: pytest.fail("must not connect")))
+
+
+def test_group_auth_rejects_credentials_embedded_in_the_base_url():
+    with pytest.raises(ValidationError):
+        Client("https://sales-team:secret-value@example.test/databases/sales", "secret-value", username="sales-team",
+               transport=httpx.MockTransport(lambda request: pytest.fail("must not connect")))
+
+
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "127.2.3.4", "[::1]"])
+def test_group_auth_accepts_http_loopback_for_local_development(host):
+    seen = []
+    with Client(f"http://{host}:8765/databases/sales", "secret-value", username="sales-team",
+                transport=httpx.MockTransport(lambda request: seen.append(request) or reply({}))) as client:
+        client.capabilities()
+    assert len(seen) == 1
+    assert seen[0].url.path == "/databases/sales/v0/capabilities"
+    assert seen[0].headers.get_list("authorization") == ["Basic c2FsZXMtdGVhbTpzZWNyZXQtdmFsdWU="]
+
+
+@pytest.mark.parametrize("host", ["example.test", "192.168.1.1", "0.0.0.0", "[2001:db8::1]"])
+def test_group_auth_rejects_non_loopback_http_before_connecting(host):
+    with pytest.raises(ValidationError, match="HTTPS"):
+        Client(f"http://{host}/databases/sales", "secret-value", username="sales-team",
+               transport=httpx.MockTransport(lambda request: pytest.fail("must not connect")))
 
 
 def test_append_is_owned_and_retry_reuses_identical_operation_and_body_after_lost_response():

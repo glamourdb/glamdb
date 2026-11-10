@@ -1,5 +1,9 @@
 # Password-protected browser demo
 
+For organization credentials and database ownership, use the
+[organization deployment](ORGANIZATIONS.md). The deployment below is the
+separate browser-only demo with a single shared password.
+
 This deployment serves the existing browser-only demo behind **server-side
 HTTP Basic authentication over HTTPS**. The browser asks for username `glamdb`
 (configurable) and a shared password-token. Every visitor with that token may

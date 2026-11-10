@@ -1,6 +1,7 @@
 import { writeEditor, readEditorRows, previewRows, lockWriteForm } from './editor.js';
 import { WorkbenchAPI, readMetadataPages, validateViewMetadata } from './api.js';
 import { fileDetails } from './file-details.js';
+import { loadAccessSession, selectDatabase } from './access.js';
 import { applyTheme, validateTheme, brandAsset } from './theme.js';
 import {
     escapeHTML as e,
@@ -32,7 +33,8 @@ import {
 } from './model.js';
 
 const $ = (selector) => document.querySelector(selector);
-const publicDemo = document.documentElement.dataset.publicDemo === 'true';
+const accessGateway = document.documentElement.dataset.accessGateway === 'true';
+const publicDemo = !accessGateway && document.documentElement.dataset.publicDemo === 'true';
 const icon = (name, classes = '') =>
     `<svg class="icon ${classes}" aria-hidden="true"><use href="${new URL('icons.svg', import.meta.url).href}#${name}"></use></svg>`;
 const nav = [
@@ -60,7 +62,8 @@ let connectionController = null,
     toastTimer = null,
     themeStamp = '',
     configTimer = null,
-    serverHealth = null;
+    serverHealth = null,
+    accessRevision = null;
 const labels = (name, fallback = name) => state.theme?.labels?.[name] ?? fallback;
 const collectionPath = () => `/collections/${encodeURIComponent(state.collectionId)}`;
 const viewQuery = () =>
@@ -121,18 +124,25 @@ function toast(message) {
     toastTimer = setTimeout(() => node.classList.remove('visible'), 4500);
 }
 function report(error) {
+    if (accessGateway && [401, 403].includes(error.status)) {
+        resetSession();
+        accessLogin('Sign-in is no longer authorized. Reload access to sign in again.');
+        return;
+    }
     if (error.name !== 'AbortError') toast(error.message ?? 'Something went wrong');
 }
-function resetSession(database = undefined) {
+function resetSession({ access, databaseId = null, database } = {}) {
     databaseSelectionGeneration++;
-    connectionController?.abort();
-    viewController?.abort();
-    queryController?.abort();
-    countController?.abort();
-    countController = null;
-    connectionController = viewController = queryController = null;
+    const controllers = [connectionController, viewController, queryController, countController];
+    if (access)
+        state = selectDatabase(state, access, databaseId, { origin: location.origin, controllers });
+    else {
+        state.api?.close?.();
+        for (const controller of controllers) controller?.abort();
+        state = database === undefined ? resetConnection(state) : switchDatabase(state, database);
+    }
+    connectionController = viewController = queryController = countController = null;
     queryGeneration++;
-    state = database === undefined ? resetConnection(state) : switchDatabase(state, database);
     creationFields = [];
     $('#modal').close();
     $('#modal').replaceChildren();
@@ -173,7 +183,18 @@ async function loadTheme(force = false) {
             publicDemo ? new URL('../config/theme.json', import.meta.url) : '/workbench/config',
             { cache: 'no-store' },
         );
+        if (accessGateway && [401, 403].includes(response.status)) {
+            resetSession();
+            accessLogin('Sign-in is no longer authorized. Reload access to sign in again.');
+            throw new Error('Sign-in is no longer authorized.');
+        }
         if (!response.ok) throw new Error('Theme file is invalid; keeping the last valid theme.');
+        const revision = response.headers.get('X-GlamDB-Access-Revision');
+        if (accessGateway && revision !== null && /^\d+$/.test(revision)) {
+            const changed = accessRevision !== null && accessRevision !== revision;
+            accessRevision = revision;
+            if (changed && state.access?.organization) await reloadAccess();
+        }
         const config = validateTheme(await response.json());
         const stamp = JSON.stringify(config);
         if (force || (!state.themePreview && stamp !== themeStamp)) {
@@ -238,7 +259,7 @@ async function loadHealth() {
 
 async function databaseWorkspace(database = null) {
     const { base, token } = state;
-    resetSession(database);
+    resetSession({ database });
     state.base = base;
     state.token = token;
     state.database = database;
@@ -333,13 +354,80 @@ async function createDatabase(form) {
     }
 }
 
+function databaseOptions() {
+    return (state.access?.databases ?? [])
+        .map(
+            (database) =>
+                `<option value="${e(database.id)}" ${state.databaseId === database.id ? 'selected' : ''}>${e(database.name)}</option>`,
+        )
+        .join('');
+}
+function accessLogin(message = '') {
+    const group = state.access?.group;
+    const principal = state.access?.organization ? 'Organization' : 'Group';
+    const available = state.access?.databases.length > 0;
+    $('#app').innerHTML =
+        `<main id="main-content" class="login-screen"><section class="login-art">${brand()}
+    <h1>Big ideas.<br>Beautiful data.</h1>${icon('bow', 'hero-bow decor-bow')}${icon('sparkle', 'hero-star one decor-sparkle')}${icon('kiss', 'hero-kiss decor-kiss')}
+    <p class="login-copy-bottom" data-label="footer">${e(labels('footer'))}</p></section>
+    <section class="login-panel"><div class="login-box"><p class="eyebrow" data-brand="eyebrow">${e(state.theme.brand.eyebrow)}</p>
+    <h2>Your databases</h2>${group ? `<p>${principal}: <strong>${e(group.name)}</strong><br>Signed in as ${e(group.login)}</p>` : '<p>Load your access list to open a database.</p>'}
+    ${available ? `<form id="database-form"><label class="field">Database<select name="database" required><option value="">Choose a database</option>${databaseOptions()}</select></label><button class="button primary" type="submit">Open database${icon('arrow')}</button></form>` : group ? `<p class="notice">No databases are available for this ${principal.toLowerCase()}.</p>` : ''}
+    <p class="login-error" id="login-error" role="alert">${e(message)}</p><button class="button" data-action="reload-access">Reload access</button>
+    <p class="login-footnote">Website sign-in is managed by your browser. Clearing this workspace does not clear the browser's saved sign-in.</p></div></section></main>`;
+}
+async function connectDatabase(databaseId) {
+    const access = state.access;
+    resetSession({ access, databaseId });
+    const api = state.api;
+    const controller = new AbortController();
+    connectionController = controller;
+    state.databaseLoading = true;
+    chrome();
+    try {
+        const capabilities = await api.json('/v0/capabilities', { signal: controller.signal });
+        if (api !== state.api || controller.signal.aborted) return;
+        state.capabilities = capabilities;
+        await refreshWorkspace();
+        if (api !== state.api || controller.signal.aborted) return;
+        state.databaseLoading = false;
+        chrome();
+    } catch (error) {
+        if (api !== state.api || controller.signal.aborted) return;
+        resetSession({ access, databaseId });
+        state.databaseError = error.message ?? 'The database could not be reached';
+        chrome();
+    }
+}
+async function reloadAccess() {
+    resetSession();
+    const controller = new AbortController();
+    connectionController = controller;
+    accessLogin('Loading your access list…');
+    try {
+        const access = await loadAccessSession(
+            globalThis.fetch.bind(globalThis),
+            controller.signal,
+        );
+        if (controller !== connectionController || controller.signal.aborted) return;
+        resetSession({ access });
+        if (access.databases.length) await connectDatabase(access.databases[0].id);
+        else accessLogin();
+    } catch (error) {
+        if (controller !== connectionController || controller.signal.aborted) return;
+        resetSession();
+        accessLogin(error.message);
+    }
+}
+
 function chrome() {
     $('#app').innerHTML =
         `<div class="shell"><aside class="sidebar" id="sidebar" aria-label="Workspace navigation">${brand()}
     <p class="brand-tagline" data-brand="tagline">${e(state.theme.brand.tagline)}</p><div class="workspace-tag"><span class="status-dot"></span>
-    <div><strong>${e(state.database?.name ?? 'My workspace')}</strong><small>${e(new URL(state.base).host)} · ${state.capabilities?.mock ? 'MOCK' : 'CONNECTED'}</small></div></div>
+    <div><strong>${e(accessGateway ? state.access.group.name : state.database?.name ?? 'My workspace')}</strong><small>${accessGateway ? e(state.access.group.login) : e(new URL(state.base).host)} · ${state.databaseError ? 'UNAVAILABLE' : state.databaseLoading ? 'CONNECTING' : state.capabilities?.mock ? 'MOCK' : 'CONNECTED'}</small></div></div>
+    ${accessGateway ? `<label class="field" style="margin:0 7px 20px">Database<select id="database-selector" aria-label="Database">${databaseOptions()}</select></label>` : ''}
     <nav class="nav">${nav.map(([key, symbol]) => `<button data-action="nav" data-tab="${key}" class="${state.tab === key ? 'active' : ''}" ${state.tab === key ? 'aria-current="page"' : ''}>${icon(symbol)}<span data-label="nav_${key}">${e(labels(`nav_${key}`))}</span></button>`).join('')}</nav>
-    <div class="collection-heading"><span data-label="collections">${e(labels('collections'))}</span><button class="icon-button" data-action="create" aria-label="New collection">${icon('plus')}</button></div>
+    <div class="collection-heading"><span data-label="collections">${e(labels('collections'))}</span><button class="icon-button" data-action="create" aria-label="New collection" ${accessGateway && (state.databaseLoading || state.databaseError) ? 'disabled' : ''}>${icon('plus')}</button></div>
     <div class="collection-list">${state.collections.map((item) => `<button data-action="select-collection" data-id="${e(item.collection_id)}" class="${state.collectionId === item.collection_id ? 'selected' : ''}">${icon('table')}<span>${e(item.name)}</span></button>`).join('')}</div>
     <div class="sidebar-footer">${icon('kiss', 'decor-kiss')}<p data-label="footer">${e(labels('footer'))}</p></div></aside>
     <div class="workspace"><header class="topbar"><div class="breadcrumb"><button class="icon-button menu-toggle" data-action="menu" aria-label="Toggle navigation">${icon('menu')}</button><span>Workspace</span>${icon('chevron')}<strong>${e(currentCollection()?.name ?? 'Your collections')}</strong></div>
@@ -546,6 +634,12 @@ function resultTable() {
 
 function renderView() {
     if (!$('#view')) return;
+    if (accessGateway && state.tab !== 'style' && (state.databaseLoading || state.databaseError)) {
+        $('#view').innerHTML = state.databaseError
+            ? `${heading('Database unavailable', 'Choose another database or refresh to try again.', false)}<div class="notice" role="alert">${e(state.databaseError)}</div>`
+            : `${heading('Opening database…', '', false)}<p class="notice" role="status">Loading the selected database.</p>`;
+        return;
+    }
     if (
         state.collectionId &&
         !state.schema &&
@@ -1665,8 +1759,10 @@ document.addEventListener('submit', async (event) => {
             } finally {
                 setBusy(button, false);
             }
-        } else if (form.id === 'database-form') await createDatabase(form);
-        else if (form.id === 'query-form') await runQuery();
+        } else if (form.id === 'database-form') {
+            if (accessGateway) await connectDatabase(form.elements.database.value);
+            else await createDatabase(form);
+        } else if (form.id === 'query-form') await runQuery();
         else if (form.id === 'append-form' || form.id === 'write-form') await appendForm(form);
         else if (form.id === 'create-form') await createForm(form);
         else if (form.id === 'recovery-form') await importRecovery(form);
@@ -1699,18 +1795,25 @@ document.addEventListener('click', async (event) => {
             if (pendingEntries(true).length) openRecovery(true);
             else {
                 resetSession();
-                login();
+                if (accessGateway) accessLogin('Workspace cleared. Reload access to open a database.');
+                else login();
             }
         } else if (action === 'disconnect-clear') {
             resetSession();
-            login();
+            if (accessGateway) accessLogin('Workspace cleared. Reload access to open a database.');
+            else login();
         } else if (action === 'pending-requests') openRecovery();
         else if (action === 'export-pending')
             exportRecovery(target.dataset.kind, target.dataset.id);
         else if (action === 'refresh') {
+            if (accessGateway) {
+                await connectDatabase(state.databaseId);
+                return;
+            }
             await refreshWorkspace();
             if (state.api === api) toast('Workspace refreshed.');
-        } else if (action === 'select-collection') await selectCollection(target.dataset.id);
+        } else if (action === 'reload-access') await reloadAccess();
+        else if (action === 'select-collection') await selectCollection(target.dataset.id);
         else if (action === 'create') openCreate();
         else if (action === 'close-modal') $('#modal').close();
         else if (action === 'append') openAppend();
@@ -1823,7 +1926,8 @@ document.addEventListener('change', async (event) => {
     const target = event.target,
         api = state.api;
     try {
-        if (target.id === 'snapshot-selector')
+        if (target.id === 'database-selector') await connectDatabase(target.value);
+        else if (target.id === 'snapshot-selector')
             await selectCollection(
                 state.collectionId,
                 target.value === 'latest' ? null : target.value,
@@ -1851,7 +1955,8 @@ $('#modal').addEventListener('click', (event) => {
 async function bootstrap() {
     try {
         await loadTheme(true);
-        if (publicDemo) {
+        if (accessGateway) await reloadAccess();
+        else if (publicDemo) {
             const [{ BrowserDemoAPI }, response] = await Promise.all([
                 import('./demo.js'),
                 fetch(new URL('../config/demo-data.json', import.meta.url)),
@@ -1868,7 +1973,7 @@ async function bootstrap() {
         configTimer = setInterval(() => loadTheme(), 2000);
     } catch (error) {
         $('#app').innerHTML =
-            `<main id="main-content" class="boot"><div><h1>Theme unavailable</h1><p>${e(error.message)}</p><p>Check the mock server and its --theme-file setting, then reload.</p></div></main>`;
+            `<main id="main-content" class="boot"><div><h1>Theme unavailable</h1><p>${e(error.message)}</p><p>Check the theme configuration and reload.</p></div></main>`;
     }
 }
 window.addEventListener('pagehide', () => {
@@ -1876,6 +1981,7 @@ window.addEventListener('pagehide', () => {
     connectionController?.abort();
     viewController?.abort();
     queryController?.abort();
+    state.api?.close?.();
     state.token = '';
 });
 bootstrap();
