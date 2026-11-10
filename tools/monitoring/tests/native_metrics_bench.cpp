@@ -1,7 +1,11 @@
 #include "core/telemetry/metrics.h"
 
+#include <prometheus/collectable.h>
+#include <prometheus/text_serializer.h>
+
 #include <chrono>
 #include <iostream>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -40,7 +44,8 @@ int main()
 {
     constexpr size_t Calls = 1'000'000;
     ObserveCalls(1);
-    const auto before = CountSeries(NGlamDB::NTelemetry::RenderMetrics());
+    const auto before =
+        CountSeries(prometheus::TextSerializer().Serialize(NGlamDB::NTelemetry::GetMetricsCollectable()->Collect()));
     const auto start = std::chrono::steady_clock::now();
     ObserveCalls(Calls);
     const auto single = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
@@ -55,7 +60,8 @@ int main()
         worker.join();
     }
     const auto parallel = std::chrono::duration<double>(std::chrono::steady_clock::now() - parallelStart).count();
-    const auto snapshot = NGlamDB::NTelemetry::RenderMetrics();
+    const auto snapshot =
+        prometheus::TextSerializer().Serialize(NGlamDB::NTelemetry::GetMetricsCollectable()->Collect());
     const auto after = CountSeries(snapshot);
     std::cout << "{\"fixture\":\"metrics component only, no database or storage operations\",\"calls_per_run\":"
               << Calls << ",\"single_seconds\":" << single << ",\"single_ns_per_call\":" << single * 1e9 / Calls

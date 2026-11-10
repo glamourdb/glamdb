@@ -5,84 +5,19 @@
   "evaluation_interval": "30s",
   "tests": [
     {
-      "name": "pod parent wins over child containers and counters handle restart",
+      "name": "gateway status classes and counter reset",
       "interval": "30s",
       "input_series": [
         {
-          "series": "glamdb_cgroup_cpu_usage_seconds_total{cluster=\"test\",namespace=\"glamdb\",pod=\"db-0\",node=\"n\",service=\"glamdb\"}",
-          "values": "0+15x20"
-        },
-        {
-          "series": "container_cpu_usage_seconds_total{job=\"cadvisor\",cluster=\"test\",namespace=\"glamdb\",pod=\"db-0\",container=\"db\"}",
-          "values": "0+30x20"
-        },
-        {
-          "series": "container_cpu_usage_seconds_total{job=\"cadvisor\",cluster=\"test\",namespace=\"glamdb\",pod=\"db-1\",container=\"db\"}",
-          "values": "0+30x20"
-        },
-        {
-          "series": "glamdb_cgroup_memory_usage_bytes{cluster=\"test\",namespace=\"glamdb\",pod=\"db-0\"}",
-          "values": "1048576+0x20"
-        },
-        {
-          "series": "container_memory_usage_bytes{job=\"cadvisor\",cluster=\"test\",namespace=\"glamdb\",pod=\"db-0\",container=\"db\"}",
-          "values": "2097152+0x20"
-        },
-        {
-          "series": "container_cpu_usage_seconds_total{job=\"cadvisor\",cluster=\"test\",namespace=\"glamdb\",pod=\"restarted\",container=\"db\"}",
+          "series": "glamdb_gateway_http_requests_total{job=\"glamdb-gateway\",cluster=\"test\",service=\"glamdb\",route=\"scan\",method=\"POST\",status_class=\"2xx\"}",
           "values": "0+30x5 30+30x14"
-        }
-      ],
-      "promql_expr_test": [
-        {
-          "expr": "glamdb:pod_cpu_usage_cores:rate5m",
-          "eval_time": "5m",
-          "exp_samples": [
-            {
-              "labels": "glamdb:pod_cpu_usage_cores:rate5m{cluster=\"test\",namespace=\"glamdb\",pod=\"db-0\"}",
-              "value": 0.5
-            },
-            {
-              "labels": "glamdb:pod_cpu_usage_cores:rate5m{cluster=\"test\",namespace=\"glamdb\",pod=\"db-1\"}",
-              "value": 1
-            },
-            {
-              "labels": "glamdb:pod_cpu_usage_cores:rate5m{cluster=\"test\",namespace=\"glamdb\",pod=\"restarted\"}",
-              "value": 1
-            }
-          ]
         },
         {
-          "expr": "glamdb:pod_memory_usage_bytes",
-          "eval_time": "5m",
-          "exp_samples": [
-            {
-              "labels": "glamdb:pod_memory_usage_bytes{cluster=\"test\",namespace=\"glamdb\",pod=\"db-0\"}",
-              "value": 1048576
-            }
-          ]
+          "series": "glamdb_gateway_http_requests_total{job=\"glamdb-gateway\",cluster=\"test\",service=\"glamdb\",route=\"scan\",method=\"POST\",status_class=\"5xx\"}",
+          "values": "0+0x20"
         },
         {
-          "expr": "glamdb:pod_memory_anon_bytes",
-          "eval_time": "5m",
-          "exp_samples": []
-        }
-      ]
-    },
-    {
-      "name": "HTTP counts exact outer gateway route and excludes metrics listeners",
-      "interval": "30s",
-      "input_series": [
-        {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"test\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=\"200\"}",
-          "values": "0+270x20"
-        },
-        {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"test\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=\"502\"}",
-          "values": "0+30x20"
-        },
-        {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"test\",service=\"glamdb\",handler=\"metrics\",server=\"metrics\",code=\"200\"}",
+          "series": "glamdb_gateway_http_requests_total{job=\"other\",cluster=\"test\",service=\"glamdb\",route=\"scan\",method=\"POST\",status_class=\"2xx\"}",
           "values": "0+300x20"
         }
       ],
@@ -93,67 +28,75 @@
           "exp_samples": [
             {
               "labels": "glamdb:http_requests:rate5m{cluster=\"test\",service=\"glamdb\"}",
-              "value": 10
-            }
-          ]
-        },
-        {
-          "expr": "glamdb:http_errors:rate5m",
-          "eval_time": "5m",
-          "exp_samples": [
-            {
-              "labels": "glamdb:http_errors:rate5m{cluster=\"test\",service=\"glamdb\"}",
               "value": 1
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "native down endpoint does not retain successful operation recording",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "glamdb_operations_total{job=\"glamdb-core\",cluster=\"test\",service=\"glamdb\",instance=\"native:9464\",operation=\"append\",outcome=\"committed\"}",
+          "values": "0+30x20"
         },
         {
-          "expr": "glamdb:http_error:ratio5m",
-          "eval_time": "5m",
-          "exp_samples": [
-            {
-              "labels": "glamdb:http_error:ratio5m{cluster=\"test\",service=\"glamdb\"}",
-              "value": 0.1
-            }
-          ]
-        },
+          "series": "up{job=\"glamdb-core\",cluster=\"test\",service=\"glamdb\",instance=\"native:9464\"}",
+          "values": "1+0x5 0+0x14"
+        }
+      ],
+      "promql_expr_test": [
         {
-          "expr": "glamdb:http_requests:rate5m{cluster=\"absent\"}",
+          "expr": "glamdb:native_operations:rate5m",
           "eval_time": "5m",
           "exp_samples": []
         }
       ]
     },
     {
-      "name": "PVC ratios use real available bytes and quantile semantics across pods",
+      "name": "missing sources leave request and PVC records absent",
+      "interval": "30s",
+      "input_series": [],
+      "promql_expr_test": [
+        {
+          "expr": "glamdb:podset_pvc_available:p50",
+          "eval_time": "5m",
+          "exp_samples": []
+        }
+      ]
+    },
+    {
+      "name": "actual PVC median across controller pods",
       "interval": "30s",
       "input_series": [
         {
-          "series": "kubelet_volume_stats_available_bytes{cluster=\"test\",namespace=\"glamdb\",persistentvolumeclaim=\"v0\"}",
+          "series": "kubelet_volume_stats_available_bytes{cluster=\"test\",namespace=\"glamdb\",persistentvolumeclaim=\"db-0-data\"}",
           "values": "20+0x20"
         },
         {
-          "series": "kubelet_volume_stats_capacity_bytes{cluster=\"test\",namespace=\"glamdb\",persistentvolumeclaim=\"v0\"}",
+          "series": "kubelet_volume_stats_capacity_bytes{cluster=\"test\",namespace=\"glamdb\",persistentvolumeclaim=\"db-0-data\"}",
           "values": "100+0x20"
         },
         {
-          "series": "kubelet_volume_stats_available_bytes{cluster=\"test\",namespace=\"glamdb\",persistentvolumeclaim=\"v1\"}",
-          "values": "80+0x20"
-        },
-        {
-          "series": "kubelet_volume_stats_capacity_bytes{cluster=\"test\",namespace=\"glamdb\",persistentvolumeclaim=\"v1\"}",
-          "values": "100+0x20"
-        },
-        {
-          "series": "kube_pod_spec_volumes_persistentvolumeclaims_info{cluster=\"test\",namespace=\"glamdb\",pod=\"db-0\",persistentvolumeclaim=\"v0\",volume=\"data\"}",
-          "values": "1+0x20"
-        },
-        {
-          "series": "kube_pod_spec_volumes_persistentvolumeclaims_info{cluster=\"test\",namespace=\"glamdb\",pod=\"db-1\",persistentvolumeclaim=\"v1\",volume=\"data\"}",
+          "series": "kube_pod_spec_volumes_persistentvolumeclaims_info{cluster=\"test\",namespace=\"glamdb\",pod=\"db-0\",persistentvolumeclaim=\"db-0-data\"}",
           "values": "1+0x20"
         },
         {
           "series": "kube_pod_owner{cluster=\"test\",namespace=\"glamdb\",pod=\"db-0\",owner_kind=\"StatefulSet\",owner_name=\"db\",owner_is_controller=\"true\"}",
+          "values": "1+0x20"
+        },
+        {
+          "series": "kubelet_volume_stats_available_bytes{cluster=\"test\",namespace=\"glamdb\",persistentvolumeclaim=\"db-1-data\"}",
+          "values": "80+0x20"
+        },
+        {
+          "series": "kubelet_volume_stats_capacity_bytes{cluster=\"test\",namespace=\"glamdb\",persistentvolumeclaim=\"db-1-data\"}",
+          "values": "100+0x20"
+        },
+        {
+          "series": "kube_pod_spec_volumes_persistentvolumeclaims_info{cluster=\"test\",namespace=\"glamdb\",pod=\"db-1\",persistentvolumeclaim=\"db-1-data\"}",
           "values": "1+0x20"
         },
         {
@@ -163,169 +106,12 @@
       ],
       "promql_expr_test": [
         {
-          "expr": "glamdb:podset_pvc_available:p100",
-          "eval_time": "5m",
-          "exp_samples": [
-            {
-              "labels": "glamdb:podset_pvc_available:p100{cluster=\"test\",namespace=\"glamdb\",podset=\"StatefulSet/db\"}",
-              "value": 0.8
-            }
-          ]
-        },
-        {
           "expr": "glamdb:podset_pvc_available:p50",
           "eval_time": "5m",
           "exp_samples": [
             {
               "labels": "glamdb:podset_pvc_available:p50{cluster=\"test\",namespace=\"glamdb\",podset=\"StatefulSet/db\"}",
               "value": 0.5
-            }
-          ]
-        },
-        {
-          "expr": "glamdb:podset_pvc_available:p00",
-          "eval_time": "5m",
-          "exp_samples": [
-            {
-              "labels": "glamdb:podset_pvc_available:p00{cluster=\"test\",namespace=\"glamdb\",podset=\"StatefulSet/db\"}",
-              "value": 0.2
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "network shared namespace duplicates collapse and hostNetwork excluded",
-      "interval": "30s",
-      "input_series": [
-        {
-          "series": "container_network_receive_bytes_total{job=\"cadvisor\",cluster=\"test\",namespace=\"glamdb\",pod=\"db-0\",container=\"a\",interface=\"eth0\"}",
-          "values": "0+300x20"
-        },
-        {
-          "series": "container_network_receive_bytes_total{job=\"cadvisor\",cluster=\"test\",namespace=\"glamdb\",pod=\"db-0\",container=\"b\",interface=\"eth0\"}",
-          "values": "0+300x20"
-        },
-        {
-          "series": "container_network_receive_bytes_total{job=\"cadvisor\",cluster=\"test\",namespace=\"glamdb\",pod=\"host\",container=\"a\",interface=\"eth0\"}",
-          "values": "0+600x20"
-        },
-        {
-          "series": "kube_pod_info{cluster=\"test\",namespace=\"glamdb\",pod=\"host\",host_network=\"true\"}",
-          "values": "1+0x20"
-        }
-      ],
-      "promql_expr_test": [
-        {
-          "expr": "glamdb:pod_network_receive_bytes:rate5m",
-          "eval_time": "5m",
-          "exp_samples": [
-            {
-              "labels": "glamdb:pod_network_receive_bytes:rate5m{cluster=\"test\",namespace=\"glamdb\",pod=\"db-0\"}",
-              "value": 10
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "actual Caddy2.11.9 captured route labels replay",
-      "interval": "30s",
-      "input_series": [
-        {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"captured\",service=\"glamdb\",code=\"200\",handler=\"subroute\",method=\"GET\",server=\"workbench\"}",
-          "values": "0+1x20"
-        },
-        {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"captured\",service=\"glamdb\",code=\"401\",handler=\"subroute\",method=\"GET\",server=\"workbench\"}",
-          "values": "0+1x20"
-        },
-        {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"captured\",service=\"glamdb\",code=\"404\",handler=\"subroute\",method=\"GET\",server=\"workbench\"}",
-          "values": "0+1x20"
-        },
-        {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"captured\",service=\"glamdb\",code=\"404\",handler=\"subroute\",method=\"OTHER\",server=\"workbench\"}",
-          "values": "0+20x20"
-        }
-      ],
-      "promql_expr_test": [
-        {
-          "expr": "glamdb:http_requests:rate5m",
-          "eval_time": "5m",
-          "exp_samples": [
-            {
-              "labels": "glamdb:http_requests:rate5m{cluster=\"captured\",service=\"glamdb\"}",
-              "value": 0.7666666666666667
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "idle observed HTTP is distinct from absent traffic and no error ratio fabricated",
-      "interval": "30s",
-      "input_series": [
-        {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"idle\",service=\"glamdb\",server=\"workbench\",handler=\"subroute\",code=\"200\"}",
-          "values": "0+0x20"
-        }
-      ],
-      "promql_expr_test": [
-        {
-          "expr": "glamdb:http_requests:rate5m",
-          "eval_time": "5m",
-          "exp_samples": [
-            {
-              "labels": "glamdb:http_requests:rate5m{cluster=\"idle\",service=\"glamdb\"}",
-              "value": 0
-            }
-          ]
-        },
-        {
-          "expr": "glamdb:http_error:ratio5m",
-          "eval_time": "5m",
-          "exp_samples": []
-        }
-      ]
-    },
-    {
-      "name": "latency aggregates bucket counts across unequal instance traffic before quantile",
-      "interval": "30s",
-      "input_series": [
-        {
-          "series": "caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"hist\",service=\"glamdb\",server=\"workbench\",handler=\"subroute\",instance=\"fast\",le=\"0.1\"}",
-          "values": "0+90x20"
-        },
-        {
-          "series": "caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"hist\",service=\"glamdb\",server=\"workbench\",handler=\"subroute\",instance=\"fast\",le=\"1\"}",
-          "values": "0+90x20"
-        },
-        {
-          "series": "caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"hist\",service=\"glamdb\",server=\"workbench\",handler=\"subroute\",instance=\"fast\",le=\"+Inf\"}",
-          "values": "0+90x20"
-        },
-        {
-          "series": "caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"hist\",service=\"glamdb\",server=\"workbench\",handler=\"subroute\",instance=\"slow\",le=\"0.1\"}",
-          "values": "0+0x20"
-        },
-        {
-          "series": "caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"hist\",service=\"glamdb\",server=\"workbench\",handler=\"subroute\",instance=\"slow\",le=\"1\"}",
-          "values": "0+10x20"
-        },
-        {
-          "series": "caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"hist\",service=\"glamdb\",server=\"workbench\",handler=\"subroute\",instance=\"slow\",le=\"+Inf\"}",
-          "values": "0+10x20"
-        }
-      ],
-      "promql_expr_test": [
-        {
-          "expr": "abs(glamdb:http_request_duration_seconds:p95 - 0.55) < bool 0.000000000001",
-          "eval_time": "5m",
-          "exp_samples": [
-            {
-              "labels": "{cluster=\"hist\",service=\"glamdb\"}",
-              "value": 1
             }
           ]
         }

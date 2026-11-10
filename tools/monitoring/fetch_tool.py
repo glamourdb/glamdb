@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("tool", choices=("prometheus", "node-exporter", "kubeconform"))
+    parser.add_argument("tool", choices=("prometheus", "node-exporter", "kubeconform", "helm"))
     parser.add_argument("--directory", type=Path, default=ROOT / "artifacts/monitoring/bin")
     args = parser.parse_args()
     lock = json.loads((ROOT / "deploy/monitoring/versions.lock.json").read_text())["downloads"][args.tool]
@@ -26,7 +26,11 @@ def main():
         parser.error("no reviewed checksum for " + target + "; use the locked OCI image or add a verified upstream asset pin")
     name = "node_exporter" if args.tool == "node-exporter" else args.tool
     filename = (f"kubeconform-{target}.tar.gz" if name == "kubeconform" else f"{name}-{lock['version']}.{target}.tar.gz")
-    url = lock["release"].replace("/tag/", "/download/") + "/" + filename
+    if name == "helm":
+        filename = f"helm-v{lock['version']}-{target}.tar.gz"
+        url = lock["base_url"] + "/" + filename
+    else:
+        url = lock["release"].replace("/tag/", "/download/") + "/" + filename
     with urlopen(url, timeout=180) as response:
         data = response.read()
     digest = hashlib.sha256(data).hexdigest()

@@ -1,163 +1,168 @@
 # Monitoring validation
 
-The Monitoring checks workflow runs the reproducible component/rule/dashboard
-gate and strict Kubernetes schema validation on Ubuntu, using locked upstream
-validator checksums. Workflow syntax and security lint passed locally; its
-hosted result is reported separately by the PR checks.
-
-Executed on 2026-11-10. Host: Darwin arm64, 16 GiB RAM, AppleClang 21.0.0,
-Python 3.14.3. Native component checks also used GCC 16.2 and LLVM 18.1.8
-analysis/formatting. Runtime collection used a dedicated disposable Linux VM:
-Fedora CoreOS 43, kernel 6.17.7 aarch64, cgroup v2, 2 CPUs / 1536 MiB RAM.
-No database volume, existing container workload or production cluster was used.
+Executed for the library/client and standard-collector configuration on
+2026-11-11. Native component environment: Darwin arm64, AppleClang 21.0.0,
+Python 3.14.3; formatting uses clang-format 18.1.8. These are current replacement
+checks, not the earlier private collector/textfile tests. There is no claim of
+full native engine durability, production HTTP/scanner integration, or hosted CI
+success from these component results.
 
 ## Executed PASS
 
-`python3 tools/monitoring/check.py --promtool PATH_TO_VERIFIED_PROMTOOL`
-with the locked Prometheus 3.13.5 executable:
-
-- Ten Python tests: actual Caddy route-label contract, digest pins, generated
-  dashboard references, Kubernetes source/privilege structure, cgroup units,
-  missing-controller behavior, unlimited quotas, traversal/symlink rejection,
-  bounded sample identities and pod-parent discovery.
-- Both Prometheus configuration variants pass strict syntax validation.
-- All 43 recording rules pass `promtool check rules`.
-- Seven deterministic PromQL scenarios pass: pod-parent precedence and counter
-  restart; aggregate gateway/status denominator; real PVC p100/p50/min semantics;
-  shared-network namespace de-duplication / hostNetwork exclusion; actual Caddy
-  2.11.9 captured label-set replay; idle versus absent traffic; bucket-weighted
-  latency across unequal instance traffic. Quantile comparison uses an explicit
-  1e-12 second tolerance for floating arithmetic.
-- All 70 generated dashboard expressions pass PromQL parsing after replacing
-  Grafana variable placeholders with valid regexes.
-- The C++ native component builds with `-Wall -Wextra -Wpedantic -Werror` and
-  AddressSanitizer/UndefinedBehaviorSanitizer. Eight threads add 80,000 known
-  outcomes without lost increments; tests verify histogram boundaries,
-  incomplete scopes, bounded error labels, admission gauges and atomic
-  textfile publication. The actual exposition passes `promtool check metrics`:
-  212 series / approximately 26.6 KiB for that fixture.
-
-`cmake -S . -B build/monitoring-make -G 'Unix Makefiles'
--DGLAMDB_IO_ONLY=ON -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Debug`, then
-`cmake --build build/monitoring-make --target glamdb_metrics --parallel 2`:
-standalone metrics target builds without Arrow, Iceberg or SQLite.
-
-The native component test also builds/runs with GCC 16 under strict warnings.
-LLVM 18.1.8 `clang-format --dry-run --Werror` passes for changed native files
-and probes. LLVM 18.1.8 `clang-tidy --warnings-as-errors=*` passes `metrics.cpp`
-using compatible upstream libc++ 18 headers for analysis; the host SDK's newer
-libc++ headers otherwise require builtins unavailable in Clang 18. This does
-not change the installed compiler or product header configuration.
-
-With the optional structured logger present, a separately compiled sanitized
-component test opens the actual logger, submits an important event, shuts it
-down and checks that process submitted/written counters advanced. The metrics
-snapshot contains those actual counts; exposition passes promtool. CMake
-conditionally links/exports that dependency when `glamdb_logging` exists;
-the standalone monitoring build omits unavailable log series.
-
-Both Compose files pass the official Docker Compose 5.7.0 parser:
+With prometheus-cpp 1.3.0 installed from its exact submodule (upstream pinned
+CivetWeb, pull enabled; push/tests/compression/TLS disabled), prometheus_client
+0.26.0, Prometheus/promtool 3.13.5 and Helm 3.19.1:
 
 ```sh
-docker-compose -f deploy/monitoring/compose.yml config --quiet
-GLAMDB_NODE_LISTEN=127.0.0.1:19100 docker-compose \
-  -f deploy/monitoring/compose.exporters.yml config --quiet
+.venv/bin/python tools/monitoring/check.py \
+  --promtool artifacts/monitoring/prometheus-3.13.5.darwin-arm64/promtool \
+  --helm artifacts/monitoring/bin/helm \
+  --chart artifacts/monitoring/kube-prometheus-stack-92.7.0.tgz
 ```
 
-The second command validates configuration only; the loopback bind is not a
-claim of reachability from a bridged Prometheus container. Real deployment
-requires the private reachable address described in [MONITORING](MONITORING.md).
+- Seven focused Python contracts: concurrent finite HTTP counters, histogram
+  count/sum/boundary, fresh-registry reset, default readiness/in-flight release,
+  library ASGI response, actual library HTTP socket and thread/listener teardown,
+  truthful logger snapshot families, pins and absence of synthetic source values.
+  These are seven test methods; several assertions share a method.
+- Native component compiles with strict warnings and ASan/UBSan. Eight threads
+  record 80,000 committed outcomes; exact count=80,000, sum=800 seconds and the
+  inclusive 0.01-second bucket are checked. Tests also cover incomplete scopes,
+  unknown-error bounding, admission ownership, phase/error pre-registration and
+  scope gauge release. A second fresh process proves reset. The fixture exports
+  exactly **714 domain series**, about **87.2 KiB**, before optional log metrics.
+- Actual prometheus-cpp Exposer serves the domain registry over a localhost TCP
+  socket. `promtool check metrics` accepts it. Destruction removes the listener;
+  no publisher/snapshot file is used. It is a server-application fixture, not a
+  production native database HTTP adapter.
+- Both static Prometheus configurations pass `promtool check config`.
+- All **13** application/PVC recording rules pass parsing. Four PromQL scenarios
+  cover gateway reset/denominators, native endpoint-down suppression, absent
+  sources and actual PVC median aggregation. All **33** application/upstream-node
+  dashboard expressions parse after normal Grafana variable substitution.
+- The exact official kube-prometheus-stack **92.7.0** archive matches locked
+  SHA-256 `af35d3e93750ce46d90cbb6537483c8fa914f19fbffa19fbabcb2825181a0f1a`.
+  Helm strict lint passes and rendering with Kubernetes 1.36.0 capabilities
+  succeeds. No rendered `insecureSkipVerify: true` remains. This does not prove
+  a real cluster's certificates, RBAC, CRDs, CSI, scheduling or runtime support.
+- The standalone native metrics target builds with
+  `GLAMDB_IO_ONLY=ON GLAMDB_BUILD_METRICS=ON BUILD_TESTING=OFF` and the pinned
+  Prometheus prefix. IO-only also builds with no metric dependency when the
+  standalone option is off. Native formatting passes LLVM 18.1.8. The metric adapter also compiles with
+  strict warnings against the finalized optional logging stats header; combined
+  native logging lifecycle execution remains a separate integration check.
+- Changed workflow passes actionlint 1.7.12 and zizmor 1.32.0 offline pedantic
+  checks with no findings.
+- Fourteen mocked Docker-runner tests pass, including explicit recursive
+  Prometheus/CivetWeb prerequisite failures and isolated dependency volume
+  arguments. They do not start a Docker daemon or certify a real engine build.
 
-`python3 tools/monitoring/kubernetes.py --with-cadvisor` generates 27 resources.
-Verified kubeconform 0.8.0 against Kubernetes 1.36.0 schemas:
-**27 valid, 0 invalid, 0 errors, 0 skipped**. The generated Kubernetes Prometheus
-configuration also passes promtool syntax validation.
+Ignored per-run artifacts contain the exact command output; they are not
+installed product files. Reproduce the component gate instead of relying on a
+historical test-count claim.
 
-## Real scrape and Grafana provisioning
+## Component cost
 
-The pinned Prometheus 3.13.5, Grafana 13.3.0 and Python OCI images were run in
-an isolated network with disposable task containers, bounded CPU/memory and
-temporary metrics storage. The operator can reproduce the suite with:
+The same one-million-call C++ fixture ran before and after replacement with
+`-O2`, eight-thread comparison and no database/storage work. Original branch
+head `b3f95b3ad074534f6120a372e1191965ce701e24` used the private atomic histogram:
+731.477 ns/call single-thread, 0.370760 s for the eight-thread million calls,
+211 observed series. The library implementation measured 1587.34 ns/call and
+0.649090 s, with all 714 domain series pre-registered. This is approximately
+856 ns more per instrumented fixture call; it is not a full-request or database
+throughput result. No cache or revocation guarantee was changed for the result.
+
+The Python observation fixture recorded 100,000 calls in 0.355255 s, approximately
+3.55 microseconds each. Its full finite registry has **1,850 samples** including
+the library's created timestamps, approximately 175.7 KiB of exposition and
+515,837 retained bytes measured with tracemalloc during construction. These are
+component measurements on this host, not a production memory/latency budget.
+Request volume does not add metric identities.
+
+## Standard collector runtime checks
+
+`tools/monitoring/container_smoke.py` uses only an explicitly selected disposable
+Linux VM/connection, a unique `glamdb-oss-monitor-*` network/container prefix,
+CPU/memory limits and temporary in-memory Prometheus/Grafana data. It neither
+starts/stops a VM nor removes any existing volume. Source comparisons run from
+a separate probe container so the probe process does not inflate workload
+`pids.current` or memory accounting.
+
+The runtime fixture uses Fedora CoreOS 43, Linux 6.17.7 aarch64, cgroup v2,
+4 CPUs / 4096 MiB, and an existing checkout share. Podman Docker-compatible API
+detection in cAdvisor 0.60.6 expects Docker layerdb paths that Podman does not
+provide; the fixture disables that adapter and uses upstream raw-cgroup mode.
+A real Docker or Kubernetes/containerd deployment still needs its own runtime
+qualification. macOS-to-VM published-loopback forwarding reset connections in
+this environment, so collector correctness is queried via actual HTTP over the
+isolated Linux bridge. That does not qualify external browser/host forwarding.
+
+Executed result: **PASS with documented source gaps** using:
 
 ```sh
-python3 tools/monitoring/container_smoke.py \
-  --connection DEDICATED_PODMAN_CONNECTION \
-  --machine DEDICATED_VM --vm-root /workspace
+.venv/bin/python tools/monitoring/container_smoke.py \
+  --connection DEDICATED_ROOTFUL_CONNECTION --machine DEDICATED_VM \
+  --vm-root /workspace
 ```
 
-`/workspace` must already be a share of this checkout in that dedicated VM.
-The test never starts a VM or changes the selected default connection.
+- Charged memory matched `memory.current` exactly: **73,666,560 bytes**. CPU
+  usage matched **0.105229 seconds**, and cAdvisor reported **4 threads** against
+  actual `pids.current=4`. Host total memory matched **4,079,595,520 bytes**;
+  AnonPages/Cached/Unevictable comparisons use explicit live-gauge tolerances.
+- The pinned unified-v2 handler's source-proven mappings were exercised with a
+  64 MiB anonymous allocator and an 8 MiB file/cache control: RSS-named series
+  **73,003,008 bytes** equals actual `memory.stat anon`; cache **8,556,544 bytes**
+  equals actual `file`. This is a qualified version/hierarchy mapping, not a
+  generic RSS rename. A targeted file fadvise/mmap control produced **one major
+  fault**, matching the real counter; it did not evict host-wide cache.
+- A bounded CPU loop under 0.5-core quota produced **0.983276 seconds** of CFS
+  throttling, exactly matching `throttled_usec / 1e6`. The optional burst field
+  existed and matched zero; nonzero burst behavior remains unqualified.
+- Actual Grafana **13.3.0** provisioned the upstream node dashboard UID
+  `7d57716318ee0dddbac5a7f451fb7753` and `glamdb-service`. Its authenticated
+  datasource proxy queried the real Prometheus/node producer. Startup measured
+  **2.268 seconds**, with a 512 MiB / 1 CPU test cap. Bundled plugins were used;
+  unpinned preinstallation and automatic updates were disabled.
+- Removing the workload removed its raw/fresh resource series while cAdvisor
+  stayed `up=1`. The actual observation-age query used a 30-second bound.
+  Before enabling standard `track_timestamps_staleness`, the real test exposed
+  cached explicitly timestamped values lasting over 90 seconds. `container_last_seen`
+  in the pinned source uses scrape time and is not the observation-age guard.
+- Stopping node_exporter yielded `up=0` and removed old node memory values;
+  restarting it restored `up=1`. Every uniquely named test container and its
+  network were independently confirmed absent after cleanup. No preexisting
+  volume or unrelated VM was removed.
 
-Observed results:
+The ignored result is `artifacts/monitoring/standard-collectors.json`.
+[MONITORING_COVERAGE](MONITORING_COVERAGE.md) states remaining scope/kernel
+requirements. These Linux checks do not certify Kubernetes or a database.
 
-- A real allocator container allocated 64 MiB and started three additional
-  threads. Its Linux cgroup exported **73,003,008 anonymous bytes** and **4 kernel
-  tasks**; every CPU/memory/pids/I/O/PSI collector succeeded.
-- Prometheus scraped the exporter and evaluated its recordings: 55 workload
-  resource/recording series in the fixture.
-- Actual Grafana started with an authenticated admin account, provisioned all
-  three dashboard UIDs (`glamdb-nodes`, `glamdb-pods`, `glamdb-service`) and
-  retained the pod dashboard's 27 panels. Its Prometheus datasource proxy query
-  returned the real cgroup anonymous-memory series.
-- After stopping the allocator, resource values disappeared while exporter
-  `up` remained 1. The test therefore exercises missing-workload behavior without
-  treating exporter reachability as workload health.
-- Test containers/network were removed and the dedicated VM was stopped.
-  The preexisting default VM and default connection were left unchanged.
+## NOTRUN / operator prerequisites
 
-The allocator is a collection fixture, not the database. The runtime evidence
-does not claim native readiness, a production backend, or storage performance.
-The ignored local artifact is `artifacts/monitoring/container-smoke.json`.
-
-## Bounded instrumentation measurement
-
-`tools/monitoring/tests/native_metrics_bench.cpp`, built with AppleClang `-O3
--DNDEBUG`, runs two sets of one million metrics scopes (one serial and one
-across eight threads), with validation/data/catalog timing and returned outcomes.
-It performs **no database or storage operations**.
-
-Measured on this host: serial 0.254068 seconds (254.068 ns/scope); eight threads
-0.193201 seconds for one million total scopes. Series count remained **211
-before and after**; final snapshot approximately 26.9 KiB. These are component
-cost/cardinality observations, not an engine RPS or end-to-end latency result.
-Benchmark source and ignored JSON artifact permit rerunning on deployment
-hardware rather than extrapolating this host's result.
-
-## Not established by these checks
-
-- Full Arrow/Iceberg/SQLite engine build, coordinator suite and installed-consumer
-  link verification require the installed dependency prefix, absent in this
-  environment. Engine hook changes were source-reviewed and formatted; the
-  independent metrics and optional logger integration were compiled/tested.
-- Kubernetes server-side dry-run, actual scheduling, admission/taints, kubelet
-  authorization, CSI volume stats, workload discovery across reschedules and
-  optional privileged cAdvisor process/sched/TCP collection require a real
-  reviewed cluster. Schema validation cannot prove them.
-- Production Compose startup is distinct from the isolated direct-container
-  runtime test. Host network/firewall, Docker runtime paths, permissions and
-  exporter privileges must be checked on the deployment host.
-- Grafana provisioning, datasource queries and expression parsing passed;
-  a browser visual inspection of every populated panel is not recorded.
-- No physical-hardware disk saturation, network retransmission workload,
-  million-RPS database load, power loss or durability qualification was run.
-  Linux has no exact generic unconstrained-wait or directional wall-busy split;
-  the named proxy/NoData boundaries remain as documented.
-
-Official Grafana Darwin download returned HTTP 451 in this environment; the
-locked official OCI image supplied the actual runtime verification instead.
-
-
-Follow-up configuration checks: the optional private `loki` discovery job and
-empty `targets/loki.json` are present in both Compose Prometheus configurations,
-and the native renderer accepts `--loki`. The job name matches Loki alert
-selectors. The Linux quickstart installs a separate UID472/mode0400 Grafana
-file-backed secret; the original caller-owned mode0600 file remains available
-for operator login and Kubernetes secret creation. This corrects ownership
-that the environment-password runtime smoke did not exercise. Promtool and
-Compose syntax checks were rerun for these changes; host UID mapping still
-requires operator validation on the deployment engine.
-
-The isolated CMake tooling fixture now also copies `public/`, required by the
-independent metrics module's typed outcome definitions. A combined IO build
-exposed the previous missing-header failure; both nested CMake cases passed
-after the fixture correction.
+- Complete engine build and installed `glamdb::core` consumer: this checkout's
+  current dependency prefix has no SQLite3 package (configure stops at
+  `find_package(SQLite3 CONFIG)`) and no installed Arrow/Iceberg stack. The
+  package config now discovers exact prometheus-cpp 1.3.0 so static consumers can
+  resolve the private metric library. Build the complete locked prefix, install
+  the engine and run the existing installed-consumer CTest before release.
+- Combined optional native Quill/log metric lifecycle, Linux/GCC/TSan/MSan and
+  full clang-tidy execution were not run. The compile-only stats compatibility
+  check does not establish runtime teardown or sanitizer coverage.
+- Production native HTTP/backend/scanner requests, authoritative native
+  readiness/current-unknown state and full gateway/native comparative load.
+  The current native transport integration is absent; a mock is not evidence.
+- Actual Kubernetes server dry-run/deployment, CSI PVC fill/free quantiles,
+  kubelet certificate/RBAC/runtime checks and Kubernetes controller outages.
+  Kubernetes is optional and was not introduced solely for a test.
+- Nonzero burst, scheduler unconstrained-wait separation, mlock unevictable
+  memory, packet-loss retransmits and directional
+  wall-busy percentages are not certified by the allocator fixture. Exact
+  unsupported fields remain No data; directional service time is only a proxy.
+- arianvp/cgroup-exporter 0.3.3 production adoption/load/path/churn qualification
+  and parent-scope support: intentionally not enabled. Its source/license/release
+  review and explicit gap decision are in the coverage matrix.
+- The Docker Compose CLI was unavailable on this host, so its official config
+  parser was not run. Helm and promtool parsing do not substitute for it.
+- Hosted workflow, full environment load and operator retention/firewall/secret
+  provisioning remain deployment checks. Helm render/component smoke results
+  must not be reported as those checks.
