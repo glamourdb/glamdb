@@ -11,6 +11,7 @@
 | nlohmann/json | 3.12.0 | `json/` submodule; application JSON codec. |
 | reproc/reproc++ | 14.2.7 | `reproc/` submodule; CLI child-process lifecycle, MIT. |
 | SQLite | 3.54.1 | Official amalgamation archive. |
+| prometheus-cpp | 1.3.0 | `prometheus-cpp/` submodule; core metrics and application-owned pull exporter. |
 
 Exact commits, URLs, and SQLite checksums are recorded in [lock.json](lock.json).
 SQLite's archive was checked against the SHA3-256 published on its
@@ -22,7 +23,7 @@ cmake --preset deps-local
 cmake --build --preset deps-local --parallel 2
 ```
 
-This explicitly builds and installs Arrow/Parquet, Iceberg and SQLite into
+This explicitly builds and installs Arrow/Parquet, Iceberg, SQLite and prometheus-cpp into
 `.deps/install`. GoogleTest is built directly from the pinned submodule when
 `BUILD_TESTING=ON`; the dependency build does not compile or install it again.
 GoogleMock is disabled. Quill is header-only and consumed directly by the private telemetry target in every
@@ -36,6 +37,10 @@ wheel hash in `tools/logging/requirements.txt`; its installed wheel retains
 CLI11 is consumed directly from its pinned submodule by
 the CLI target; it adds no runtime library or public engine dependency. Its tests,
 examples, and installation are disabled when included as a subproject.
+prometheus-cpp installs core/pull with its pinned CivetWeb submodule; push, tests,
+compression and embedded TLS are disabled. Its core library is a private static
+engine dependency; its listener is owned only by a server application. Installed
+consumers find the same exact version through the exported CMake package.
 The dependency build needs
 network access for SQLite and upstream transitive dependencies, plus the build
 prerequisites of Arrow and Iceberg, including zlib development files. Set

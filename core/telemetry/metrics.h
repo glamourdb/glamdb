@@ -4,10 +4,12 @@
 
 #include <chrono>
 #include <cstdint>
-#include <filesystem>
 #include <memory>
-#include <string>
 #include <string_view>
+
+namespace prometheus {
+class Collectable;
+}
 
 namespace NGlamDB::NTelemetry {
 
@@ -23,8 +25,9 @@ void RecordFinished(EOperation operation,
 void RecordIncomplete(EOperation operation, double seconds) noexcept;
 void AdjustInFlight(EOperation operation, int64_t delta) noexcept;
 void AdjustAdmission(int64_t pendingDelta, int64_t bytesDelta) noexcept;
-std::string RenderMetrics(std::string_view serviceInstance = "core");
-bool WriteMetricsTextfile(const std::filesystem::path& path, std::string_view serviceInstance = "core") noexcept;
+// Private application seam: register with an application-owned prometheus::Exposer.
+// No listener, thread, textfile or public engine API is created here.
+std::shared_ptr<prometheus::Collectable> GetMetricsCollectable();
 
 template <class TOutcome>
 class TOperationScope
@@ -85,22 +88,6 @@ private:
     TClock::time_point PhaseStart_ = Start_;
     glamdb::CommitPhase Phase_ = glamdb::CommitPhase::Validation;
     bool Finished_ = false;
-};
-
-// Opt-in lifecycle owner; no formatting, filesystem access or threads in Record*.
-// GLAMDB_METRICS_TEXTFILE must name an absolute .prom file. Failure is diagnostic
-// only and never changes a database operation's result.
-class TMetricsPublisher
-{
-public:
-    TMetricsPublisher();
-    ~TMetricsPublisher();
-    TMetricsPublisher(const TMetricsPublisher&) = delete;
-    TMetricsPublisher& operator=(const TMetricsPublisher&) = delete;
-
-private:
-    struct TImpl;
-    std::unique_ptr<TImpl> Impl_;
 };
 
 } // namespace NGlamDB::NTelemetry

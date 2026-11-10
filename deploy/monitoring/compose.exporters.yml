@@ -5,13 +5,11 @@ services:
     command:
       - --path.rootfs=/host
       - --web.listen-address=${GLAMDB_NODE_LISTEN:?Set a private host IP and port reachable from Prometheus}
-      - --collector.textfile.directory=/metrics
       - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/.+)($|/)
     network_mode: host
     pid: host
     volumes:
       - /:/host:ro,rslave
-      - ${GLAMDB_METRICS_DIRECTORY:-../../artifacts/monitoring/textfile}:/metrics:ro
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -26,6 +24,8 @@ services:
       - --whitelisted_container_labels=io.kubernetes.pod.namespace,io.kubernetes.pod.name,io.kubernetes.container.name
       - --enable_metrics=cpu,memory,disk,diskIO,network,process,sched,tcp,advtcp,oom_event
     privileged: true
+    pid: host
+    cgroup: host
     devices: ['/dev/kmsg:/dev/kmsg']
     volumes:
       - /:/rootfs:ro
@@ -36,20 +36,6 @@ services:
     networks: [observability]
     restart: unless-stopped
     mem_limit: 512m
-  resources:
-    image: python:3.13.11-slim-bookworm@sha256:20080e807bfc404f8450b185cf0fc95d553462673598549613735f70a5b4d5d0
-    command: [python3, /app/resource_exporter.py, --listen, '0.0.0.0:9409', --cgroup-root, /host-cgroup, --targets, /app/targets.json]
-    user: '65534:65534'
-    volumes:
-      - ../../tools/monitoring/resource_exporter.py:/app/resource_exporter.py:ro
-      - ./resource-targets.json:/app/targets.json:ro
-      - /sys/fs/cgroup:/host-cgroup:ro
-    networks: [observability]
-    read_only: true
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
-    mem_limit: 128m
-    restart: unless-stopped
 networks:
   observability:
     name: glamdb-observability

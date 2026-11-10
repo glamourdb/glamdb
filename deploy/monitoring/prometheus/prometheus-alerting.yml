@@ -12,6 +12,15 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
         labels: {cluster: local, service: monitoring}
+  - job_name: glamdb-edge
+    sample_limit: 20000
+    label_limit: 20
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/edge.json']
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'caddy_http_.*|caddy_reverse_proxy_.*|process_.*|go_.*'
+        action: keep
   - job_name: glamdb-gateway
     sample_limit: 20000
     label_limit: 20
@@ -19,7 +28,7 @@ scrape_configs:
       - files: ['/etc/prometheus/targets/gateway.json']
     metric_relabel_configs:
       - source_labels: [__name__]
-        regex: 'caddy_http_.*|caddy_reverse_proxy_.*|process_.*|go_.*'
+        regex: 'glamdb_gateway_.*|glamdb_python_log_.*|process_.*|python_.*'
         action: keep
   - job_name: glamdb-core
     sample_limit: 10000
@@ -32,6 +41,8 @@ scrape_configs:
     file_sd_configs:
       - files: ['/etc/prometheus/targets/node.json']
   - job_name: cadvisor
+    honor_timestamps: true
+    track_timestamps_staleness: true
     sample_limit: 100000
     label_limit: 25
     file_sd_configs:
@@ -48,11 +59,6 @@ scrape_configs:
         target_label: container
       - regex: 'container_label_.*|image'
         action: labeldrop
-  - job_name: glamdb-resources
-    sample_limit: 50000
-    label_limit: 20
-    file_sd_configs:
-      - files: ['/etc/prometheus/targets/resources.json']
   - job_name: loki
     sample_limit: 20000
     label_limit: 25
@@ -63,10 +69,6 @@ scrape_configs:
     label_limit: 25
     file_sd_configs:
       - files: ['/etc/prometheus/targets/alloy.json']
-  - job_name: glamdb-alert-transport
-    static_configs:
-      - targets: ['alert-transport:9087']
-        labels: {cluster: local, service: alerting}
   - job_name: alertmanager
     static_configs:
       - targets: ['alertmanager:9093']

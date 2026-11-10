@@ -4,25 +4,22 @@
 #include "core/telemetry/structured_log.h"
 #endif
 
+#include <prometheus/collectable.h>
+#include <prometheus/counter.h>
+#include <prometheus/gauge.h>
+#include <prometheus/histogram.h>
+#include <prometheus/registry.h>
+
 #include <algorithm>
 #include <array>
-#include <atomic>
-#include <condition_variable>
-#include <cstdlib>
-#include <fstream>
-#include <iostream>
-#include <locale>
+#include <memory>
 #include <mutex>
-#include <sstream>
 #include <stdexcept>
-#include <thread>
-#include <utility>
+#include <string>
+#include <vector>
 
 namespace NGlamDB::NTelemetry {
 namespace {
-
-static_assert(std::atomic<uint64_t>::is_always_lock_free);
-static_assert(std::atomic<int64_t>::is_always_lock_free);
 
 constexpr std::array<std::string_view, 2> OperationNames{"append", "create_collection"};
 constexpr std::array<std::string_view, 4> OutcomeNames{"committed",
@@ -54,138 +51,171 @@ constexpr std::array<std::string_view, 13> ErrorNames{"INVALID_ARGUMENT",
 constexpr std::array<double, 15>
     Bounds{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 15, 60};
 
-struct THistogram
+// Domain schema and stable handles only. prometheus-cpp owns the registry,
+// concurrent counters/gauges/histograms, collection and serialization.
+struct TDomainMetrics final : prometheus::Collectable
 {
-    std::array<std::atomic<uint64_t>, Bounds.size() + 1> Buckets{};
-    std::atomic<uint64_t> SumUs{};
+    prometheus::Registry Registry;
+    std::array<std::array<prometheus::Counter*, OutcomeNames.size()>, OperationNames.size()> Outcomes{};
+    std::array<std::array<prometheus::Histogram*, OutcomeNames.size()>, OperationNames.size()> Durations{};
+    std::array<std::array<prometheus::Histogram*, PhaseNames.size()>, OperationNames.size()> Phases{};
+    std::array<std::array<std::array<prometheus::Counter*, ErrorNames.size()>, PhaseNames.size()>,
+        OperationNames.size()>
+        Errors{};
+    std::array<prometheus::Gauge*, OperationNames.size()> InFlight{};
+    prometheus::Gauge* Pending{};
+    prometheus::Gauge* OwnedBytes{};
+#ifdef GLAMDB_METRICS_WITH_LOGGING
+    std::array<prometheus::Counter*, 11> LogCounters{};
+    std::array<prometheus::Gauge*, 3> LogGauges{};
+    mutable std::mutex LogScrapeMutex;
+#endif
 
-    void Observe(double seconds) noexcept
+    TDomainMetrics()
     {
-        const auto bucket =
-            static_cast<size_t>(std::lower_bound(Bounds.begin(), Bounds.end(), seconds) - Bounds.begin());
-        Buckets[bucket].fetch_add(1, std::memory_order_relaxed);
-        SumUs.fetch_add(static_cast<uint64_t>(std::max(0.0, seconds) * 1'000'000), std::memory_order_relaxed);
-    }
-};
-
-struct TRegistry
-{
-    std::array<std::array<std::atomic<uint64_t>, 4>, 2> Outcomes{};
-    std::array<std::array<THistogram, 4>, 2> Durations{};
-    std::array<std::array<THistogram, PhaseNames.size()>, 2> Phases{};
-    std::array<std::array<std::array<std::atomic<uint64_t>, ErrorNames.size()>, PhaseNames.size()>, 2> Errors{};
-    std::array<std::atomic<int64_t>, 2> InFlight{};
-    std::atomic<int64_t> Pending{};
-    std::atomic<int64_t> OwnedBytes{};
-};
-
-TRegistry Registry;
-
-std::string GetLabel(std::string_view name, std::string_view value)
-{
-    return std::string(name) + "=\"" + std::string(value) + "\"";
-}
-
-void RenderHistogram(std::ostream& out, std::string_view name, const std::string& labels, const THistogram& histogram)
-{
-    uint64_t cumulative = 0;
-    for (size_t i = 0; i <= Bounds.size(); ++i) {
-        cumulative += histogram.Buckets[i].load(std::memory_order_relaxed);
-        out << name << "_bucket{" << labels << ",le=\"";
-        if (i < Bounds.size()) {
-            out << Bounds[i];
-        } else {
-            out << "+Inf";
-        }
-        out << "\"} " << cumulative << '\n';
-    }
-    out << name << "_count{" << labels << "} " << cumulative << '\n';
-    out << name << "_sum{" << labels << "} "
-        << static_cast<double>(histogram.SumUs.load(std::memory_order_relaxed)) / 1'000'000.0 << '\n';
-}
-
-bool HasSamples(const THistogram& histogram)
-{
-    return std::ranges::any_of(histogram.Buckets, [](const auto& bucket) {
-        return bucket.load(std::memory_order_relaxed) != 0;
-    });
-}
-
-bool IsValidInstance(std::string_view value)
-{
-    return !value.empty() && value.size() <= 64 && std::ranges::all_of(value, [](char character) {
-        return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
-            (character >= '0' && character <= '9') || character == '_' || character == '-' || character == '.';
-    });
-}
-
-std::string AddInstanceLabel(const std::string& metrics, std::string_view instance)
-{
-    if (!IsValidInstance(instance)) {
-        throw std::invalid_argument("invalid metrics service instance");
-    }
-    std::istringstream source(metrics);
-    std::ostringstream result;
-    std::string line;
-    while (std::getline(source, line)) {
-        if (!line.empty() && line[0] != '#') {
-            const auto space = line.find(' ');
-            const auto brace = line.find('{');
-            if (brace < space) {
-                line.insert(brace + 1, GetLabel("service_instance", instance) + ',');
-            } else {
-                line.insert(space, '{' + GetLabel("service_instance", instance) + '}');
+        const prometheus::Labels processLabels{{"service_instance", "core"}};
+        const prometheus::Histogram::BucketBoundaries bounds(Bounds.begin(), Bounds.end());
+        auto& outcomes = prometheus::BuildCounter()
+                             .Name("glamdb_operations_total")
+                             .Help("Completed API calls including retries; not unique durable writes.")
+                             .Labels(processLabels)
+                             .Register(Registry);
+        auto& durations = prometheus::BuildHistogram()
+                              .Name("glamdb_operation_duration_seconds")
+                              .Help("End-to-end API duration including admission and retries.")
+                              .Labels(processLabels)
+                              .Register(Registry);
+        auto& phases = prometheus::BuildHistogram()
+                           .Name("glamdb_phase_duration_seconds")
+                           .Help("Observed coordinator regions; data includes backend metadata work.")
+                           .Labels(processLabels)
+                           .Register(Registry);
+        auto& errors = prometheus::BuildCounter()
+                           .Name("glamdb_operation_errors_total")
+                           .Help("Returned errors mapped to a fixed domain.")
+                           .Labels(processLabels)
+                           .Register(Registry);
+        auto& inFlight = prometheus::BuildGauge()
+                             .Name("glamdb_operations_in_flight")
+                             .Help("Active synchronous API calls.")
+                             .Labels(processLabels)
+                             .Register(Registry);
+        for (size_t operation = 0; operation < OperationNames.size(); ++operation) {
+            const auto name = std::string(OperationNames[operation]);
+            InFlight[operation] = &inFlight.Add({{"operation", name}});
+            for (size_t outcome = 0; outcome < OutcomeNames.size(); ++outcome) {
+                const prometheus::Labels labels{{"operation", name}, {"outcome", std::string(OutcomeNames[outcome])}};
+                Outcomes[operation][outcome] = &outcomes.Add(labels);
+                Durations[operation][outcome] = &durations.Add(labels, bounds);
+            }
+            for (size_t phase = 0; phase < PhaseNames.size(); ++phase) {
+                prometheus::Labels labels{{"operation", name}, {"phase", std::string(PhaseNames[phase])}};
+                Phases[operation][phase] = &phases.Add(labels, bounds);
+                for (size_t error = 0; error < ErrorNames.size(); ++error) {
+                    labels["error"] = ErrorNames[error];
+                    Errors[operation][phase][error] = &errors.Add(labels);
+                }
             }
         }
-        result << line << '\n';
-    }
-    return result.str();
-}
-
+        Pending = &prometheus::BuildGauge()
+                       .Name("glamdb_admission_pending_calls")
+                       .Help("Admitted append calls retaining an admission slot.")
+                       .Labels(processLabels)
+                       .Register(Registry)
+                       .Add({});
+        OwnedBytes = &prometheus::BuildGauge()
+                          .Name("glamdb_admission_owned_input_bytes")
+                          .Help("Append input bytes owned by admission scopes.")
+                          .Labels(processLabels)
+                          .Register(Registry)
+                          .Add({});
 #ifdef GLAMDB_METRICS_WITH_LOGGING
-void RenderLogMetrics(std::ostream& out)
-{
-    const auto stats = GetProcessLogStats();
-    const std::array<std::pair<std::string_view, uint64_t>, 7> counters{{{"submitted", stats.Submitted},
-        {"accepted", stats.Accepted},
-        {"sampled", stats.Sampled},
-        {"rate_limited", stats.RateLimited},
-        {"written", stats.Written},
-        {"sink_errors", stats.SinkErrors},
-        {"dropped", 0}}};
-    for (const auto& [name, value] : counters) {
-        out << "# HELP glamdb_log_" << name << "_total Process structured logging counter.\n"
-            << "# TYPE glamdb_log_" << name << "_total counter\n";
-        if (name != "dropped") {
-            out << "glamdb_log_" << name << "_total " << value << '\n';
+        const std::array<std::string, 11> counters{"submitted",
+            "accepted",
+            "sampled",
+            "rate_limited",
+            "dropped_full",
+            "dropped_unregistered",
+            "dropped_stopped",
+            "adapter_errors",
+            "backend_notifications",
+            "quill_reported_dropped",
+            "sink_errors"};
+        for (size_t index = 0; index < counters.size(); ++index) {
+            LogCounters[index] = &prometheus::BuildCounter()
+                                      .Name("glamdb_log_" + counters[index] + "_total")
+                                      .Help("Process logging adapter or Quill callback accounting.")
+                                      .Labels(processLabels)
+                                      .Register(Registry)
+                                      .Add({});
         }
-    }
-    for (const auto& [reason, value] :
-        std::array<std::pair<std::string_view, uint64_t>, 4>{{{"queue_full", stats.DroppedFull},
-            {"contended", stats.DroppedContended},
-            {"stopped", stats.DroppedStopped},
-            {"sink", stats.DroppedSink}}})
-    {
-        out << "glamdb_log_dropped_total{reason=\"" << reason << "\"} " << value << '\n';
-    }
-    out << "# HELP glamdb_log_backlog Accepted log records pending emission.\n"
-           "# TYPE glamdb_log_backlog gauge\n"
-        << "glamdb_log_backlog " << stats.Backlog << '\n'
-        << "# HELP glamdb_log_queue_capacity Capacity of live process log queues.\n"
-           "# TYPE glamdb_log_queue_capacity gauge\n"
-        << "glamdb_log_queue_capacity " << stats.QueueCapacity << '\n';
-}
+        const std::array<std::string, 3> gauges{"producer_threads", "queue_capacity_bytes", "max_producer_threads"};
+        for (size_t index = 0; index < gauges.size(); ++index) {
+            LogGauges[index] = &prometheus::BuildGauge()
+                                    .Name("glamdb_log_" + gauges[index])
+                                    .Help("Native logging configured producer resource budget.")
+                                    .Labels(processLabels)
+                                    .Register(Registry)
+                                    .Add({});
+        }
 #endif
+    }
+
+    std::vector<prometheus::MetricFamily> Collect() const override
+    {
+#ifdef GLAMDB_METRICS_WITH_LOGGING
+        // External logger accounting is sampled at scrape. The library still
+        // owns every metric; serialize concurrent scrapes of this adapter.
+        const std::lock_guard lock(LogScrapeMutex);
+        const auto stats = GetProcessLogStats();
+        const std::array<uint64_t, 11> values{stats.Submitted,
+            stats.Accepted,
+            stats.Sampled,
+            stats.RateLimited,
+            stats.DroppedFull,
+            stats.DroppedUnregistered,
+            stats.DroppedStopped,
+            stats.AdapterErrors,
+            stats.BackendNotifications,
+            stats.QuillReportedDropped,
+            stats.SinkErrors};
+        for (size_t index = 0; index < values.size(); ++index) {
+            LogCounters[index]->Reset();
+            LogCounters[index]->Increment(static_cast<double>(values[index]));
+        }
+        LogGauges[0]->Set(static_cast<double>(stats.ProducerThreads));
+        LogGauges[1]->Set(static_cast<double>(stats.QueueCapacityBytes));
+        LogGauges[2]->Set(static_cast<double>(stats.MaxProducerThreads));
+#endif
+        return Registry.Collect();
+    }
+};
+
+const std::shared_ptr<TDomainMetrics>& GetDomainMetrics() noexcept
+{
+    // One initialization attempt. Telemetry allocation failure never changes
+    // an engine outcome or causes repeated allocations in the operation path.
+    static const auto Metrics = []() noexcept -> std::shared_ptr<TDomainMetrics> {
+        try {
+            return std::make_shared<TDomainMetrics>();
+        } catch (...) {
+            return {};
+        }
+    }();
+    return Metrics;
+}
 
 } // namespace
 
 void RecordPhase(EOperation operation, glamdb::CommitPhase phase, double seconds) noexcept
-{
+try {
     const auto operationIndex = static_cast<size_t>(operation);
     const auto phaseIndex = static_cast<size_t>(phase);
-    if (operationIndex < OperationNames.size() && phaseIndex < PhaseNames.size()) {
-        Registry.Phases[operationIndex][phaseIndex].Observe(seconds);
+    const auto& metrics = GetDomainMetrics();
+    if (metrics && operationIndex < OperationNames.size() && phaseIndex < PhaseNames.size()) {
+        metrics->Phases[operationIndex][phaseIndex]->Observe(seconds);
     }
+} catch (...) {
 }
 
 void RecordFinished(EOperation operation,
@@ -193,192 +223,63 @@ void RecordFinished(EOperation operation,
     glamdb::CommitPhase phase,
     std::string_view error,
     double seconds) noexcept
-{
+try {
     const auto operationIndex = static_cast<size_t>(operation);
     const auto outcomeIndex = static_cast<size_t>(outcome);
     const auto phaseIndex = static_cast<size_t>(phase);
-    if (operationIndex >= OperationNames.size() || outcomeIndex >= 3 || phaseIndex >= PhaseNames.size()) {
+    const auto& metrics = GetDomainMetrics();
+    if (!metrics || operationIndex >= OperationNames.size() || outcomeIndex >= 3 || phaseIndex >= PhaseNames.size()) {
         return;
     }
-    Registry.Outcomes[operationIndex][outcomeIndex].fetch_add(1, std::memory_order_relaxed);
-    Registry.Durations[operationIndex][outcomeIndex].Observe(seconds);
+    metrics->Outcomes[operationIndex][outcomeIndex]->Increment();
+    metrics->Durations[operationIndex][outcomeIndex]->Observe(seconds);
     if (!error.empty()) {
         const auto errorIt = std::ranges::find(ErrorNames, error);
         const auto errorIndex =
             errorIt == ErrorNames.end() ? ErrorNames.size() - 1 : static_cast<size_t>(errorIt - ErrorNames.begin());
-        Registry.Errors[operationIndex][phaseIndex][errorIndex].fetch_add(1, std::memory_order_relaxed);
+        metrics->Errors[operationIndex][phaseIndex][errorIndex]->Increment();
     }
+} catch (...) {
 }
 
 void RecordIncomplete(EOperation operation, double seconds) noexcept
-{
+try {
     const auto operationIndex = static_cast<size_t>(operation);
-    if (operationIndex < OperationNames.size()) {
-        Registry.Outcomes[operationIndex][3].fetch_add(1, std::memory_order_relaxed);
-        Registry.Durations[operationIndex][3].Observe(seconds);
+    const auto& metrics = GetDomainMetrics();
+    if (metrics && operationIndex < OperationNames.size()) {
+        metrics->Outcomes[operationIndex][3]->Increment();
+        metrics->Durations[operationIndex][3]->Observe(seconds);
     }
+} catch (...) {
 }
 
 void AdjustInFlight(EOperation operation, int64_t delta) noexcept
-{
+try {
     const auto operationIndex = static_cast<size_t>(operation);
-    if (operationIndex < OperationNames.size()) {
-        Registry.InFlight[operationIndex].fetch_add(delta, std::memory_order_relaxed);
+    const auto& metrics = GetDomainMetrics();
+    if (metrics && operationIndex < OperationNames.size()) {
+        metrics->InFlight[operationIndex]->Increment(static_cast<double>(delta));
     }
+} catch (...) {
 }
 
 void AdjustAdmission(int64_t pendingDelta, int64_t bytesDelta) noexcept
-{
-    Registry.Pending.fetch_add(pendingDelta, std::memory_order_relaxed);
-    Registry.OwnedBytes.fetch_add(bytesDelta, std::memory_order_relaxed);
+try {
+    const auto& metrics = GetDomainMetrics();
+    if (metrics) {
+        metrics->Pending->Increment(static_cast<double>(pendingDelta));
+        metrics->OwnedBytes->Increment(static_cast<double>(bytesDelta));
+    }
+} catch (...) {
 }
 
-std::string RenderMetrics(std::string_view serviceInstance)
+std::shared_ptr<prometheus::Collectable> GetMetricsCollectable()
 {
-    std::ostringstream out;
-    out.imbue(std::locale::classic());
-    out.precision(12);
-    out << "# HELP glamdb_operations_total Completed API calls including retries; not unique durable writes.\n"
-           "# TYPE glamdb_operations_total counter\n"
-           "# HELP glamdb_operations_in_flight Active synchronous API calls.\n"
-           "# TYPE glamdb_operations_in_flight gauge\n"
-           "# HELP glamdb_operation_duration_seconds End-to-end API duration including admission and retries.\n"
-           "# TYPE glamdb_operation_duration_seconds histogram\n"
-           "# HELP glamdb_phase_duration_seconds Observed coordinator regions; data includes backend metadata work.\n"
-           "# TYPE glamdb_phase_duration_seconds histogram\n"
-           "# HELP glamdb_operation_errors_total Returned errors mapped to a fixed domain.\n"
-           "# TYPE glamdb_operation_errors_total counter\n";
-    for (size_t operation = 0; operation < OperationNames.size(); ++operation) {
-        const auto operationLabel = GetLabel("operation", OperationNames[operation]);
-        out << "glamdb_operations_in_flight{" << operationLabel << "} "
-            << Registry.InFlight[operation].load(std::memory_order_relaxed) << '\n';
-        for (size_t outcome = 0; outcome < OutcomeNames.size(); ++outcome) {
-            const auto labels = operationLabel + ',' + GetLabel("outcome", OutcomeNames[outcome]);
-            out << "glamdb_operations_total{" << labels << "} "
-                << Registry.Outcomes[operation][outcome].load(std::memory_order_relaxed) << '\n';
-            RenderHistogram(out, "glamdb_operation_duration_seconds", labels, Registry.Durations[operation][outcome]);
-        }
-        for (size_t phase = 0; phase < PhaseNames.size(); ++phase) {
-            const auto labels = operationLabel + ',' + GetLabel("phase", PhaseNames[phase]);
-            if (HasSamples(Registry.Phases[operation][phase])) {
-                RenderHistogram(out, "glamdb_phase_duration_seconds", labels, Registry.Phases[operation][phase]);
-            }
-            for (size_t error = 0; error < ErrorNames.size(); ++error) {
-                const auto count = Registry.Errors[operation][phase][error].load(std::memory_order_relaxed);
-                if (count != 0) {
-                    out << "glamdb_operation_errors_total{" << labels << ',' << GetLabel("error", ErrorNames[error])
-                        << "} " << count << '\n';
-                }
-            }
-        }
+    const auto& metrics = GetDomainMetrics();
+    if (!metrics) {
+        throw std::runtime_error("native metrics initialization failed");
     }
-    out << "# HELP glamdb_admission_pending_calls Admitted append calls retaining an admission slot.\n"
-           "# TYPE glamdb_admission_pending_calls gauge\n"
-        << "glamdb_admission_pending_calls " << Registry.Pending.load(std::memory_order_relaxed) << '\n'
-        << "# HELP glamdb_admission_owned_input_bytes Append input bytes owned by admission scopes.\n"
-           "# TYPE glamdb_admission_owned_input_bytes gauge\n"
-        << "glamdb_admission_owned_input_bytes " << Registry.OwnedBytes.load(std::memory_order_relaxed) << '\n'
-        << "# HELP glamdb_metrics_snapshot_timestamp_seconds Unix time when this process rendered this snapshot.\n"
-           "# TYPE glamdb_metrics_snapshot_timestamp_seconds gauge\n"
-        << "glamdb_metrics_snapshot_timestamp_seconds "
-        << std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count() << '\n';
-#ifdef GLAMDB_METRICS_WITH_LOGGING
-    RenderLogMetrics(out);
-#endif
-    return AddInstanceLabel(out.str(), serviceInstance);
-}
-
-bool WriteMetricsTextfile(const std::filesystem::path& path, std::string_view serviceInstance) noexcept
-{
-    try {
-        if (!path.is_absolute() || path.extension() != ".prom") {
-            return false;
-        }
-        auto temporary = path;
-        temporary += ".tmp";
-        {
-            std::ofstream file(temporary, std::ios::trunc | std::ios::binary);
-            file << RenderMetrics(serviceInstance);
-            file.close();
-            if (!file) {
-                return false;
-            }
-        }
-        std::filesystem::rename(temporary, path);
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
-struct TMetricsPublisher::TImpl
-{
-    std::filesystem::path Path;
-    std::string ServiceInstance = "core";
-    std::mutex Mutex;
-    std::condition_variable Changed;
-    bool Stopped = false;
-    std::thread Thread;
-
-    void Publish() const
-    {
-        if (!WriteMetricsTextfile(Path, ServiceInstance)) {
-            std::cerr << "metrics textfile publication failed\n";
-        }
-    }
-};
-
-TMetricsPublisher::TMetricsPublisher()
-{
-    const auto* path = std::getenv("GLAMDB_METRICS_TEXTFILE");
-    if (!path || *path == '\0') {
-        return;
-    }
-    try {
-        const std::filesystem::path target(path);
-        if (!target.is_absolute() || target.extension() != ".prom") {
-            std::cerr << "GLAMDB_METRICS_TEXTFILE requires an absolute .prom path\n";
-            return;
-        }
-        auto impl = std::make_unique<TImpl>();
-        impl->Path = target;
-        const auto* instance = std::getenv("GLAMDB_METRICS_INSTANCE");
-        if (instance && *instance != '\0') {
-            if (!IsValidInstance(instance)) {
-                std::cerr << "GLAMDB_METRICS_INSTANCE requires 1..64 letters, digits, dots, underscores or dashes\n";
-                return;
-            }
-            impl->ServiceInstance = instance;
-        }
-        impl->Publish();
-        impl->Thread = std::thread([state = impl.get()] {
-            std::unique_lock lock(state->Mutex);
-            while (!state->Changed.wait_for(lock, std::chrono::seconds(15), [&] {
-                return state->Stopped;
-            }))
-            {
-                lock.unlock();
-                state->Publish();
-                lock.lock();
-            }
-        });
-        Impl_ = std::move(impl);
-    } catch (...) {
-        std::cerr << "metrics publisher could not start\n";
-    }
-}
-
-TMetricsPublisher::~TMetricsPublisher()
-{
-    if (Impl_) {
-        {
-            std::lock_guard lock(Impl_->Mutex);
-            Impl_->Stopped = true;
-        }
-        Impl_->Changed.notify_one();
-        Impl_->Thread.join();
-        Impl_->Publish();
-    }
+    return metrics;
 }
 
 } // namespace NGlamDB::NTelemetry

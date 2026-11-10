@@ -1,120 +1,36 @@
 {
   "groups": [
     {
-      "name": "glamdb-recording",
+      "name": "glamdb-application",
       "interval": "30s",
       "rules": [
         {
-          "record": "glamdb:pod_cpu_usage_cores:rate5m",
-          "expr": "sum by (cluster,namespace,pod) (rate(glamdb_cgroup_cpu_usage_seconds_total[5m])) or on (cluster,namespace,pod) sum by (cluster,namespace,pod) (rate(container_cpu_usage_seconds_total{job=\"cadvisor\",pod!=\"\",container!=\"\",container!=\"POD\"}[5m]))"
+          "record": "glamdb:http_requests:rate5m",
+          "expr": "sum by (cluster,service) (rate(glamdb_gateway_http_requests_total{job=\"glamdb-gateway\"}[5m]))"
         },
         {
-          "record": "glamdb:pod_cpu_throttled_seconds:rate5m",
-          "expr": "sum by (cluster,namespace,pod) (rate(glamdb_cgroup_cpu_throttled_seconds_total[5m])) or on (cluster,namespace,pod) sum by (cluster,namespace,pod) (rate(container_cpu_cfs_throttled_seconds_total{job=\"cadvisor\",pod!=\"\",container!=\"\",container!=\"POD\"}[5m]))"
+          "record": "glamdb:http_errors:rate5m",
+          "expr": "sum by (cluster,service) (rate(glamdb_gateway_http_requests_total{job=\"glamdb-gateway\",status_class=\"5xx\"}[5m]))"
         },
         {
-          "record": "glamdb:pod_memory_usage_bytes",
-          "expr": "sum by (cluster,namespace,pod) (glamdb_cgroup_memory_usage_bytes) or on (cluster,namespace,pod) sum by (cluster,namespace,pod) (container_memory_usage_bytes{job=\"cadvisor\",pod!=\"\",container!=\"\",container!=\"POD\"})"
+          "record": "glamdb:http_error:ratio5m",
+          "expr": "glamdb:http_errors:rate5m / on (cluster,service) (glamdb:http_requests:rate5m > 0)"
         },
         {
-          "record": "glamdb:pod_threads",
-          "expr": "sum by (cluster,namespace,pod) (glamdb_cgroup_threads) or on (cluster,namespace,pod) sum by (cluster,namespace,pod) (container_threads{job=~\"cadvisor|cadvisor-detail\",pod!=\"\",container!=\"\",container!=\"POD\"})"
+          "record": "glamdb:http_request_duration_seconds:p50",
+          "expr": "histogram_quantile(0.5, sum by (cluster,service,le) (rate(glamdb_gateway_http_request_duration_seconds_bucket{job=\"glamdb-gateway\"}[5m])))"
         },
         {
-          "record": "glamdb:pod_memory_anon_bytes",
-          "expr": "sum by (cluster,namespace,pod) (glamdb_cgroup_memory_anon_bytes)"
+          "record": "glamdb:http_request_duration_seconds:p95",
+          "expr": "histogram_quantile(0.95, sum by (cluster,service,le) (rate(glamdb_gateway_http_request_duration_seconds_bucket{job=\"glamdb-gateway\"}[5m])))"
         },
         {
-          "record": "glamdb:pod_memory_file_bytes",
-          "expr": "sum by (cluster,namespace,pod) (glamdb_cgroup_memory_file_bytes)"
+          "record": "glamdb:http_request_duration_seconds:p99",
+          "expr": "histogram_quantile(0.99, sum by (cluster,service,le) (rate(glamdb_gateway_http_request_duration_seconds_bucket{job=\"glamdb-gateway\"}[5m])))"
         },
         {
-          "record": "glamdb:pod_memory_unevictable_bytes",
-          "expr": "sum by (cluster,namespace,pod) (glamdb_cgroup_memory_unevictable_bytes)"
-        },
-        {
-          "record": "glamdb:pod_memory_major_faults:rate5m",
-          "expr": "sum by (cluster,namespace,pod) (rate(glamdb_cgroup_memory_major_faults_total[5m]))"
-        },
-        {
-          "record": "glamdb:pod_cpu_burst_seconds:rate5m",
-          "expr": "sum by (cluster,namespace,pod) (rate(glamdb_cgroup_cpu_burst_seconds_total[5m]))"
-        },
-        {
-          "record": "glamdb:pod_cpu_runqueue_wait_seconds:rate5m",
-          "expr": "sum by (cluster,namespace,pod) (rate(container_cpu_schedstat_runqueue_seconds_total{job=~\"cadvisor|cadvisor-detail\",pod!=\"\",container!=\"\",container!=\"POD\"}[5m]))"
-        },
-        {
-          "record": "glamdb:pod_cpu_limit_cores",
-          "expr": "sum by (cluster,namespace,pod) (glamdb_cgroup_cpu_limit_cores)"
-        },
-        {
-          "record": "glamdb:pod_cpu_requests_cores",
-          "expr": "sum by (cluster,namespace,pod) (kube_pod_container_resource_requests{resource=\"cpu\",unit=\"core\"})"
-        },
-        {
-          "record": "glamdb:pod_cpu_above_requests_cores:rate5m",
-          "expr": "clamp_min(glamdb:pod_cpu_usage_cores:rate5m - on (cluster,namespace,pod) glamdb:pod_cpu_requests_cores, 0)"
-        },
-        {
-          "record": "glamdb:pod_cpu_limit_utilization:ratio5m",
-          "expr": "glamdb:pod_cpu_usage_cores:rate5m / on (cluster,namespace,pod) (glamdb:pod_cpu_limit_cores > 0)"
-        },
-        {
-          "record": "glamdb:pod_cpu_pressure_seconds:rate5m",
-          "expr": "sum by (cluster,namespace,pod,scope) (rate(glamdb_cgroup_pressure_stall_seconds_total{resource=\"cpu\"}[5m]))"
-        },
-        {
-          "record": "glamdb:pod_io_read_bytes:rate5m",
-          "expr": "sum by (cluster,namespace,pod) (rate(glamdb_cgroup_io_read_bytes_total[5m])) or on (cluster,namespace,pod) sum by (cluster,namespace,pod) (rate(container_fs_reads_bytes_total{job=\"cadvisor\",pod!=\"\",container!=\"\",container!=\"POD\"}[5m]))"
-        },
-        {
-          "record": "glamdb:pod_io_read_operations:rate5m",
-          "expr": "sum by (cluster,namespace,pod) (rate(glamdb_cgroup_io_read_operations_total[5m])) or on (cluster,namespace,pod) sum by (cluster,namespace,pod) (rate(container_fs_reads_total{job=\"cadvisor\",pod!=\"\",container!=\"\",container!=\"POD\"}[5m]))"
-        },
-        {
-          "record": "glamdb:pod_io_write_bytes:rate5m",
-          "expr": "sum by (cluster,namespace,pod) (rate(glamdb_cgroup_io_write_bytes_total[5m])) or on (cluster,namespace,pod) sum by (cluster,namespace,pod) (rate(container_fs_writes_bytes_total{job=\"cadvisor\",pod!=\"\",container!=\"\",container!=\"POD\"}[5m]))"
-        },
-        {
-          "record": "glamdb:pod_io_write_operations:rate5m",
-          "expr": "sum by (cluster,namespace,pod) (rate(glamdb_cgroup_io_write_operations_total[5m])) or on (cluster,namespace,pod) sum by (cluster,namespace,pod) (rate(container_fs_writes_total{job=\"cadvisor\",pod!=\"\",container!=\"\",container!=\"POD\"}[5m]))"
-        },
-        {
-          "record": "glamdb:pod_network_receive_bytes:rate5m",
-          "expr": "(sum by (cluster,namespace,pod) (max by (cluster,namespace,pod,interface) (rate(container_network_receive_bytes_total{job=\"cadvisor\",pod!=\"\",interface!=\"lo\"}[5m])))) unless on (cluster,namespace,pod) max by (cluster,namespace,pod) (kube_pod_info{host_network=\"true\"})"
-        },
-        {
-          "record": "glamdb:pod_network_transmit_bytes:rate5m",
-          "expr": "(sum by (cluster,namespace,pod) (max by (cluster,namespace,pod,interface) (rate(container_network_transmit_bytes_total{job=\"cadvisor\",pod!=\"\",interface!=\"lo\"}[5m])))) unless on (cluster,namespace,pod) max by (cluster,namespace,pod) (kube_pod_info{host_network=\"true\"})"
-        },
-        {
-          "record": "glamdb:pod_tcp_established",
-          "expr": "(sum by (cluster,namespace,pod) (max by (cluster,namespace,pod,family) (label_replace(container_network_tcp_usage_total{job=~\"cadvisor|cadvisor-detail\",pod!=\"\",tcp_state=\"established\"},\"family\",\"4\",\"pod\",\".*\") or label_replace(container_network_tcp6_usage_total{job=~\"cadvisor|cadvisor-detail\",pod!=\"\",tcp_state=\"established\"},\"family\",\"6\",\"pod\",\".*\")))) unless on (cluster,namespace,pod) max by (cluster,namespace,pod) (kube_pod_info{host_network=\"true\"})"
-        },
-        {
-          "record": "glamdb:pod_tcp_retransmits:rate5m",
-          "expr": "(max by (cluster,namespace,pod) (rate(container_network_advance_tcp_stats_total{job=~\"cadvisor|cadvisor-detail\",pod!=\"\",tcp_state=\"retranssegs\"}[5m]))) unless on (cluster,namespace,pod) max by (cluster,namespace,pod) (kube_pod_info{host_network=\"true\"})"
-        },
-        {
-          "record": "glamdb:node_cpu_utilization:ratio5m",
-          "expr": "1 - avg by (cluster,instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))"
-        },
-        {
-          "record": "glamdb:node_memory_used_bytes",
-          "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes"
-        },
-        {
-          "record": "glamdb:node_disk_busy:ratio5m",
-          "expr": "rate(node_disk_io_time_seconds_total[5m])"
-        },
-        {
-          "record": "glamdb:node_disk_read_service_time:ratio5m",
-          "expr": "rate(node_disk_read_time_seconds_total[5m])"
-        },
-        {
-          "record": "glamdb:node_disk_write_service_time:ratio5m",
-          "expr": "rate(node_disk_write_time_seconds_total[5m])"
+          "record": "glamdb:native_operations:rate5m",
+          "expr": "sum by (cluster,service,operation,outcome) (rate(glamdb_operations_total{job=\"glamdb-core\"}[5m]) and on (cluster,service,instance) (up{job=\"glamdb-core\"} == 1))"
         },
         {
           "record": "glamdb:podset_owner",
@@ -139,42 +55,6 @@
         {
           "record": "glamdb:podset_pvc_available:p100",
           "expr": "quantile by (cluster,namespace,podset) (1, glamdb:pod_pvc_available:ratio * on (cluster,namespace,pod) group_left (podset) glamdb:podset_owner)"
-        },
-        {
-          "record": "glamdb:http_requests:rate5m",
-          "expr": "sum by (cluster,service) (rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",handler=\"subroute\",server=\"workbench\"}[5m]))"
-        },
-        {
-          "record": "glamdb:http_errors:rate5m",
-          "expr": "sum by (cluster,service) (rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",handler=\"subroute\",server=\"workbench\",code=~\"5..\"}[5m])) or on (cluster,service) (glamdb:http_requests:rate5m * 0)"
-        },
-        {
-          "record": "glamdb:http_upstream_failures:rate5m",
-          "expr": "sum by (cluster,service) (rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",handler=\"subroute\",server=\"workbench\",code=~\"502|504\"}[5m])) or on (cluster,service) (glamdb:http_requests:rate5m * 0)"
-        },
-        {
-          "record": "glamdb:http_error:ratio5m",
-          "expr": "glamdb:http_errors:rate5m / on (cluster,service) (glamdb:http_requests:rate5m > 0)"
-        },
-        {
-          "record": "glamdb:http_request_duration_seconds:p50",
-          "expr": "histogram_quantile(0.5, sum by (cluster,service,le) (rate(caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",handler=\"subroute\",server=\"workbench\"}[5m])))"
-        },
-        {
-          "record": "glamdb:http_request_duration_seconds:p95",
-          "expr": "histogram_quantile(0.95, sum by (cluster,service,le) (rate(caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",handler=\"subroute\",server=\"workbench\"}[5m])))"
-        },
-        {
-          "record": "glamdb:http_request_duration_seconds:p99",
-          "expr": "histogram_quantile(0.99, sum by (cluster,service,le) (rate(caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",handler=\"subroute\",server=\"workbench\"}[5m])))"
-        },
-        {
-          "record": "glamdb:native_operations:rate5m",
-          "expr": "sum by (cluster,service,operation,outcome) (rate(glamdb_operations_total[5m]) and on (cluster,service,instance,service_instance) (time() - glamdb_metrics_snapshot_timestamp_seconds < 90))"
-        },
-        {
-          "record": "glamdb:native_snapshot_age_seconds",
-          "expr": "time() - glamdb_metrics_snapshot_timestamp_seconds"
         }
       ]
     }
