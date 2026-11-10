@@ -1,0 +1,17 @@
+{
+  "alertmanager": {
+    "version": "0.35.0",
+    "image": "prom/alertmanager:v0.35.0@sha256:e638797febd034838eca8b98cdbd46f951e9bf7f178777aa8669167406a9946c",
+    "darwin_arm64_archive_sha256": "06c0700ebdee77688eddc12e1c71c52e88efbb348f832ecb7a9ff699f9106fba",
+    "source": "https://github.com/prometheus/alertmanager/releases/tag/v0.35.0"
+  },
+  "python": {
+    "version": "3.13.18",
+    "image": "python:3.13.18-slim-bookworm@sha256:a5a7017efc5969e00ae2b91c8eb0631049a569652aa4ffc4501769049ae45c72",
+    "source": "https://hub.docker.com/_/python"
+  },
+  "prometheus": {
+    "tested_versions": ["3.13.5", "3.16.0"],
+    "source": "https://prometheus.io/download/"
+  }
+}

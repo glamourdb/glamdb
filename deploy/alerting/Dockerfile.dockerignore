@@ -1,0 +1,8 @@
+**
+!tools/
+!tools/alerting/
+!tools/alerting/transport.py
+!deploy/
+!deploy/alerting/
+!deploy/alerting/Dockerfile
+!deploy/alerting/Dockerfile.dockerignore
