@@ -12,7 +12,7 @@ import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from test_alerting import module
+from tools.alerting.test_alerting import module
 
 
 @contextmanager
