@@ -91,8 +91,10 @@ a separate probe container so the probe process does not inflate workload
 The runtime fixture uses Fedora CoreOS 43, Linux 6.17.7 aarch64, cgroup v2,
 4 CPUs / 4096 MiB, and an existing checkout share. Podman Docker-compatible API
 detection in cAdvisor 0.60.6 expects Docker layerdb paths that Podman does not
-provide; the fixture disables that adapter and uses upstream raw-cgroup mode.
-A real Docker or Kubernetes/containerd deployment still needs its own runtime
+provide; the fixture disables that Docker adapter while keeping the upstream
+Podman factory and raw cgroups available. It selects the actual Podman child
+scope (including its trailing-slash exporter ID) and compares the matching
+Linux cgroup path. A real Docker or Kubernetes/containerd deployment still needs its own runtime
 qualification. macOS-to-VM published-loopback forwarding reset connections in
 this environment, so collector correctness is queried via actual HTTP over the
 isolated Linux bridge. That does not qualify external browser/host forwarding.
@@ -154,6 +156,9 @@ requirements. These Linux checks do not certify Kubernetes or a database.
 - Actual Kubernetes server dry-run/deployment, CSI PVC fill/free quantiles,
   kubelet certificate/RBAC/runtime checks and Kubernetes controller outages.
   Kubernetes is optional and was not introduced solely for a test.
+- Controlled network-namespace byte/TCP-established comparisons and block-device
+  byte/IOPS/service-time comparisons were not executed. Their table entries are
+  producer/unit contracts, not runtime PASS claims.
 - Nonzero burst, scheduler unconstrained-wait separation, mlock unevictable
   memory, packet-loss retransmits and directional
   wall-busy percentages are not certified by the allocator fixture. Exact
