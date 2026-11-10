@@ -241,6 +241,7 @@ Preserve these boundaries when adding or changing engine behavior:
 | `tools/workload/` | Mimesis datasets, SDK/Locust workloads, per-worker SQLite outcome journals and full verification. |
 | `probes/`, `benchmarks/` | Installed-dependency/compatibility probes and workload measurements. |
 | `scripts/` | Developer tooling, including quality checks. |
+| `core/telemetry/metrics.*`, `deploy/monitoring/`, `tools/monitoring/` | Native telemetry, provisioned dashboards/collectors, deployment generators and checks. |
 | `third_party/` | Pinned upstream submodules and `lock.json`. |
 
 Read [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) when placing new
@@ -257,6 +258,12 @@ Preserve the supplied PNGs unchanged. Brand paths must be local assets; sizes
 belong in theme.json. Asset URLs must support both / and /glamdb/.
 
 ## Build and development commands
+
+For real host/container/Kubernetes monitoring, native metrics snapshots, sources,
+proxy meanings and deployment steps, read [MONITORING](docs/development/MONITORING.md).
+Run `python3 tools/monitoring/check.py --promtool PATH` for focused checks.
+Keep missing collectors/unsupported fields as NoData; exporter reachability and
+snapshot freshness do not establish native database health or durability.
 
 Client/mock development uses Python 3.13 and Node 22+:
 

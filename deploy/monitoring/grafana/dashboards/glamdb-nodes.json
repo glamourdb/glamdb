@@ -1,0 +1,913 @@
+{
+  "uid": "glamdb-nodes",
+  "title": "GlamDB · Linux hardware",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": [
+    "glamdb",
+    "provisioned"
+  ],
+  "editable": false,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Scope and missing data",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Missing collectors, unsupported kernel fields, idle histogram quantiles, and unconfigured endpoints remain **No data**. No panel substitutes zero or infers native readiness. See `docs/development/MONITORING.md` for sources, prerequisites, proxy meanings and deployment steps."
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Node CPU utilization",
+      "description": "1 minus idle fraction; includes iowait and steal, not application CPU alone.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "glamdb:node_cpu_utilization:ratio5m{cluster=~\"$cluster\",instance=~\"$instance\"}",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Node used memory (MemTotal-MemAvailable)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "glamdb:node_memory_used_bytes{cluster=~\"$cluster\",instance=~\"$instance\"}",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Node anonymous memory",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "node_memory_AnonPages_bytes{cluster=~\"$cluster\",instance=~\"$instance\"}",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Node total RAM",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 11,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "node_memory_MemTotal_bytes{cluster=~\"$cluster\",instance=~\"$instance\"}",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Node file cache",
+      "description": "Linux Cached+SReclaimable; kernel accounting differs from cgroup file.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "node_memory_Cached_bytes{cluster=~\"$cluster\",instance=~\"$instance\"} + node_memory_SReclaimable_bytes{cluster=~\"$cluster\",instance=~\"$instance\"}",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Node unevictable memory",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 19,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "node_memory_Unevictable_bytes{cluster=~\"$cluster\",instance=~\"$instance\"}",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Node network received/transmitted",
+      "description": "Filter virtual interfaces in Explore when diagnosing a physical link; never sum all links to infer wire traffic.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "rate(node_network_receive_bytes_total{cluster=~\"$cluster\",instance=~\"$instance\"}[5m])",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(node_network_transmit_bytes_total{cluster=~\"$cluster\",instance=~\"$instance\"}[5m])",
+          "legendFormat": "transmit {{instance}} {{device}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Node established TCP",
+      "description": "Linux network namespace Tcp CurrEstab counts ESTABLISHED and CLOSE-WAIT, not a pure ESTABLISHED count.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 27,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "node_netstat_Tcp_CurrEstab{cluster=~\"$cluster\",instance=~\"$instance\"}",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Node TCP retransmissions",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "rate(node_netstat_Tcp_RetransSegs{cluster=~\"$cluster\",instance=~\"$instance\"}[5m])",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Node filesystem free",
+      "description": "Real statfs available space; shared node filesystem, not per-pod ephemeral-storage quota.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 35,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "node_filesystem_avail_bytes{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs\",mountpoint=~\"$mountpoint\"} / node_filesystem_size_bytes{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs\",mountpoint=~\"$mountpoint\"}",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Top disks: busy time",
+      "description": "Linux io_ticks wall-time busy fraction. Modern parallel devices can saturate below/above assumptions; not a universal throughput limit.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "topk(10,glamdb:node_disk_busy:ratio5m{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"$device\"})",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Top disks: read service-time utilization (proxy)",
+      "description": "Directional service time/second, can exceed 100% under concurrent I/O. Linux has no independent read/write wall busy% counters; do not clamp or call this device saturation.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 43,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "topk(10,glamdb:node_disk_read_service_time:ratio5m{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"$device\"})",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Top disks: read bytes",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "topk(10,rate(node_disk_read_bytes_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"$device\"}[5m]))",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Top disks: read IOPS",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "topk(10,rate(node_disk_reads_completed_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"$device\"}[5m]))",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "iops",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Top disks: write service-time utilization (proxy)",
+      "description": "Directional service time/second, can exceed 100% under concurrent I/O. Linux has no independent read/write wall busy% counters; do not clamp or call this device saturation.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "topk(10,glamdb:node_disk_write_service_time:ratio5m{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"$device\"})",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Top disks: write bytes",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 59,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "topk(10,rate(node_disk_written_bytes_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"$device\"}[5m]))",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Top disks: write IOPS",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 67,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "topk(10,rate(node_disk_writes_completed_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"$device\"}[5m]))",
+          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "iops",
+          "noValue": "No data",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "cluster",
+        "type": "query",
+        "datasource": {
+          "uid": "prometheus",
+          "type": "prometheus"
+        },
+        "query": "label_values(up,cluster)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "namespace",
+        "type": "query",
+        "datasource": {
+          "uid": "prometheus",
+          "type": "prometheus"
+        },
+        "query": "label_values({cluster=~\"$cluster\",namespace!=\"\"},namespace)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "pod",
+        "type": "query",
+        "datasource": {
+          "uid": "prometheus",
+          "type": "prometheus"
+        },
+        "query": "label_values({cluster=~\"$cluster\",namespace=~\"$namespace\",pod!=\"\"},pod)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": {
+          "uid": "prometheus",
+          "type": "prometheus"
+        },
+        "query": "label_values(up{cluster=~\"$cluster\",service!=\"\"},service)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "instance",
+        "type": "query",
+        "datasource": {
+          "uid": "prometheus",
+          "type": "prometheus"
+        },
+        "query": "label_values(node_uname_info{cluster=~\"$cluster\"},instance)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "device",
+        "type": "query",
+        "datasource": {
+          "uid": "prometheus",
+          "type": "prometheus"
+        },
+        "query": "label_values(node_disk_io_time_seconds_total{cluster=~\"$cluster\"},device)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "mountpoint",
+        "type": "query",
+        "datasource": {
+          "uid": "prometheus",
+          "type": "prometheus"
+        },
+        "query": "label_values(node_filesystem_avail_bytes{cluster=~\"$cluster\"},mountpoint)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "podset",
+        "type": "query",
+        "datasource": {
+          "uid": "prometheus",
+          "type": "prometheus"
+        },
+        "query": "label_values(glamdb:podset_owner{cluster=~\"$cluster\",namespace=~\"$namespace\"},podset)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  }
+}
