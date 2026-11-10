@@ -13,8 +13,8 @@ import unittest
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
-from test_alerting import ROOT, module
-from test_http import FakeAPI, running
+from tools.alerting.test_alerting import ROOT, module
+from tools.alerting.test_http import FakeAPI, running
 
 
 def free_port():
