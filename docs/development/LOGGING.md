@@ -15,6 +15,15 @@ adapter does not install middleware or alter storage writers. These logs are
 best effort. Authoritative administrative audit and storage outcomes belong in
 their transactional journals.
 
+The organization gateway integrates the Python adapter when both components
+are installed. It emits supervisor start/stop and administrative change events,
+projecting only validated receipt IDs, revisions and outcomes. Its transactional
+audit remains authoritative; retries can repeat operational notifications.
+Set GLAMDB_LOG_DIRECTORY to a dedicated per-process directory and register it
+as an Alloy file source. Do not share the rotation directory with a native
+writer. A configured sink that cannot be opened fails gateway startup; no
+raw Caddy request JSON is added to this schema.
+
 ## Choice and source review
 
 Reviewed against upstream documentation on **2026-11-10**:
