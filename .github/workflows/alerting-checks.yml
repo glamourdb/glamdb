@@ -50,7 +50,7 @@ jobs:
             docker rm "$container_id"
             trap - EXIT
           done
-      - name: Test real Prometheus, Alertmanager, webhook, and delivery
+      - name: Test real Prometheus and native Alertmanager Telegram delivery
         run: |
           tool_dir="$RUNNER_TEMP/glamdb-alerting"
           python3 tools/alerting/check.py \

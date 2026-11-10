@@ -241,7 +241,7 @@ Preserve these boundaries when adding or changing engine behavior:
 | `tools/workload/` | Mimesis datasets, SDK/Locust workloads, per-worker SQLite outcome journals and full verification. |
 | `probes/`, `benchmarks/` | Installed-dependency/compatibility probes and workload measurements. |
 | `scripts/` | Developer tooling, including quality checks. |
-| `deploy/alerting/`, `tools/alerting/` | Four-state Prometheus rules, Alertmanager routing, durable Telegram transport and executable replay/transition tests. |
+| `deploy/alerting/`, `tools/alerting/` | Four-state Prometheus rules, Alertmanager routing, native Telegram receiver and executable replay/transition tests. |
 | `third_party/` | Pinned upstream submodules and `lock.json`. |
 
 Read [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) when placing new
@@ -261,9 +261,13 @@ belong in theme.json. Asset URLs must support both / and /glamdb/.
 
 For alerting setup and validation, read [ALERTING.md](ALERTING.md) and run
 `python3 tools/alerting/check.py` with the required Prometheus/Alertmanager tools
-on PATH or passed explicitly. Its process tests use loopback fake Telegram only.
-Gateway HTTP metrics cover the outer workbench route, including UI/auth/helpers
-and API traffic; native operation counters measure actual core operations.
+on PATH or passed explicitly. Its process tests run real Prometheus/Alertmanager
+with a loopback Telegram protocol peer only.
+The native receiver owns delivery; there is no webhook/outbox service.
+`deploy/alerting/external-observer/` runs on a separate host/notification path.
+Gateway application metrics cover requests after the edge/OIDC proxy. Separate
+Caddy outer-edge counts include authentication rejections before the application.
+Native operation counters measure actual core operations.
 
 Client/mock development uses Python 3.13 and Node 22+:
 

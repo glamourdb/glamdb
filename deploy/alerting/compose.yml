@@ -16,38 +16,14 @@ services:
     volumes:
       - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
-    secrets: [alert_webhook_bearer]
+    secrets: [telegram_bot_token, telegram_chat_id]
     networks: [observability]
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
+    security_opt: ["no-new-privileges:true"]
     mem_limit: 256m
     cpus: 0.5
-    logging:
-      driver: json-file
-      options: {max-size: 10m, max-file: "3"}
-
-  alert-transport:
-    build:
-      context: ../..
-      dockerfile: deploy/alerting/Dockerfile
-    command: [--capacity, "1000", --prometheus-url, "http://prometheus:9090"]
-    ports: ["127.0.0.1:${ALERT_TRANSPORT_PORT:-9087}:9087"]
-    volumes: [telegram-outbox:/data]
-    secrets: [telegram_bot_token, telegram_chat_id, alert_webhook_bearer]
-    networks: [observability]
-    restart: unless-stopped
-    read_only: true
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
-    mem_limit: 128m
-    cpus: 0.5
-    healthcheck:
-      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9087/healthz', timeout=2)"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
     logging:
       driver: json-file
       options: {max-size: 10m, max-file: "3"}
@@ -57,12 +33,9 @@ secrets:
     file: ${ALERTING_SECRETS_DIR:-../../artifacts/alerting/secrets}/telegram_bot_token
   telegram_chat_id:
     file: ${ALERTING_SECRETS_DIR:-../../artifacts/alerting/secrets}/telegram_chat_id
-  alert_webhook_bearer:
-    file: ${ALERTING_SECRETS_DIR:-../../artifacts/alerting/secrets}/alert_webhook_bearer
 
 volumes:
   alertmanager-data:
-  telegram-outbox:
 
 networks:
   observability:

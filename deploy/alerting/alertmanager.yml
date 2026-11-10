@@ -2,7 +2,7 @@ global:
   resolve_timeout: 5m
 
 route:
-  receiver: telegram-outbox
+  receiver: telegram
   group_by: [cluster, service, check, namespace, pod, node]
   group_wait: 30s
   group_interval: 1m
@@ -15,17 +15,25 @@ route:
 
 receivers:
   - name: visible-only
-  - name: telegram-outbox
-    webhook_configs:
-      - url: http://alert-transport:9087/alerts
+  - name: telegram
+    telegram_configs:
+      - api_url: https://api.telegram.org
+        bot_token_file: /run/secrets/telegram_bot_token
+        chat_id_file: /run/secrets/telegram_chat_id
         send_resolved: false
-        max_alerts: 100
-        timeout: 10s
+        parse_mode: ""
+        timeout: 5s
+        message: |-
+          {{ range .Alerts.Firing }}{{ .Labels.state }} GlamDB {{ .Labels.check }}
+          Scope: {{ .Labels.cluster }}/{{ .Labels.service }} {{ .Labels.namespace }} {{ .Labels.pod }} {{ .Labels.node }}
+          Observed at (Unix seconds): {{ .Annotations.observed_at }}
+          State since (UTC): {{ .StartsAt.UTC.Format "2006-01-02T15:04:05Z" }}
+          {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ .Annotations.runbook_url }}
+          {{ end }}
         http_config:
           follow_redirects: false
-          authorization:
-            type: Bearer
-            credentials_file: /run/secrets/alert_webhook_bearer
 
 # State rules are exclusive. These guards also suppress stale lower states
 # during a rolling rule/configuration change; never inhibit NODATA by ALARM.
