@@ -1,5 +1,10 @@
 # GlamDB alerting
 
+The Alerting checks workflow runs the full loopback checker on Ubuntu. It
+extracts native Prometheus/Alertmanager tools from digest-pinned official images
+and sends no messages to a real chat. Hosted checks remain separate from local
+evidence below.
+
 The alerting layer evaluates **OK, WARN, ALARM, and NODATA**, routes notifications
 through Alertmanager, and sends plain-text Telegram messages through a bounded
 SQLite outbox. It requires the Prometheus metric contracts and recording rules
