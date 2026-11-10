@@ -242,7 +242,7 @@ Preserve these boundaries when adding or changing engine behavior:
 | `probes/`, `benchmarks/` | Installed-dependency/compatibility probes and workload measurements. |
 | `scripts/` | Developer tooling, including quality checks. |
 | `deploy/alerting/`, `tools/alerting/` | Four-state Prometheus rules, Alertmanager routing, native Telegram receiver and executable replay/transition tests. |
-| `core/telemetry/metrics.*`, `deploy/monitoring/`, `tools/monitoring/` | Native telemetry, provisioned dashboards/collectors, deployment generators and checks. |
+| `core/telemetry/metrics.*`, `deploy/monitoring/`, `tools/monitoring/` | Library-backed native/Python telemetry, standard collectors/chart, application panels and checks. |
 | `third_party/` | Pinned upstream submodules and `lock.json`. |
 
 Read [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) when placing new
@@ -269,11 +269,15 @@ The native receiver owns delivery; there is no webhook/outbox service.
 Gateway application metrics cover requests after the edge/OIDC proxy. Separate
 Caddy outer-edge counts include authentication rejections before the application.
 Native operation counters measure actual core operations.
-For real host/container/Kubernetes monitoring, native metrics snapshots, sources,
-proxy meanings and deployment steps, read [MONITORING](docs/development/MONITORING.md).
-Run `python3 tools/monitoring/check.py --promtool PATH` for focused checks.
-Keep missing collectors/unsupported fields as NoData; exporter reachability and
-snapshot freshness do not establish native database health or durability.
+For real host/container/Kubernetes monitoring, private application endpoints,
+source gaps and deployment steps, read [MONITORING](docs/development/MONITORING.md).
+Install `tools/monitoring/requirements.txt` with hash verification and build the pinned
+prometheus-cpp core/pull installation before `python3 tools/monitoring/check.py
+--promtool PATH`. See the coverage matrix linked from that runbook. Keep missing
+collectors/unsupported fields as NoData; exporter reachability does not establish
+native database health or durability. The short-lived CLI publishes no textfile.
+`GLAMDB_BUILD_METRICS=ON` enables the standalone metric target in IO-only mode;
+the normal engine build always includes its domain instrumentation.
 
 Client/mock development uses Python 3.13 and Node 22+:
 

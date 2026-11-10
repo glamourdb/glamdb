@@ -14,12 +14,16 @@ target_link_libraries(glamdb_io PRIVATE "$<BUILD_INTERFACE:glamdb_build_options>
 target_include_directories(glamdb_io PRIVATE "${PROJECT_SOURCE_DIR}")
 
 find_package(Threads REQUIRED)
-add_library(glamdb_metrics STATIC telemetry/metrics.cpp)
-target_link_libraries(glamdb_metrics PRIVATE "$<BUILD_INTERFACE:glamdb_build_options>" Threads::Threads)
-target_include_directories(glamdb_metrics PRIVATE "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/public")
-if(TARGET glamdb_logging)
-    target_link_libraries(glamdb_metrics PRIVATE glamdb_logging)
-    target_compile_definitions(glamdb_metrics PRIVATE GLAMDB_METRICS_WITH_LOGGING=1)
+if(NOT GLAMDB_IO_ONLY OR GLAMDB_BUILD_METRICS)
+    find_package(prometheus-cpp 1.3.0 EXACT CONFIG REQUIRED)
+    add_library(glamdb_metrics STATIC telemetry/metrics.cpp)
+    target_link_libraries(glamdb_metrics PRIVATE "$<BUILD_INTERFACE:glamdb_build_options>"
+        Threads::Threads prometheus-cpp::core)
+    target_include_directories(glamdb_metrics PRIVATE "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/public")
+    if(TARGET glamdb_logging)
+        target_link_libraries(glamdb_metrics PRIVATE glamdb_logging)
+        target_compile_definitions(glamdb_metrics PRIVATE GLAMDB_METRICS_WITH_LOGGING=1)
+    endif()
 endif()
 
 if(NOT GLAMDB_IO_ONLY)

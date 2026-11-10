@@ -1,8 +1,8 @@
 {
   "uid": "glamdb-service",
-  "title": "GlamDB · API and coordinator",
+  "title": "GlamDB \u00b7 API and coordinator",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "tags": [
     "glamdb",
     "provisioned"
@@ -21,7 +21,7 @@
     {
       "id": 1,
       "type": "text",
-      "title": "Scope and missing data",
+      "title": "Scope and missing sources",
       "gridPos": {
         "x": 0,
         "y": 0,
@@ -30,14 +30,14 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "Missing collectors, unsupported kernel fields, idle histogram quantiles, and unconfigured endpoints remain **No data**. No panel substitutes zero or infers native readiness. See `docs/development/MONITORING.md` for sources, prerequisites, proxy meanings and deployment steps."
+        "content": "Standard host and Kubernetes panels come from the pinned upstream mixins/chart. Exact cgroup anonymous/file/unevictable and unconstrained-wait gaps are documented in MONITORING_COVERAGE.md; they remain **No data** in the default stack. Native readiness/commit-unknown state requires an authoritative server adapter. CLI metrics are never published as a stale server snapshot."
       }
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "Gateway metrics scrape",
-      "description": "Exporter reachability only. Missing target remains NoData; 1 does not mean database ready.",
+      "title": "Gateway scrape",
+      "description": "Reachability only; does not establish readiness.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -50,34 +50,24 @@
       },
       "targets": [
         {
+          "refId": "A",
           "expr": "up{job=\"glamdb-gateway\",cluster=~\"$cluster\",service=~\"$service\"}",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "noValue": "No data",
-          "min": 0
+          "unit": "short"
         },
         "overrides": []
       },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
+      "options": {}
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Native snapshot age",
-      "description": "Fresh process snapshot expected <90s. Stale files survive process exit; never interpret node-exporter up as native liveness.",
+      "title": "Gateway authoritative readiness",
+      "description": "Admission/backend owner sets this gauge. Default closed.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -90,34 +80,24 @@
       },
       "targets": [
         {
-          "expr": "glamdb:native_snapshot_age_seconds{cluster=~\"$cluster\",service=~\"$service\"}",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "glamdb_gateway_ready{cluster=~\"$cluster\",service=~\"$service\"}",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "noValue": "No data",
-          "min": 0
+          "unit": "short"
         },
         "overrides": []
       },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
+      "options": {}
     },
     {
       "id": 4,
-      "type": "stat",
-      "title": "Fresh native snapshots",
-      "description": "Snapshots published in last90s; process exit can remain fresh until threshold. Not exact live-process count or native readiness.",
+      "type": "timeseries",
+      "title": "Gateway requests / second",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -130,34 +110,24 @@
       },
       "targets": [
         {
-          "expr": "sum((time() - glamdb_metrics_snapshot_timestamp_seconds{cluster=~\"$cluster\",service=~\"$service\"}) < bool 90)",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "glamdb:http_requests:rate5m{cluster=~\"$cluster\",service=~\"$service\"}",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "noValue": "No data",
-          "min": 0
+          "unit": "reqps"
         },
         "overrides": []
       },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
+      "options": {}
     },
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Gateway all-HTTP RPS",
-      "description": "Exact outer workbench route; includes UI, authentication failures, helpers and API. Not DB-only RPS. Metrics listener excluded.",
+      "title": "Gateway HTTP 5xx fraction",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -170,37 +140,24 @@
       },
       "targets": [
         {
-          "expr": "glamdb:http_requests:rate5m{cluster=~\"$cluster\",service=~\"$service\"}",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "glamdb:http_error:ratio5m{cluster=~\"$cluster\",service=~\"$service\"}",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
-          "noValue": "No data",
-          "min": 0
+          "unit": "percentunit"
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
+      "options": {}
     },
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Gateway all-HTTP responses by status/method",
-      "description": "",
+      "title": "Gateway p99 duration",
+      "description": "Through response completion, including streaming. Idle or absent histogram stays No data.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -213,37 +170,24 @@
       },
       "targets": [
         {
-          "expr": "sum by (code,method) (rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",handler=\"subroute\",server=\"workbench\",cluster=~\"$cluster\",service=~\"$service\"}[5m]))",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "glamdb:http_request_duration_seconds:p99{cluster=~\"$cluster\",service=~\"$service\"}",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
-          "noValue": "No data",
-          "min": 0
+          "unit": "s"
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
+      "options": {}
     },
     {
       "id": 7,
       "type": "timeseries",
-      "title": "HTTP error ratio",
-      "description": "5xx fraction; idle traffic leaves ratio absent rather than healthy 0%.",
+      "title": "Gateway stages p99",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -256,37 +200,24 @@
       },
       "targets": [
         {
-          "expr": "glamdb:http_error:ratio5m{cluster=~\"$cluster\",service=~\"$service\"}",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "histogram_quantile(0.99,sum by (stage,le) (rate(glamdb_gateway_stage_duration_seconds_bucket{cluster=~\"$cluster\",service=~\"$service\"}[5m])))",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit",
-          "noValue": "No data",
-          "min": 0
+          "unit": "s"
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
+      "options": {}
     },
     {
       "id": 8,
       "type": "timeseries",
-      "title": "Upstream failures / timeout proxy",
-      "description": "502/504 rates; include connection errors and other upstream failures. Precise timeout reason is unavailable in Caddy metric labels; use structured logs.",
+      "title": "Gateway in flight",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -299,37 +230,24 @@
       },
       "targets": [
         {
-          "expr": "glamdb:http_upstream_failures:rate5m{cluster=~\"$cluster\",service=~\"$service\"}",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "sum by (route) (glamdb_gateway_http_in_flight{cluster=~\"$cluster\",service=~\"$service\"})",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
-          "noValue": "No data",
-          "min": 0
+          "unit": "short"
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
+      "options": {}
     },
     {
       "id": 9,
       "type": "timeseries",
-      "title": "Gateway latency p50 / p95 / p99",
-      "description": "Histogram quantiles weighted by request count across instances; not averaged instance percentiles. Durations over final finite bucket10s cannot be resolved accurately.",
+      "title": "Native calls / second",
+      "description": "API calls including retries, not distinct durable writes. No native production HTTP adapter is supplied.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -342,47 +260,24 @@
       },
       "targets": [
         {
-          "expr": "glamdb:http_request_duration_seconds:p50{cluster=~\"$cluster\",service=~\"$service\"}",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
-        },
-        {
-          "expr": "glamdb:http_request_duration_seconds:p95{cluster=~\"$cluster\",service=~\"$service\"}",
-          "legendFormat": "p95 {{service}}",
-          "refId": "B"
-        },
-        {
-          "expr": "glamdb:http_request_duration_seconds:p99{cluster=~\"$cluster\",service=~\"$service\"}",
-          "legendFormat": "p99 {{service}}",
-          "refId": "C"
+          "refId": "A",
+          "expr": "glamdb:native_operations:rate5m{cluster=~\"$cluster\",service=~\"$service\"}",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "noValue": "No data",
-          "min": 0
+          "unit": "ops"
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
+      "options": {}
     },
     {
       "id": 10,
       "type": "timeseries",
-      "title": "Native API calls by outcome",
-      "description": "Actual CreateCollection/AppendDurable calls, including retries. Committed call count is not a count of distinct durable publications.",
+      "title": "Native p99 duration",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -395,37 +290,24 @@
       },
       "targets": [
         {
-          "expr": "glamdb:native_operations:rate5m{cluster=~\"$cluster\",service=~\"$service\"}",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "histogram_quantile(0.99,sum by (operation,outcome,le) (rate(glamdb_operation_duration_seconds_bucket{cluster=~\"$cluster\",service=~\"$service\"}[5m])))",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
-          "noValue": "No data",
-          "min": 0
+          "unit": "s"
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
+      "options": {}
     },
     {
       "id": 11,
       "type": "timeseries",
-      "title": "Native operation p95",
-      "description": "",
+      "title": "Native measured stages p99",
+      "description": "Only observed coordinator regions. Data includes backend metadata work; no fabricated Parquet/Iceberg subspans.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -438,37 +320,24 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95,sum by (le,operation,outcome) (rate(glamdb_operation_duration_seconds_bucket{cluster=~\"$cluster\",service=~\"$service\"}[5m])))",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "histogram_quantile(0.99,sum by (operation,phase,le) (rate(glamdb_phase_duration_seconds_bucket{cluster=~\"$cluster\",service=~\"$service\"}[5m])))",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "noValue": "No data",
-          "min": 0
+          "unit": "s"
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
+      "options": {}
     },
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Native observed phase p95",
-      "description": "Only observed coordinator regions. Data includes backend metadata work; validation includes admission. No invented Metadata/CatalogCommit timings.",
+      "title": "Native deadline exceeded / second",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -481,37 +350,24 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95,sum by (le,operation,phase) (rate(glamdb_phase_duration_seconds_bucket{cluster=~\"$cluster\",service=~\"$service\"}[5m])))",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "sum by (operation) (rate(glamdb_operation_errors_total{cluster=~\"$cluster\",service=~\"$service\",error=\"DEADLINE_EXCEEDED\"}[5m]))",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "noValue": "No data",
-          "min": 0
+          "unit": "ops"
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
+      "options": {}
     },
     {
       "id": 13,
       "type": "timeseries",
-      "title": "Native errors by bounded code/phase",
-      "description": "Unknown error strings map to other; no identifiers or diagnostics become labels.",
+      "title": "Native overload / second",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -524,36 +380,23 @@
       },
       "targets": [
         {
-          "expr": "sum by (operation,error,phase) (rate(glamdb_operation_errors_total{cluster=~\"$cluster\",service=~\"$service\"}[5m]))",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "sum by (operation) (rate(glamdb_operation_errors_total{cluster=~\"$cluster\",service=~\"$service\",error=\"RESOURCE_EXHAUSTED\"}[5m]))",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
-          "noValue": "No data",
-          "min": 0
+          "unit": "ops"
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
+      "options": {}
     },
     {
       "id": 14,
       "type": "timeseries",
-      "title": "Native calls in flight",
+      "title": "Native in flight",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -567,37 +410,24 @@
       },
       "targets": [
         {
-          "expr": "(glamdb_operations_in_flight{cluster=~\"$cluster\",service=~\"$service\"}) and on (cluster,service,instance,service_instance) (time() - glamdb_metrics_snapshot_timestamp_seconds < 90)",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "glamdb_operations_in_flight{cluster=~\"$cluster\",service=~\"$service\"}",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "noValue": "No data",
-          "min": 0
+          "unit": "short"
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
+      "options": {}
     },
     {
       "id": 15,
       "type": "timeseries",
-      "title": "Native admission slots",
-      "description": "Admitted append scopes, including active writer. Process aggregate across stores.",
+      "title": "Admission-owned input",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -610,37 +440,24 @@
       },
       "targets": [
         {
-          "expr": "(glamdb_admission_pending_calls{cluster=~\"$cluster\",service=~\"$service\"}) and on (cluster,service,instance,service_instance) (time() - glamdb_metrics_snapshot_timestamp_seconds < 90)",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "glamdb_admission_owned_input_bytes{cluster=~\"$cluster\",service=~\"$service\"}",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "noValue": "No data",
-          "min": 0
+          "unit": "bytes"
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
+      "options": {}
     },
     {
       "id": 16,
       "type": "timeseries",
-      "title": "Native admission-owned input",
-      "description": "Only coordinator input reservation; excludes Arrow/backend/control memory and is not total process RSS.",
+      "title": "Podset PVC free fraction p50",
+      "description": "Per pod least-free mounted PVC, median over immediate controller. CSI+kubelet stats+KSM required. No ephemeral-quota substitution.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -653,37 +470,24 @@
       },
       "targets": [
         {
-          "expr": "(glamdb_admission_owned_input_bytes{cluster=~\"$cluster\",service=~\"$service\"}) and on (cluster,service,instance,service_instance) (time() - glamdb_metrics_snapshot_timestamp_seconds < 90)",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "glamdb:podset_pvc_available:p50{cluster=~\"$cluster\"}",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
-          "noValue": "No data",
-          "min": 0
+          "unit": "percentunit"
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
+      "options": {}
     },
     {
       "id": 17,
       "type": "timeseries",
-      "title": "Native logger drops",
-      "description": "Actual process logger counters when the logging module is linked. Unavailable module stays absent.",
+      "title": "Podset PVC free fraction p100",
+      "description": "Most-free pod in immediate controller; inspect p00 for worst pod. No data without actual CSI/KSM sources.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -696,251 +500,18 @@
       },
       "targets": [
         {
-          "expr": "(rate(glamdb_log_dropped_total{cluster=~\"$cluster\",service=~\"$service\"}[5m])) and on (cluster,service,instance,service_instance) (time() - glamdb_metrics_snapshot_timestamp_seconds < 90)",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "glamdb:podset_pvc_available:p100{cluster=~\"$cluster\"}",
+          "legendFormat": "{{operation}} {{outcome}} {{route}} {{stage}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
-          "noValue": "No data",
-          "min": 0
+          "unit": "percentunit"
         },
         "overrides": []
       },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
-    },
-    {
-      "id": 18,
-      "type": "timeseries",
-      "title": "Native logger backlog / capacity",
-      "description": "Bounded live queues including writer batches; not a durable replay backlog.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 67,
-        "w": 12,
-        "h": 8
-      },
-      "targets": [
-        {
-          "expr": "(glamdb_log_backlog{cluster=~\"$cluster\",service=~\"$service\"}) and on (cluster,service,instance,service_instance) (time() - glamdb_metrics_snapshot_timestamp_seconds < 90)",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
-        },
-        {
-          "expr": "(glamdb_log_queue_capacity{cluster=~\"$cluster\",service=~\"$service\"}) and on (cluster,service,instance,service_instance) (time() - glamdb_metrics_snapshot_timestamp_seconds < 90)",
-          "legendFormat": "capacity {{service_instance}}",
-          "refId": "B"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "noValue": "No data",
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
-    },
-    {
-      "id": 19,
-      "type": "timeseries",
-      "title": "Resource collection failures",
-      "description": "0 means collector failed; absent resource values are not fabricated zeros.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 67,
-        "w": 12,
-        "h": 8
-      },
-      "targets": [
-        {
-          "expr": "glamdb_cgroup_collector_success{cluster=~\"$cluster\",namespace=~\"$namespace\",pod=~\"$pod\"}",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "noValue": "No data",
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
-    },
-    {
-      "id": 20,
-      "type": "timeseries",
-      "title": "Resource sample age",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 75,
-        "w": 12,
-        "h": 8
-      },
-      "targets": [
-        {
-          "expr": "time() - glamdb_resource_sample_timestamp_seconds",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "noValue": "No data",
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
-    },
-    {
-      "id": 21,
-      "type": "timeseries",
-      "title": "Prometheus series and ingestion",
-      "description": "Raw series/cardinality budget; use scrape_samples_post_metric_relabeling per target to identify changes.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 75,
-        "w": 12,
-        "h": 8
-      },
-      "targets": [
-        {
-          "expr": "prometheus_tsdb_head_series",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "noValue": "No data",
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
-    },
-    {
-      "id": 22,
-      "type": "timeseries",
-      "title": "Scrape sample count",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 83,
-        "w": 12,
-        "h": 8
-      },
-      "targets": [
-        {
-          "expr": "scrape_samples_post_metric_relabeling",
-          "legendFormat": "{{pod}}{{instance}} {{operation}} {{phase}} {{outcome}} {{device}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "noValue": "No data",
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
+      "options": {}
     }
   ],
   "templating": {
@@ -949,47 +520,16 @@
         "name": "cluster",
         "type": "query",
         "datasource": {
-          "uid": "prometheus",
-          "type": "prometheus"
+          "type": "prometheus",
+          "uid": "prometheus"
         },
-        "query": "label_values(up,cluster)",
-        "refresh": 1,
-        "multi": true,
-        "includeAll": true,
-        "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        }
-      },
-      {
-        "name": "namespace",
-        "type": "query",
-        "datasource": {
-          "uid": "prometheus",
-          "type": "prometheus"
+        "definition": "label_values(up,cluster)",
+        "query": {
+          "query": "label_values(up,cluster)",
+          "refId": "cluster"
         },
-        "query": "label_values({cluster=~\"$cluster\",namespace!=\"\"},namespace)",
-        "refresh": 1,
-        "multi": true,
         "includeAll": true,
-        "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        }
-      },
-      {
-        "name": "pod",
-        "type": "query",
-        "datasource": {
-          "uid": "prometheus",
-          "type": "prometheus"
-        },
-        "query": "label_values({cluster=~\"$cluster\",namespace=~\"$namespace\",pod!=\"\"},pod)",
-        "refresh": 1,
         "multi": true,
-        "includeAll": true,
         "allValue": ".*",
         "current": {
           "text": "All",
@@ -1000,81 +540,16 @@
         "name": "service",
         "type": "query",
         "datasource": {
-          "uid": "prometheus",
-          "type": "prometheus"
+          "type": "prometheus",
+          "uid": "prometheus"
         },
-        "query": "label_values(up{cluster=~\"$cluster\",service!=\"\"},service)",
-        "refresh": 1,
-        "multi": true,
-        "includeAll": true,
-        "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        }
-      },
-      {
-        "name": "instance",
-        "type": "query",
-        "datasource": {
-          "uid": "prometheus",
-          "type": "prometheus"
+        "definition": "label_values(up,service)",
+        "query": {
+          "query": "label_values(up,service)",
+          "refId": "service"
         },
-        "query": "label_values(node_uname_info{cluster=~\"$cluster\"},instance)",
-        "refresh": 1,
-        "multi": true,
         "includeAll": true,
-        "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        }
-      },
-      {
-        "name": "device",
-        "type": "query",
-        "datasource": {
-          "uid": "prometheus",
-          "type": "prometheus"
-        },
-        "query": "label_values(node_disk_io_time_seconds_total{cluster=~\"$cluster\"},device)",
-        "refresh": 1,
         "multi": true,
-        "includeAll": true,
-        "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        }
-      },
-      {
-        "name": "mountpoint",
-        "type": "query",
-        "datasource": {
-          "uid": "prometheus",
-          "type": "prometheus"
-        },
-        "query": "label_values(node_filesystem_avail_bytes{cluster=~\"$cluster\"},mountpoint)",
-        "refresh": 1,
-        "multi": true,
-        "includeAll": true,
-        "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        }
-      },
-      {
-        "name": "podset",
-        "type": "query",
-        "datasource": {
-          "uid": "prometheus",
-          "type": "prometheus"
-        },
-        "query": "label_values(glamdb:podset_owner{cluster=~\"$cluster\",namespace=~\"$namespace\"},podset)",
-        "refresh": 1,
-        "multi": true,
-        "includeAll": true,
         "allValue": ".*",
         "current": {
           "text": "All",

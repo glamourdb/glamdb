@@ -1,15 +1,15 @@
 #include "core/telemetry/metrics.h"
 
-#ifdef GLAMDB_METRICS_WITH_LOGGING
-#include "core/telemetry/structured_log.h"
-#endif
+#include <prometheus/collectable.h>
+#include <prometheus/text_serializer.h>
 
-#include <cstdlib>
-#include <filesystem>
-#include <fstream>
+#include <cmath>
+#include <initializer_list>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -19,43 +19,54 @@ void Check(bool condition, const char* message)
         throw std::runtime_error(message);
     }
 }
+
+const prometheus::ClientMetric& Find(const std::vector<prometheus::MetricFamily>& families,
+    const std::string& name,
+    std::initializer_list<std::pair<std::string, std::string>> labels)
+{
+    for (const auto& family : families) {
+        if (family.name != name) {
+            continue;
+        }
+        for (const auto& metric : family.metric) {
+            bool matches = true;
+            for (const auto& [key, value] : labels) {
+                bool found = false;
+                for (const auto& label : metric.label) {
+                    found |= label.name == key && label.value == value;
+                }
+                matches &= found;
+            }
+            if (matches) {
+                return metric;
+            }
+        }
+    }
+    throw std::runtime_error("expected metric not found: " + name);
+}
 } // namespace
 
-int main(int argc, char** argv)
+int main()
 {
     using namespace NGlamDB::NTelemetry;
     using namespace glamdb;
-    const auto before = RenderMetrics();
-    Check(before.find("glamdb_phase_duration_seconds_count{") == std::string::npos, "unobserved phase was invented");
-#ifdef GLAMDB_METRICS_WITH_LOGGING
-    {
-        const auto prior = GetProcessLogStats();
-        auto logger = TStructuredLogger::Open();
-        Check(logger.has_value(), "logger did not open");
-        TLogEvent event;
-        event.Event = ELogEvent::RuntimeStarted;
-        Check((*logger)->TryLog(event), "important log record was not accepted");
-        (*logger)->Shutdown();
-        logger->reset();
-        const auto stats = GetProcessLogStats();
-        Check(stats.Submitted > prior.Submitted && stats.Written > prior.Written,
-            "actual log counters did not advance");
-        const auto snapshot = RenderMetrics();
-        Check(snapshot.find("glamdb_log_written_total{service_instance=\"core\"} " + std::to_string(stats.Written)) !=
-                std::string::npos,
-            "actual logger counters were not exported");
-    }
-#endif
+    const auto collectable = GetMetricsCollectable();
+    const auto before = collectable->Collect();
+    Check(Find(before, "glamdb_operations_total", {{"operation", "append"}, {"outcome", "committed"}}).counter.value ==
+            0,
+        "new process counter did not reset");
+    Check(Find(before, "glamdb_phase_duration_seconds", {{"operation", "append"}, {"phase", "data"}})
+                .histogram.sample_count == 0,
+        "pre-registered phase has observations");
     {
         TOperationScope<AppendOutcome> scope(EOperation::Append);
         scope.EnterPhase(CommitPhase::Data);
-        const auto outcome = scope.Finish({"sensitive-operation-id",
+        (void)scope.Finish({"sensitive-operation-id",
             CommitDisposition::CommitUnknown,
             CommitPhase::Data,
             std::nullopt,
             ErrorDetail{"unbounded-secret-error", "private-message"},
             std::nullopt});
-        Check(outcome.disposition == CommitDisposition::CommitUnknown, "outcome changed");
     }
     {
         TOperationScope<CreateOutcome> scope(EOperation::CreateCollection);
@@ -72,33 +83,46 @@ int main(int argc, char** argv)
         writer.join();
     }
     AdjustAdmission(1, 8192);
-    Check(RenderMetrics().find("glamdb_admission_owned_input_bytes{service_instance=\"core\"} 8192\n") !=
-            std::string::npos,
-        "owned bytes missing");
+    Check(Find(collectable->Collect(), "glamdb_admission_owned_input_bytes", {}).gauge.value == 8192,
+        "admission ownership missing");
     AdjustAdmission(-1, -8192);
-    const auto snapshot = RenderMetrics();
-    Check(
-        snapshot.find(
-            "glamdb_operations_total{service_instance=\"core\",operation=\"append\",outcome=\"committed\"} 80000\n") !=
-            std::string::npos,
+    const auto after = collectable->Collect();
+    Check(Find(after, "glamdb_operations_total", {{"operation", "append"}, {"outcome", "committed"}}).counter.value ==
+            80000,
         "concurrent increments were lost");
-    Check(snapshot.find("glamdb_operation_duration_seconds_bucket{service_instance=\"core\",operation=\"append\","
-                        "outcome=\"committed\",le=\"0."
-                        "01\"} 80000\n") != std::string::npos,
-        "histogram boundary was incorrect");
-    Check(snapshot.find("outcome=\"incomplete\"} 1\n") != std::string::npos, "incomplete scope was hidden");
-    Check(snapshot.find("phase=\"data\",error=\"other\"} 1\n") != std::string::npos, "error label was not bounded");
+    const auto& histogram =
+        Find(after, "glamdb_operation_duration_seconds", {{"operation", "append"}, {"outcome", "committed"}}).histogram;
+    Check(histogram.sample_count == 80000 && std::abs(histogram.sample_sum - 800) < 1e-7,
+        "histogram count or sum incorrect");
+    Check(histogram.bucket[1].cumulative_count == 0 && histogram.bucket[4].upper_bound == 0.01 &&
+            histogram.bucket[4].cumulative_count == 80000,
+        "histogram boundary incorrect");
+    Check(Find(after, "glamdb_operations_total", {{"operation", "create_collection"}, {"outcome", "incomplete"}})
+                .counter.value == 1,
+        "incomplete scope hidden");
+    Check(Find(after, "glamdb_operation_errors_total", {{"operation", "append"}, {"phase", "data"}, {"error", "other"}})
+                .counter.value == 1,
+        "error label unbounded");
+    Check(Find(after, "glamdb_operations_in_flight", {{"operation", "append"}}).gauge.value == 0,
+        "scope did not release in-flight gauge");
+    prometheus::TextSerializer serializer;
+    const auto snapshot = serializer.Serialize(after);
     Check(snapshot.find("sensitive") == std::string::npos && snapshot.find("secret") == std::string::npos &&
             snapshot.find("private") == std::string::npos,
         "identifier or diagnostic leaked");
-    Check(!WriteMetricsTextfile("relative.prom"), "relative textfile accepted");
-    if (argc == 2) {
-        const std::filesystem::path target = argv[1];
-        Check(WriteMetricsTextfile(target), "textfile publication failed");
-        Check(!std::filesystem::exists(target.string() + ".tmp"), "temporary snapshot not renamed");
-        std::ifstream file(target);
-        const std::string contents((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-        Check(contents.find("glamdb_metrics_snapshot_timestamp_seconds{") != std::string::npos, "snapshot age missing");
-    }
+    Check(snapshot.find("snapshot_timestamp") == std::string::npos, "stale textfile protocol retained");
+    auto count = [](const auto& text) {
+        size_t result = 0;
+        bool start = true;
+        for (char character : text) {
+            if (start && character != '#') {
+                ++result;
+            }
+            start = character == '\n';
+        }
+        return result;
+    };
+    Check(count(snapshot) == count(serializer.Serialize(before)) && count(snapshot) == 714,
+        "pre-registered series budget changed");
     std::cout << snapshot;
 }
