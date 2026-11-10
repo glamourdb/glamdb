@@ -140,3 +140,19 @@ hardware rather than extrapolating this host's result.
 
 Official Grafana Darwin download returned HTTP 451 in this environment; the
 locked official OCI image supplied the actual runtime verification instead.
+
+
+Follow-up configuration checks: the optional private `loki` discovery job and
+empty `targets/loki.json` are present in both Compose Prometheus configurations,
+and the native renderer accepts `--loki`. The job name matches Loki alert
+selectors. The Linux quickstart installs a separate UID472/mode0400 Grafana
+file-backed secret; the original caller-owned mode0600 file remains available
+for operator login and Kubernetes secret creation. This corrects ownership
+that the environment-password runtime smoke did not exercise. Promtool and
+Compose syntax checks were rerun for these changes; host UID mapping still
+requires operator validation on the deployment engine.
+
+The isolated CMake tooling fixture now also copies `public/`, required by the
+independent metrics module's typed outcome definitions. A combined IO build
+exposed the previous missing-header failure; both nested CMake cases passed
+after the fixture correction.

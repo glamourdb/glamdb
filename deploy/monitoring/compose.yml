@@ -50,7 +50,7 @@ volumes:
   grafana-data: {}
 secrets:
   grafana_admin_password:
-    file: ${GLAMDB_GRAFANA_PASSWORD_FILE:-../../artifacts/monitoring/grafana-password}
+    file: ${GLAMDB_GRAFANA_PASSWORD_FILE:-../../artifacts/monitoring/grafana-password.container}
 networks:
   observability:
     name: glamdb-observability

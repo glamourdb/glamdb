@@ -53,6 +53,11 @@ scrape_configs:
     label_limit: 20
     file_sd_configs:
       - files: ['/etc/prometheus/targets/resources.json']
+  - job_name: loki
+    sample_limit: 20000
+    label_limit: 25
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/loki.json']
   - job_name: alloy
     sample_limit: 20000
     label_limit: 25

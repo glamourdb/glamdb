@@ -27,7 +27,7 @@ class CmakeConfigurationTest(unittest.TestCase):
         self.source.mkdir()
         self.build = self.root / "build"
         shutil.copyfile(ROOT / "CMakeLists.txt", self.source / "CMakeLists.txt")
-        for directory in ("core", "apps", "cmake", "tests", "scripts"):
+        for directory in ("core", "apps", "cmake", "tests", "scripts", "public"):
             shutil.copytree(ROOT / directory, self.source / directory,
                             ignore=shutil.ignore_patterns("__pycache__"))
 

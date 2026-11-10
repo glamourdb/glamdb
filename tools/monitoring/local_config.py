@@ -12,12 +12,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cluster", default="local")
     parser.add_argument("--service", default="glamdb")
-    for name in ("gateway", "core", "node", "cadvisor", "resources", "alloy"):
+    for name in ("gateway", "core", "node", "cadvisor", "resources", "alloy", "loki"):
         parser.add_argument("--" + name, action="append", default=[], help="Explicit host:port; repeat for multiple targets")
     parser.add_argument("--alertmanager", help="Optional actual Alertmanager host:port")
     args = parser.parse_args()
     jobs = []
-    for name in ("gateway", "core", "node", "cadvisor", "resources", "alloy"):
+    for name in ("gateway", "core", "node", "cadvisor", "resources", "alloy", "loki"):
         targets = getattr(args, name)
         if targets:
             job = "glamdb-" + name if name in ("gateway", "core", "resources") else name
