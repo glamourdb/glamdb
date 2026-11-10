@@ -160,6 +160,32 @@ the privileged-port capability, restricts writes and uses KillMode=control-group
 so stopping the supervisor stops its Caddy child too. It provisions no host,
 DNS, backend, organization or secret.
 
+### Optional centralized administrative logs
+
+When the logging component is installed, the supervisor emits bounded structured
+start/stop and administrative mutation events. The SQLite audit remains the
+authoritative record. Events contain validated IDs/revisions and outcomes, never
+passwords, hashes, request parameters or database values. Idempotent request
+retries may repeat an operational event; they never repeat the audit mutation.
+
+By default these operational events use stderr. For file collection, create a
+dedicated writer directory and add a systemd override with these lines:
+
+~~~ini
+[Service]
+Environment=GLAMDB_LOG_DIRECTORY=/srv/glamdb-observability/access
+ReadWritePaths=/srv/glamdb-observability/access
+~~~
+
+Create that directory with mode 0700 owned by the service account before
+restarting. Use a separate directory for each native/control-plane process;
+concurrent rotation owners are rejected. Mount/register this source in Alloy
+using the logging deployment guide. Never use a warehouse, UI, served-site or
+generated runtime-state directory as the log sink. An explicitly requested sink
+fails startup if its logging module/path is unavailable; without that optional
+component and without a requested sink, authorization still operates normally.
+The gateway does not feed raw Caddy request JSON to this structured collector.
+
 ## 5. Browser and SDK login
 
 Open https://workbench.example.com and enter the organization's login/password

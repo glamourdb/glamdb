@@ -14,12 +14,22 @@ launcher does not start them and requires real server configuration.
 - `python -m pytest sdk/python/tests -q`: 276 passed; includes optional Basic
   credentials, UTF-8 passwords, TLS/loopback validation and every SDK route
   with both database-prefix slash forms. Bearer behavior remains covered.
-- `bash scripts/check-protected-demo.sh`: 175 passed with real HTTPS/Caddy and
+- `bash scripts/check-protected-demo.sh`: 178 passed with the optional logging
+  component enabled and real HTTPS/Caddy and
   browser checks, covering legacy shared-password mode, static group compatibility
   and persistent organizations. Chromium runs 3 legacy, 6 static-group and 3
   organization scenarios. The final 37-case catalog/supervisor gate also passed
-  independently.
+  independently. The actual supervisor-to-JSONL check validates lifecycle,
+  administrative receipts and secret absence; it explicitly skips when the
+  independent optional logging component is not installed. Use
+  `GLAMDB_LOGGING_SOURCE_ROOT=/path/to/component-checkout` for an explicit
+  component source during integration, or install it in the combined checkout.
 - `git diff --check` and Python compilation passed.
+
+After merging current main's split CI and CLI11 parsing, the workbench suites
+were rerun: 485 Python, 45 Node and 31 Chromium tests passed. The standalone
+HTTPS suite remains a dedicated browser-job gate rather than running twice in
+repository-wide Python discovery. Workflow syntax/security lint passed.
 
 The organization browser tests use fresh Pink/Blue/Empty contexts. They check
 only owned databases, no token/server prompt or browser storage, no HTTP

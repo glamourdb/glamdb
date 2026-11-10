@@ -15,6 +15,7 @@ import threading
 from .catalog import AuthorizationCatalog, CatalogError, catalog_lease
 from .config import AccessConfigError, _pairs, parse_registry
 from .runtime import GatewayRuntime
+from .operational import OperationalEvents
 
 
 def listener_directory():
@@ -45,6 +46,11 @@ class OrganizationSupervisor:
         self.catalog = AuthorizationCatalog(args.catalog)
         self.runtime = GatewayRuntime(args)
         self.lock = threading.RLock()
+        directory = os.environ.get("GLAMDB_LOG_DIRECTORY") or None
+        if directory:
+            self.runtime.validate_private_path(directory)
+        self.events = OperationalEvents(directory)
+        self.events.emit("runtime_started", revision=self.catalog.revision)
 
     def snapshot(self):
         registry = parse_registry(self.catalog.registry_data(), os.environ, allow_empty=True)
@@ -76,12 +82,15 @@ class OrganizationSupervisor:
                     self.runtime.last_error = "GATEWAY_UNAVAILABLE"
                     raise
                 return {"revision": self.catalog.revision, **self.runtime.status()}
-            return self.catalog.apply(request, validate=self.snapshot, fence=self.runtime.stop,
-                                      activate=self.activate, actor_uid=uid)
+            result = self.catalog.apply(request, validate=self.snapshot, fence=self.runtime.stop,
+                                        activate=self.activate, actor_uid=uid)
+            self.events.mutation(result)
+            return result
 
     def close(self):
         self.runtime.stop()
         self.catalog.close()
+        self.events.close()
 
 
 class OperatorServer(socketserver.UnixStreamServer):

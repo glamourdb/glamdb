@@ -321,6 +321,10 @@ and secrets must stay outside UI, served and generated runtime-state trees.
 Use one service account with its persistent home listener leases; the child
 inherits catalog, state and listener ownership. Never delete leases to bypass
 an active gateway or edit a live catalog offline.
+The Python operational logger is an optional independent component: the
+supervisor uses it when installed, and an explicit `GLAMDB_LOG_DIRECTORY` must
+fail clearly if unavailable. Never log administrative request parameters or
+interpret best-effort events as transactional audit.
 Mock faults require explicit development configuration. Do not give the mock a
 production store path. Every production write must eventually use the C++ core.
 
