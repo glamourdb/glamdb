@@ -11,6 +11,7 @@ import threading
 import time
 import unittest
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 from test_alerting import ROOT, module
 from test_http import FakeAPI, running
@@ -37,9 +38,13 @@ def wait_until(predicate, seconds=15):
 def api(url, payload=None, method=None):
     request = Request(url, data=json.dumps(payload).encode() if payload is not None else None,
                       method=method, headers={"Content-Type": "application/json"})
-    with urlopen(request, timeout=2) as response:
-        data = response.read()
-        return json.loads(data) if data else None
+    try:
+        with urlopen(request, timeout=2) as response:
+            data = response.read()
+            return json.loads(data) if data else None
+    except HTTPError as error:
+        error.close()
+        raise
 
 
 @unittest.skipUnless(os.environ.get("PROMETHEUS_BIN") and os.environ.get("ALERTMANAGER_BIN"),
@@ -175,6 +180,35 @@ class StackTest(unittest.TestCase):
                           "labels": {"check": "cpu", "cluster": "local", "service": "glamdb", "state": "OK"}}])
         wait_until(lambda: 'outcome="unverified_recovery"} 1' in self.box.metrics())
         self.assertEqual(self.telegram.calls, [])
+
+    def test_real_caddy_fixture_keeps_gateway_auth_check_fresh(self):
+        exporter = FakeAPI()
+        exporter.metric_payload = (ROOT / "tools/alerting/fixtures/caddy-2.11.9.prom").read_text()
+        url = self.enter(running(exporter.httpd))
+        generate = module("generate")
+        config = json.loads((ROOT / "deploy/alerting/checks.json").read_text())
+        config["checks"] = [c for c in config["checks"] if c["id"] == "http_auth_failures"]
+        config["hold"] = {key: "0s" for key in config["hold"]}
+        config["evaluation_interval"] = "1s"
+        rules = self.root / "captured-caddy-rules.json"
+        rules.write_text(json.dumps(generate.rules(config)))
+        prom = {"global": {"scrape_interval": "1s", "evaluation_interval": "1s"},
+                "rule_files": [str(rules)], "scrape_configs": [{"job_name": "glamdb-gateway", "static_configs": [
+                    {"targets": [url.split("://", 1)[1]], "labels": {"cluster": "local", "service": "glamdb"}}]}]}
+        path = self.root / "captured-caddy-prometheus.json"
+        path.write_text(json.dumps(prom))
+        self.start_process([os.environ["PROMETHEUS_BIN"], "--config.file=" + str(path),
+                            "--storage.tsdb.path=" + str(self.root / "captured-caddy-data"),
+                            "--web.listen-address=127.0.0.1:" + str(self.prom_port),
+                            "--log.level=warn"], "captured-caddy-prometheus")
+        endpoint = self.prom_url + "/api/v1/query?query=glamdb_alert_state"
+        wait_until(lambda: bool(api(self.prom_url + "/api/v1/query?query=caddy_http_request_duration_seconds_count")
+                                ["data"]["result"]))
+        wait_until(lambda: bool(api(endpoint)["data"]["result"]) and
+                   float(api(endpoint)["data"]["result"][0]["value"][1]) == 0)
+        # The captured initialized counters are idle on replay: fresh OK,
+        # not NODATA from selecting an unexported nested handler.
+        self.assertEqual(float(api(endpoint)["data"]["result"][0]["value"][1]), 0)
 
     def test_complete_stack_healthy_down_removed_target_never_false_ok(self):
         generate = module("generate")

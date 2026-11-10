@@ -44,13 +44,13 @@
       "alarm": 0.05,
       "fresh": [
         "up{$gateway}",
-        "caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\"}"
+        "caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\"}"
       ],
       "guards": [
         "min(up{$gateway}) == 1"
       ],
-      "summary": "HTTP 5xx ratio",
-      "description": "Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+      "summary": "Gateway HTTP 5xx ratio",
+      "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
       "notify_nodata": true
     },
     {
@@ -60,13 +60,13 @@
       "alarm": 0.05,
       "fresh": [
         "up{$gateway}",
-        "caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\"}"
+        "caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\"}"
       ],
       "guards": [
         "min(up{$gateway}) == 1"
       ],
-      "summary": "HTTP 502/504 proxy ratio",
-      "description": "Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+      "summary": "Gateway HTTP 502/504 proxy ratio",
+      "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
       "notify_nodata": true
     },
     {
@@ -76,47 +76,47 @@
       "alarm": 2,
       "fresh": [
         "up{$gateway}",
-        "caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\"}",
-        "caddy_http_request_duration_seconds_bucket{$gateway,handler=\"reverse_proxy\"}"
+        "caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\"}",
+        "caddy_http_request_duration_seconds_bucket{$gateway,handler=\"subroute\",server=\"workbench\"}"
       ],
       "guards": [
         "min(up{$gateway}) == 1",
         "sum(glamdb:http_requests:rate5m{$http}) * 300 >= 100"
       ],
-      "summary": "HTTP p95 latency",
-      "description": "Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
+      "summary": "Gateway HTTP p95 latency",
+      "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
       "notify_nodata": false
     },
     {
       "id": "http_overload_ratio",
-      "query": "((sum(rate(caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\",code=~\"429|503\"}[5m])) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{$http}), 0.000001)) * (sum(glamdb:http_requests:rate5m{$http}) * 300 >= bool 100)",
+      "query": "((sum(rate(caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\",code=~\"429|503\"}[5m])) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{$http}), 0.000001)) * (sum(glamdb:http_requests:rate5m{$http}) * 300 >= bool 100)",
       "warn": 0.01,
       "alarm": 0.05,
       "fresh": [
         "up{$gateway}",
-        "caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\"}"
+        "caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\"}"
       ],
       "guards": [
         "min(up{$gateway}) == 1"
       ],
-      "summary": "HTTP overload ratio",
-      "description": "429/503 responses over five minutes, with at least 100 total requests.",
+      "summary": "Gateway HTTP overload ratio",
+      "description": "All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
       "notify_nodata": false
     },
     {
       "id": "http_auth_failures",
-      "query": "sum(rate(caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\",code=~\"401|403\"}[5m])) or vector(0)",
+      "query": "sum(rate(caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\",code=~\"401|403\"}[5m])) or vector(0)",
       "warn": 1,
       "alarm": 5,
       "fresh": [
         "up{$gateway}",
-        "caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\"}"
+        "caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\"}"
       ],
       "guards": [
         "min(up{$gateway}) == 1"
       ],
-      "summary": "HTTP authentication/authorization failures",
-      "description": "Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
+      "summary": "Gateway HTTP authentication/authorization failures",
+      "description": "All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
       "notify_nodata": false
     },
     {

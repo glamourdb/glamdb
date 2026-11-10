@@ -259,6 +259,8 @@ client builds, and embedding the installed library.
 The [native capacity campaign](docs/development/CAPACITY_CAMPAIGN.md) measures
 ingestion, backpressure and fresh-process recovery while preserving history caps.
 
+For four-state alerts and Telegram setup, see [the alerting guide](ALERTING.md).
+
 ### Client and UI tests
 
 The workbench development environment requires Python 3.13, Node.js 22+, and

@@ -96,7 +96,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(((sum(glamdb:http_errors:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) > -Inf) and (max(((sum(glamdb:http_errors:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1))",
+          "expr": "((max(((sum(glamdb:http_errors:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) > -Inf) and (max(((sum(glamdb:http_errors:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -124,8 +124,8 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "HTTP 5xx ratio",
-            "description": "Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Gateway HTTP 5xx ratio",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -142,8 +142,8 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "HTTP 5xx ratio",
-            "description": "Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Gateway HTTP 5xx ratio",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -160,8 +160,8 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "HTTP 5xx ratio",
-            "description": "Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Gateway HTTP 5xx ratio",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -178,15 +178,15 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "HTTP 5xx ratio",
-            "description": "Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Gateway HTTP 5xx ratio",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(((sum(glamdb:http_upstream_failures:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) > -Inf) and (max(((sum(glamdb:http_upstream_failures:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1))",
+          "expr": "((max(((sum(glamdb:http_upstream_failures:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) > -Inf) and (max(((sum(glamdb:http_upstream_failures:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -214,8 +214,8 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "HTTP 502/504 proxy ratio",
-            "description": "Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Gateway HTTP 502/504 proxy ratio",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -232,8 +232,8 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "HTTP 502/504 proxy ratio",
-            "description": "Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Gateway HTTP 502/504 proxy ratio",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -250,8 +250,8 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "HTTP 502/504 proxy ratio",
-            "description": "Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Gateway HTTP 502/504 proxy ratio",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -268,15 +268,15 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "HTTP 502/504 proxy ratio",
-            "description": "Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Gateway HTTP 502/504 proxy ratio",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(max(glamdb:http_request_duration_seconds:p95{cluster=\"local\",service=\"glamdb\"})) > -Inf) and (max(max(glamdb:http_request_duration_seconds:p95{cluster=\"local\",service=\"glamdb\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1) and on() (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= 100))",
+          "expr": "((max(max(glamdb:http_request_duration_seconds:p95{cluster=\"local\",service=\"glamdb\"})) > -Inf) and (max(max(glamdb:http_request_duration_seconds:p95{cluster=\"local\",service=\"glamdb\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1) and on() (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= 100))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -304,8 +304,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "HTTP p95 latency",
-            "description": "Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
+            "summary": "Gateway HTTP p95 latency",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -322,8 +322,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "HTTP p95 latency",
-            "description": "Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
+            "summary": "Gateway HTTP p95 latency",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -340,8 +340,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "HTTP p95 latency",
-            "description": "Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
+            "summary": "Gateway HTTP p95 latency",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -358,15 +358,15 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "HTTP p95 latency",
-            "description": "Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
+            "summary": "Gateway HTTP p95 latency",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(((sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\",code=~\"429|503\"}[5m])) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) > -Inf) and (max(((sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\",code=~\"429|503\"}[5m])) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1))",
+          "expr": "((max(((sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"429|503\"}[5m])) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) > -Inf) and (max(((sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"429|503\"}[5m])) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -394,8 +394,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "HTTP overload ratio",
-            "description": "429/503 responses over five minutes, with at least 100 total requests.",
+            "summary": "Gateway HTTP overload ratio",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -412,8 +412,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "HTTP overload ratio",
-            "description": "429/503 responses over five minutes, with at least 100 total requests.",
+            "summary": "Gateway HTTP overload ratio",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -430,8 +430,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "HTTP overload ratio",
-            "description": "429/503 responses over five minutes, with at least 100 total requests.",
+            "summary": "Gateway HTTP overload ratio",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -448,15 +448,15 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "HTTP overload ratio",
-            "description": "429/503 responses over five minutes, with at least 100 total requests.",
+            "summary": "Gateway HTTP overload ratio",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\",code=~\"401|403\"}[5m])) or vector(0)) > -Inf) and (max(sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\",code=~\"401|403\"}[5m])) or vector(0)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1))",
+          "expr": "((max(sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"401|403\"}[5m])) or vector(0)) > -Inf) and (max(sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"401|403\"}[5m])) or vector(0)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -484,8 +484,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "HTTP authentication/authorization failures",
-            "description": "Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
+            "summary": "Gateway HTTP authentication/authorization failures",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -502,8 +502,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "HTTP authentication/authorization failures",
-            "description": "Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
+            "summary": "Gateway HTTP authentication/authorization failures",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -520,8 +520,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "HTTP authentication/authorization failures",
-            "description": "Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
+            "summary": "Gateway HTTP authentication/authorization failures",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -538,8 +538,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "HTTP authentication/authorization failures",
-            "description": "Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
+            "summary": "Gateway HTTP authentication/authorization failures",
+            "description": "All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
