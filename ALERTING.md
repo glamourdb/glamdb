@@ -83,6 +83,12 @@ error ratio; missing counters do not. Latency needs at least 100 observed reques
 and a finite histogram estimate, so idle latency is NODATA. A missing 5xx status
 series is treated as zero errors only behind a valid request-counter/scrape guard.
 HTTP 502/504 statuses are proxy symptoms, not native storage outcome metrics.
+The packaged Caddy gateway exports the outer route as
+`handler="subroute",server="workbench"`. Its counters, ratio denominators and
+latency histogram cover **all gateway requests**, including UI, authentication,
+helpers and API traffic. Nested proxy handlers have no separate histogram in
+this configuration. Use native `glamdb_operations_total` for actual core-operation
+counts; gateway HTTP measurements do not identify database-only requests.
 
 The numeric state changes on evaluation. Notification holds suppress short
 spikes: WARN 2 minutes, ALARM 1 minute, NODATA 2 minutes, OK 2 minutes. These are
@@ -385,14 +391,15 @@ python3 tools/alerting/check.py
 The checker verifies deterministic generation, syntax, ten PromQL scenario
 groups, Alertmanager configuration, Python unit tests, real webhook/fake Telegram
 HTTP, and actual Prometheus/Alertmanager subprocess tests. Local sockets are
-required. Direct unittest discovery skips the four subprocess tests unless
+required. Direct unittest discovery skips the five subprocess tests unless
 `PROMETHEUS_BIN` and `ALERTMANAGER_BIN` are set; the full checker requires them.
 There are no live Telegram calls in any test.
 
 Executed validation used macOS arm64, Python 3.14.3, Prometheus 3.13.5 LTS and
 3.16.0, and Alertmanager 0.35.0. Tests cover threshold boundaries, minimum traffic,
 idle counters versus missing histograms, stale underlying samples, an old OK
-sample hidden by an instant query's recent timestamp, absent
+sample hidden by an instant query's recent timestamp, a replay of the captured
+Caddy 2.11.9 outer-route histogram, absent
 inventory, stale native snapshots, short spikes, ALARM-to-NODATA without false
 recovery, fixed destination routing, bearer authentication, payload/queue bounds,
 coalescing, out-of-order events, persistent dedup/backoff, 429/5xx/4xx, redirects,

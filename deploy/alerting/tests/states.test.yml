@@ -105,7 +105,7 @@
           "values": "1+0x30"
         },
         {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\",code=\"200\"}",
+          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=\"200\"}",
           "values": "100+0x30"
         },
         {
@@ -121,7 +121,7 @@
           "values": "NaN+0x30"
         },
         {
-          "series": "caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\",code=\"200\",le=\"+Inf\"}",
+          "series": "caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=\"200\",le=\"+Inf\"}",
           "values": "100+0x30"
         }
       ],
@@ -157,7 +157,7 @@
           "values": "1+0x30"
         },
         {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\",code=\"200\"}",
+          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=\"200\"}",
           "values": "100+0x8 _x30"
         },
         {
@@ -248,7 +248,7 @@
           "values": "1+0x40"
         },
         {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\",code=\"200\"}",
+          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=\"200\"}",
           "values": "100+0x40"
         },
         {
@@ -292,7 +292,7 @@
           "values": "1+0x30"
         },
         {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"reverse_proxy\",code=\"200\"}",
+          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=\"200\"}",
           "values": "100+0x30"
         },
         {
