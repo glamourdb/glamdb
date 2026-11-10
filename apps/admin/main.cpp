@@ -6,11 +6,9 @@
 #include <CLI/CLI.hpp>
 
 #include <chrono>
-#include <cstdlib>
-#include <string_view>
-
 #include <iostream>
 #include <string>
+#include <string_view>
 
 int RunCommand(int argc, char** argv)
 try {
@@ -129,11 +127,7 @@ try {
 int main(int argc, char** argv)
 try {
     using namespace NGlamDB::NTelemetry;
-    TLogOptions options;
-    if (const auto* directory = std::getenv("GLAMDB_LOG_DIRECTORY")) {
-        options.Directory = directory;
-    }
-    auto opened = TStructuredLogger::Open(options);
+    auto opened = TStructuredLogger::Open();
     if (!opened) {
         std::cerr << "Operational logging unavailable\n";
         return RunCommand(argc, argv);

@@ -1,12 +1,11 @@
 #include "core/telemetry/structured_log.h"
 
 #include <chrono>
-#include <cstdlib>
+#include <cstdint>
 #include <iostream>
+#include <limits>
 #include <string>
-#include <sys/stat.h>
 #include <thread>
-#include <unistd.h>
 #include <vector>
 
 using namespace NGlamDB::NTelemetry;
@@ -18,62 +17,39 @@ try {
     }
     const std::string mode = argv[1];
     TLogOptions options;
-    options.Directory = mode == "blocked" ? "" : argv[2];
-    options.QueueCapacity = (mode == "stress" || mode == "blocked") ? 32 : 8192;
-    options.ImportantReserve = 8;
     options.SuccessSampleEvery = mode == "sample" ? 10 : mode == "default" ? 100 : 1;
     options.MaxSuccessPerSecond = mode == "rate" ? 2 : mode == "default" ? 20 : 1000000;
-    options.MaxFileBytes = (mode == "rotate" || mode == "sink-error") ? 4096 : 16ULL * 1024 * 1024;
-    options.FileCount = 3;
     auto opened = TStructuredLogger::Open(options);
     if (!opened) {
-        std::cerr << "logger_open_failed\n";
         return 3;
     }
     auto& logger = **opened;
-    if (mode == "hold") {
-        std::cout << "ready\n" << std::flush;
-        std::this_thread::sleep_for(std::chrono::seconds(10));
-        return 0;
-    }
-    if (mode == "sink-error") {
-        ::chmod(options.Directory.c_str(), 0500);
-    }
     const auto before = std::chrono::steady_clock::now();
-    const auto logLifecycle = [&logger, &mode](ELogEvent event) {
-        if (mode == "stress" || mode == "blocked") {
-            logger.TryLog({.Event = event});
-            return;
-        }
-        while (!logger.TryLog({.Event = event})) {
-            std::this_thread::yield();
-        }
-    };
-    logLifecycle(ELogEvent::RuntimeStarted);
+    logger.TryLog({.Event = ELogEvent::RuntimeStarted});
     const auto count = std::stoull(argv[3]);
     const auto produce = [&logger, count, &mode]() {
+        if (!logger.RegisterProducerThread()) {
+            logger.TryLog({.Event = ELogEvent::StorageFailed});
+            return;
+        }
         for (std::uint64_t index = 0; index < count; ++index) {
-            const auto error = mode == "errors" || mode == "stress" || mode == "blocked" || mode == "sink-error";
-            const TLogEvent event{.Event = ELogEvent::RequestCompleted,
+            const auto error = mode != "sample" && mode != "rate" && mode != "default";
+            logger.TryLog({.Event = ELogEvent::RequestCompleted,
                 .Operation = ELogOperation::Append,
                 .Outcome = error ? ELogOutcome::Error : ELogOutcome::Ok,
                 .RequestID = logger.NewRequestID(),
-                .DurationUs = 123,
-                .RowCount = 7,
-                .StatusCode = error ? 503U : 200U};
-            if (mode == "errors") {
-                while (!logger.TryLog(event)) {
-                    std::this_thread::yield();
-                }
-            } else {
-                logger.TryLog(event);
-            }
+                .DurationUs = mode == "maximum" ? std::numeric_limits<std::uint64_t>::max() : 123,
+                .RowCount = mode == "maximum" ? std::numeric_limits<std::uint64_t>::max() : 7,
+                .StatusCode = error ? 503U : 200U});
         }
     };
-    if (mode == "stress") {
+    if (mode == "stress" || mode == "threads" || mode == "shutdown-race") {
         std::vector<std::thread> threads;
-        for (unsigned index = 0; index < 8; ++index) {
+        for (unsigned index = 0; index < (mode == "threads" ? 64U : 8U); ++index) {
             threads.emplace_back(produce);
+        }
+        if (mode == "shutdown-race") {
+            logger.Shutdown();
         }
         for (auto& thread : threads) {
             thread.join();
@@ -81,31 +57,38 @@ try {
     } else {
         produce();
     }
-    logLifecycle(ELogEvent::RuntimeStopped);
+    logger.TryLog({.Event = ELogEvent::RuntimeStopped});
+    const auto elapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - before).count();
     if (mode != "blocked") {
         logger.Shutdown();
     }
-    if (mode == "sink-error") {
-        ::chmod(options.Directory.c_str(), 0700);
-    }
     const auto stats = logger.GetStats();
-    if (mode != "blocked") {
+    if (mode == "reopen") {
         opened->reset();
+        auto reopened = TStructuredLogger::Open(options);
+        if (!reopened) {
+            return 4;
+        }
+        (**reopened).TryLog({.Event = ELogEvent::RuntimeStarted});
+        reopened->reset();
     }
     const auto processStats = GetProcessLogStats();
-    const auto elapsed =
-        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - before).count();
     std::cout << "{\"submitted\":" << stats.Submitted << ",\"accepted\":" << stats.Accepted
-              << ",\"sampled\":" << stats.Sampled << ",\"rate_limited\":" << stats.RateLimited
-              << ",\"dropped_full\":" << stats.DroppedFull << ",\"dropped_contended\":" << stats.DroppedContended
-              << ",\"dropped_sink\":" << stats.DroppedSink << ",\"written\":" << stats.Written
-              << ",\"sink_errors\":" << stats.SinkErrors << ",\"backlog\":" << stats.Backlog
-              << ",\"process_submitted\":" << processStats.Submitted << ",\"process_written\":" << processStats.Written
-              << ",\"process_capacity\":" << processStats.QueueCapacity << ",\"elapsed_us\":" << elapsed << "}\n"
+              << ",\"process_accepted\":" << processStats.Accepted << ",\"sampled\":" << stats.Sampled
+              << ",\"rate_limited\":" << stats.RateLimited << ",\"dropped_full\":" << stats.DroppedFull
+              << ",\"dropped_unregistered\":" << stats.DroppedUnregistered
+              << ",\"dropped_stopped\":" << stats.DroppedStopped
+              << ",\"backend_notifications\":" << stats.BackendNotifications
+              << ",\"quill_reported_dropped\":" << stats.QuillReportedDropped << ",\"sink_errors\":" << stats.SinkErrors
+              << ",\"producer_threads\":" << stats.ProducerThreads
+              << ",\"queue_capacity_bytes\":" << stats.QueueCapacityBytes
+              << ",\"max_producer_threads\":" << stats.MaxProducerThreads << ",\"elapsed_us\":" << elapsed << "}\n"
               << std::flush;
     if (mode == "blocked") {
-        ::_exit(0);
+        logger.Shutdown();
     }
+    return 0;
 } catch (...) {
     return 100;
 }

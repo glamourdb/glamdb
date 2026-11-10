@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Write a synthetic fixture, query real Loki, and prove collector field projection."""
 import argparse
+import contextlib
 from datetime import datetime, timezone
 import json
 import os
@@ -10,6 +11,8 @@ import subprocess
 import time
 from urllib.parse import urlencode
 from urllib.request import urlopen
+
+from glamdb_logging import StructuredLogger
 
 
 def query(loki_url, expression):
@@ -26,8 +29,17 @@ def query(loki_url, expression):
 def run(loki_url, log_directory, probe=None, timeout=45):
     directory = Path(log_directory).resolve()
     if probe:
-        subprocess.run([str(Path(probe).resolve()), "errors", str(directory), "10"], check=True,
-                       capture_output=True, text=True, timeout=15)
+        # Test runtime capture, outside the application logger; no application file mode.
+        with (directory / "glamdb.log").open("a") as runtime_log:
+            subprocess.run([str(Path(probe).resolve()), "errors", "stderr", "10"], check=True,
+                           stdout=subprocess.PIPE, stderr=runtime_log, text=True, timeout=15)
+    python_marker = secrets.token_hex(16)
+    with (directory / "glamdb.log").open("a") as runtime_log, contextlib.redirect_stderr(runtime_log):
+        logger = StructuredLogger(sample_every=1)
+        logger.emit("request_completed", operation="auth", outcome="denied", request_id=python_marker,
+                    status_code=403, password="synthetic-secret-password", Cookie="synthetic-secret-cookie",
+                    body="synthetic-secret-body", error=ValueError("synthetic-secret-exception"))
+        logger.close()
     marker = secrets.token_hex(16)
     fixture = {
         "schema": 1, "timestamp": datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z"),
@@ -61,11 +73,19 @@ def run(loki_url, log_directory, probe=None, timeout=45):
                 assert record["database_id"] == "example-db", record
                 assert record["request_id"] == marker, record
                 assert set(labels) <= {"service", "environment", "level", "event", "detected_level", "service_name"}, labels
+            python_records = query(loki_url, '{service="glamdb"} |= "' + python_marker + '"')
+            if not python_records:
+                time.sleep(0.25)
+                continue
+            assert len(python_records) == 1, python_records
+            assert "synthetic-secret" not in json.dumps(python_records), python_records
+            assert python_records[0][1]["status_code"] == 403, python_records
             if probe:
                 native = query(loki_url, '{service="glamdb"} | json | operation="append" | status_code=503')
                 assert any(record["duration_us"] == 123 and record["row_count"] == 7 for _, record in native), native
             return {"status": "PASS", "projection_records": len(records),
-                    "native_records": len(native) if probe else None, "correlation_id": marker}
+                    "native_records": len(native) if probe else None, "python_records": len(python_records),
+                    "correlation_id": marker}
         time.sleep(0.25)
     raise TimeoutError("Synthetic log did not become queryable before the timeout")
 

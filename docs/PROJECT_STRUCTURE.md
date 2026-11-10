@@ -75,7 +75,7 @@ glamdb/
 | `core/backend/` | Storage backend bridging the coordinator seam to `glamdb_storage` (built with `GLAMDB_BUILD_STORAGE`). |
 | `core/resources/` | Shared memory/device owner, Arrow pools and conservative working envelopes. |
 | `core/scan/` | Predicate evaluation (always built), snapshot planning and Parquet scan cursor (storage builds). |
-| `core/telemetry/` | Internal `glamdb_logging`: bounded typed operational JSON, process counters and private rotating sinks. |
+| `core/telemetry/` | Internal `glamdb_logging`: bounded typed operational JSON, actual process counters and runtime-collected stderr. |
 | `deploy/logging/`, `tools/logging/` | Pinned collection/storage/search stack, Python control-plane logger and ingestion/redaction probes. |
 | `core/io/` | Independent `glamdb_io`: local filesystem, store directories/URIs, attempts, receipts, SHA-256, durable files and copying. |
 | `core/storage/` | `glamdb_storage`: FileIO adapter, profiles, Parquet writer, Iceberg staging, publication, recovery and capacity. |

@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
-#include <string>
 #include <system_error>
 
 namespace NGlamDB::NTelemetry {
@@ -31,7 +30,7 @@ enum class ELogOperation : std::uint8_t {
 };
 enum class ELogOutcome : std::uint8_t { Ok, Error, Unknown, Denied, Cancelled };
 
-// The event deliberately has no free text, URL, path, identity or payload fields.
+// No free text, URL, path, identity or payload may cross this boundary.
 struct TLogEvent
 {
     ELogEvent Event = ELogEvent::RequestCompleted;
@@ -45,14 +44,8 @@ struct TLogEvent
 
 struct TLogOptions
 {
-    // Empty selects a duplicate of stderr. Files must be outside the warehouse.
-    std::string Directory;
-    std::size_t QueueCapacity = 8192;
-    std::size_t ImportantReserve = 64;
     std::uint64_t SuccessSampleEvery = 100;
     std::uint32_t MaxSuccessPerSecond = 20;
-    std::size_t MaxFileBytes = 16ULL * 1024 * 1024;
-    std::size_t FileCount = 4;
 };
 
 struct TLogStats
@@ -62,31 +55,44 @@ struct TLogStats
     std::uint64_t Sampled = 0;
     std::uint64_t RateLimited = 0;
     std::uint64_t DroppedFull = 0;
-    std::uint64_t DroppedContended = 0;
+    std::uint64_t DroppedUnregistered = 0;
     std::uint64_t DroppedStopped = 0;
-    std::uint64_t DroppedSink = 0;
-    std::uint64_t Written = 0;
+    std::uint64_t AdapterErrors = 0;
+    std::uint64_t BackendNotifications = 0;
+    // Delayed callback observation of DroppedFull, never an additional loss count.
+    std::uint64_t QuillReportedDropped = 0;
     std::uint64_t SinkErrors = 0;
-    std::uint64_t Backlog = 0;
-    std::size_t QueueCapacity = 0;
+    std::size_t ProducerThreads = 0;
+    std::size_t QueueCapacityBytes = 0;
+    std::size_t MaxProducerThreads = 0;
 };
 
-// Cumulative process counters survive logger destruction; gauges describe live loggers.
+// Cumulative process counters outlive the logger and its metrics consumers.
 TLogStats GetProcessLogStats() noexcept;
 
 class TStructuredLogger
 {
 public:
+    static constexpr std::size_t QueueCapacityBytes = 64ULL * 1024;
+    static constexpr std::size_t MaxProducerThreads = 16;
+    static constexpr std::size_t MaxRecordBytes = 1024;
+
+    // One active logger per process. Open preallocates the calling producer.
     static std::expected<std::unique_ptr<TStructuredLogger>, std::error_code> Open(const TLogOptions& options = {});
     ~TStructuredLogger();
     TStructuredLogger(const TStructuredLogger&) = delete;
     TStructuredLogger& operator=(const TStructuredLogger&) = delete;
 
-    // No allocations, waiting for a mutex, file IO or network IO on this path.
+    // Call during worker initialization, before handling operations. The process
+    // admits at most sixteen producer threads over its lifetime, including Open.
+    // Slots are not reused: a blocked backend can retain exited threads' queues.
+    bool RegisterProducerThread() noexcept;
+    // No file/network IO, flush, queue allocation or waiting for the sink here.
     bool TryLog(const TLogEvent& event) noexcept;
     std::uint64_t NewRequestID() noexcept;
     TLogStats GetStats() const noexcept;
-    // Stop producers before destruction. Drains the queue; OS sink IO can delay shutdown.
+    // Close admission and drain in-flight callers before removing Quill objects.
+    // OS stderr IO can delay shutdown. Join producers before destroying this object.
     void Shutdown() noexcept;
 
 private:

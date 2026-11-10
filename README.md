@@ -183,5 +183,6 @@ capabilities. It reports read availability separately from write readiness;
 - [Security policy](SECURITY.md)
 
 Operational logging emits bounded structured events independently of store writes.
-See [the logging guide](docs/development/LOGGING.md) for private rotating files,
-Loki/Alloy collection, Grafana search, retention/quota setup and overload tests.
+See [the logging guide](docs/development/LOGGING.md) for bounded Quill/Python stderr
+events, runtime journal collection, Loki/Alloy, private Grafana search,
+retention/quota setup and overload tests.

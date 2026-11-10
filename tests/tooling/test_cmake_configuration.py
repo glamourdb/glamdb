@@ -30,6 +30,10 @@ class CmakeConfigurationTest(unittest.TestCase):
             shutil.copytree(ROOT / directory, self.source / directory,
                             ignore=shutil.ignore_patterns("__pycache__"))
 
+        dependency = self.source / "third_party/quill"
+        dependency.parent.mkdir()
+        dependency.symlink_to(ROOT / "third_party/quill", target_is_directory=True)
+
     def run_command(self, *command):
         return subprocess.run(command, text=True, stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT, timeout=60)
@@ -56,6 +60,12 @@ class CmakeConfigurationTest(unittest.TestCase):
         self.assertFalse(list(self.build.rglob("libglamdb_core.a")))
         self.assertFalse(list(self.build.rglob("glamdb")))
 
+    def test_missing_logging_dependency_explains_initialization(self):
+        (self.source / "third_party/quill").unlink()
+        result = self.configure("-DBUILD_TESTING=OFF")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("git submodule update --init third_party/quill", " ".join(result.stdout.split()))
+
     def test_enabled_tests_explain_missing_googletest(self):
         result = self.configure("-DBUILD_TESTING=ON")
         self.assertNotEqual(result.returncode, 0)
@@ -65,7 +75,7 @@ class CmakeConfigurationTest(unittest.TestCase):
 
     def test_new_nested_native_test_gets_a_compile_command(self):
         dependency = self.source / "third_party/googletest"
-        dependency.parent.mkdir()
+        dependency.parent.mkdir(exist_ok=True)
         dependency.symlink_to(ROOT / "third_party/googletest", target_is_directory=True)
         added = self.source / "tests/unit/io/nested/new_test.cpp"
         added.parent.mkdir()

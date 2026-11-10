@@ -1,100 +1,165 @@
 #include "structured_log.h"
 
-#include <algorithm>
-#include <array>
+#include <quill/Backend.h>
+#include <quill/Frontend.h>
+#include <quill/Logger.h>
+#include <quill/sinks/JsonSink.h>
+
 #include <atomic>
 #include <cerrno>
+#include <charconv>
 #include <chrono>
-#include <condition_variable>
 #include <cstdio>
-#include <ctime>
 #include <fcntl.h>
 #include <mutex>
 #include <pthread.h>
-#include <random>
 #include <signal.h>
+#include <string>
 #include <string_view>
-#include <sys/file.h>
-#include <sys/stat.h>
 #include <thread>
 #include <unistd.h>
-#include <vector>
 
 namespace NGlamDB::NTelemetry {
 namespace {
 
-static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
-
-struct TProcessCounters
+struct TFrontendOptions : quill::FrontendOptions
 {
-    std::atomic<std::uint64_t> Submitted = 0;
-    std::atomic<std::uint64_t> Accepted = 0;
-    std::atomic<std::uint64_t> Sampled = 0;
-    std::atomic<std::uint64_t> RateLimited = 0;
-    std::atomic<std::uint64_t> DroppedFull = 0;
-    std::atomic<std::uint64_t> DroppedContended = 0;
-    std::atomic<std::uint64_t> DroppedStopped = 0;
-    std::atomic<std::uint64_t> DroppedSink = 0;
-    std::atomic<std::uint64_t> Written = 0;
-    std::atomic<std::uint64_t> SinkErrors = 0;
-    std::atomic<std::uint64_t> Backlog = 0;
-    std::atomic<std::size_t> QueueCapacity = 0;
+    static constexpr quill::QueueType queue_type = quill::QueueType::BoundedDropping;
+    static constexpr std::size_t initial_queue_capacity = TStructuredLogger::QueueCapacityBytes;
 };
+using TFrontend = quill::FrontendImpl<TFrontendOptions>;
 
-TProcessCounters& GetProcessCounters() noexcept
-{
-    static TProcessCounters counters;
-    return counters;
-}
-
-class TCounter
+// Quill 13's public JsonConsoleSink selects stdout. Only redirect its inherited
+// stream; Quill still owns JSON formatting, escaping, writing and flushing.
+class TStderrJsonSink : public quill::JsonConsoleSink
 {
 public:
-    explicit TCounter(std::atomic<std::uint64_t>& aggregate)
-        : Aggregate_(aggregate)
-    { }
-
-    void Add() noexcept
+    TStderrJsonSink()
     {
-        Value_.fetch_add(1, std::memory_order_relaxed);
-        Aggregate_.fetch_add(1, std::memory_order_relaxed);
+        const auto fd = ::fcntl(STDERR_FILENO, F_DUPFD_CLOEXEC, 0);
+        if (fd < 0) {
+            throw std::system_error(errno, std::generic_category());
+        }
+#if defined(__APPLE__)
+        // Darwin can deliver a pipe-generated SIGPIPE to another unblocked
+        // process thread. Suppress it only on our duplicate, not process-wide.
+        if (::fcntl(fd, F_SETNOSIGPIPE, 1) != 0) {
+            const auto error = errno;
+            ::close(fd);
+            throw std::system_error(error, std::generic_category());
+        }
+#endif
+        _file = ::fdopen(fd, "w");
+        if (_file == nullptr) {
+            const auto error = errno;
+            ::close(fd);
+            throw std::system_error(error, std::generic_category());
+        }
+        if (std::setvbuf(_file, nullptr, _IONBF, 0) != 0) {
+            std::fclose(_file);
+            throw std::system_error(std::make_error_code(std::errc::io_error));
+        }
+        _filename = "stderr";
     }
 
-    void Subtract() noexcept
+    ~TStderrJsonSink() override
     {
-        Value_.fetch_sub(1, std::memory_order_relaxed);
-        Aggregate_.fetch_sub(1, std::memory_order_relaxed);
+        std::fclose(_file);
     }
-
-    std::uint64_t Get() const noexcept
-    {
-        return Value_.load(std::memory_order_relaxed);
-    }
-
-private:
-    std::atomic<std::uint64_t> Value_ = 0;
-    std::atomic<std::uint64_t>& Aggregate_;
 };
 
-constexpr std::size_t BatchSize = 64;
-constexpr auto HealthInterval = std::chrono::seconds(5);
-
-std::uint64_t NowUs() noexcept
+struct TAtomicStats
 {
-    return static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
-            .count());
+    std::atomic<std::uint64_t> Submitted{0};
+    std::atomic<std::uint64_t> Accepted{0};
+    std::atomic<std::uint64_t> Sampled{0};
+    std::atomic<std::uint64_t> RateLimited{0};
+    std::atomic<std::uint64_t> DroppedFull{0};
+    std::atomic<std::uint64_t> DroppedUnregistered{0};
+    std::atomic<std::uint64_t> DroppedStopped{0};
+    std::atomic<std::uint64_t> AdapterErrors{0};
+    std::atomic<std::uint64_t> BackendNotifications{0};
+    std::atomic<std::uint64_t> QuillReportedDropped{0};
+    std::atomic<std::uint64_t> SinkErrors{0};
+};
+
+TAtomicStats ProcessStats;
+std::atomic<std::size_t> ProducerThreads{0};
+std::mutex LifecycleMutex;
+bool HasLogger = false;
+thread_local bool IsRegistered = false;
+
+void Count(TAtomicStats& local, std::atomic<std::uint64_t> TAtomicStats::*field, std::uint64_t amount = 1) noexcept
+{
+    (local.*field).fetch_add(amount, std::memory_order_relaxed);
+    (ProcessStats.*field).fetch_add(amount, std::memory_order_relaxed);
 }
 
-std::uint64_t SteadySeconds() noexcept
+TLogStats ReadStats(const TAtomicStats& stats) noexcept
 {
-    return static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+    return {.Submitted = stats.Submitted.load(std::memory_order_relaxed),
+        .Accepted = stats.Accepted.load(std::memory_order_relaxed),
+        .Sampled = stats.Sampled.load(std::memory_order_relaxed),
+        .RateLimited = stats.RateLimited.load(std::memory_order_relaxed),
+        .DroppedFull = stats.DroppedFull.load(std::memory_order_relaxed),
+        .DroppedUnregistered = stats.DroppedUnregistered.load(std::memory_order_relaxed),
+        .DroppedStopped = stats.DroppedStopped.load(std::memory_order_relaxed),
+        .AdapterErrors = stats.AdapterErrors.load(std::memory_order_relaxed),
+        .BackendNotifications = stats.BackendNotifications.load(std::memory_order_relaxed),
+        .QuillReportedDropped = stats.QuillReportedDropped.load(std::memory_order_relaxed),
+        .SinkErrors = stats.SinkErrors.load(std::memory_order_relaxed),
+        .ProducerThreads = ProducerThreads.load(std::memory_order_relaxed),
+        .QueueCapacityBytes = TStructuredLogger::QueueCapacityBytes,
+        .MaxProducerThreads = TStructuredLogger::MaxProducerThreads};
 }
 
-const char* GetEventName(ELogEvent value) noexcept
+bool RegisterThread() noexcept
 {
-    switch (value) {
+    if (IsRegistered) {
+        return true;
+    }
+    auto count = ProducerThreads.load(std::memory_order_relaxed);
+    while (count < TStructuredLogger::MaxProducerThreads) {
+        if (ProducerThreads.compare_exchange_weak(count, count + 1, std::memory_order_relaxed)) {
+            try {
+                TFrontend::preallocate();
+                IsRegistered = true;
+                return true;
+            } catch (...) {
+                // A failed allocation still consumes the lifetime slot.
+                return false;
+            }
+        }
+    }
+    return false;
+}
+
+void OnBackendNotification(TAtomicStats& stats, const std::string& message) noexcept
+{
+    Count(stats, &TAtomicStats::BackendNotifications);
+    // This is the pinned Quill 13 bounded-dropping notification, not a delivery
+    // estimate. Other messages are counted without publishing their free text.
+    constexpr std::string_view prefix = " Quill INFO: Dropped ";
+    const auto position = message.find(prefix);
+    if (position != std::string::npos) {
+        std::uint64_t dropped = 0;
+        const auto* first = message.data() + position + prefix.size();
+        const auto [end, error] = std::from_chars(first, message.data() + message.size(), dropped);
+        if (error == std::errc{} &&
+            std::string_view(end, message.data() + message.size()).starts_with(" events from thread "))
+        {
+            Count(stats, &TAtomicStats::QuillReportedDropped, dropped);
+        }
+    } else if (message.starts_with("fwrite failed errno:") || message.starts_with("fflush failed errno:") ||
+        message.starts_with("fwrite returned 0 bytes"))
+    {
+        Count(stats, &TAtomicStats::SinkErrors);
+    }
+}
+
+const char* GetEventName(ELogEvent event) noexcept
+{
+    switch (event) {
         case ELogEvent::RuntimeStarted:
             return "runtime_started";
         case ELogEvent::RuntimeStopped:
@@ -111,9 +176,9 @@ const char* GetEventName(ELogEvent value) noexcept
     return "request_completed";
 }
 
-const char* GetOperationName(ELogOperation value) noexcept
+const char* GetOperationName(ELogOperation operation) noexcept
 {
-    switch (value) {
+    switch (operation) {
         case ELogOperation::CreateStore:
             return "create_store";
         case ELogOperation::InspectStore:
@@ -138,9 +203,9 @@ const char* GetOperationName(ELogOperation value) noexcept
     return "other";
 }
 
-const char* GetOutcomeName(ELogOutcome value) noexcept
+const char* GetOutcomeName(ELogOutcome outcome) noexcept
 {
-    switch (value) {
+    switch (outcome) {
         case ELogOutcome::Ok:
             return "ok";
         case ELogOutcome::Error:
@@ -165,498 +230,210 @@ const char* GetLevel(const TLogEvent& event) noexcept
     return event.Outcome == ELogOutcome::Ok ? "info" : "warn";
 }
 
-struct TRecord
-{
-    TLogEvent Event;
-    std::uint64_t TimestampUs = 0;
-};
-
-void FormatName(char* target, std::size_t size, std::size_t index) noexcept
-{
-    if (index == 0) {
-        std::snprintf(target, size, "glamdb.log");
-    } else {
-        std::snprintf(target, size, "glamdb.log.%zu", index);
-    }
-}
-
-class TLogSink
-{
-public:
-    ~TLogSink()
-    {
-        if (FileFD_ >= 0) {
-            ::close(FileFD_);
-        }
-        if (DirectoryFD_ >= 0) {
-            ::close(DirectoryFD_);
-        }
-    }
-
-    bool Open(const TLogOptions& options)
-    {
-        Options_ = options;
-        if (options.Directory.empty()) {
-            FileFD_ = ::fcntl(STDERR_FILENO, F_DUPFD_CLOEXEC, 0);
-            return FileFD_ >= 0;
-        }
-        if (::mkdir(options.Directory.c_str(), 0700) != 0 && errno != EEXIST) {
-            return false;
-        }
-        DirectoryFD_ = ::open(options.Directory.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
-        struct stat info
-        { };
-        if (DirectoryFD_ < 0 || ::fstat(DirectoryFD_, &info) != 0) {
-            return false;
-        }
-        if (info.st_uid != ::geteuid() || (info.st_mode & 0022) != 0) {
-            errno = EACCES;
-            return false;
-        }
-        return ::flock(DirectoryFD_, LOCK_EX | LOCK_NB) == 0 && CheckArchives() && OpenActive();
-    }
-
-    bool Write(std::string_view line) noexcept
-    {
-        if (DirectoryFD_ >= 0 && (FileFD_ < 0 || CurrentSize_ + line.size() > Options_.MaxFileBytes)) {
-            if (FileFD_ < 0 ? !OpenActive() : !Rotate()) {
-                return false;
-            }
-            if (CurrentSize_ + line.size() > Options_.MaxFileBytes && !Rotate()) {
-                return false;
-            }
-        }
-        std::size_t offset = 0;
-        while (offset < line.size()) {
-            const auto written = ::write(FileFD_, line.data() + offset, line.size() - offset);
-            if (written < 0 && errno == EINTR) {
-                continue;
-            }
-            if (written <= 0) {
-                if (offset > 0 && DirectoryFD_ >= 0) {
-                    const auto ignored = ::ftruncate(FileFD_, static_cast<off_t>(CurrentSize_));
-                    (void)ignored;
-                }
-                return false;
-            }
-            offset += static_cast<std::size_t>(written);
-        }
-        CurrentSize_ += line.size();
-        return true;
-    }
-
-private:
-    bool CheckArchives() noexcept
-    {
-        for (std::size_t index = 1; index < 16; ++index) {
-            std::array<char, 32> name{};
-            FormatName(name.data(), name.size(), index);
-            const auto fd = ::openat(DirectoryFD_, name.data(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
-            if (fd < 0) {
-                if (errno == ENOENT) {
-                    continue;
-                }
-                return false;
-            }
-            const auto valid = CheckFile(fd);
-            struct stat info
-            { };
-            const auto checked = ::fstat(fd, &info) == 0;
-            ::close(fd);
-            if (!valid || !checked) {
-                return false;
-            }
-            if ((index >= Options_.FileCount || static_cast<std::size_t>(info.st_size) > Options_.MaxFileBytes) &&
-                ::unlinkat(DirectoryFD_, name.data(), 0) != 0)
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    static bool CheckFile(int fd) noexcept
-    {
-        struct stat info
-        { };
-        if (::fstat(fd, &info) != 0) {
-            return false;
-        }
-        if (!S_ISREG(info.st_mode) || info.st_uid != ::geteuid() || info.st_nlink != 1) {
-            errno = EACCES;
-            return false;
-        }
-        return ::fchmod(fd, 0600) == 0;
-    }
-
-    bool OpenActive() noexcept
-    {
-        FileFD_ = ::openat(DirectoryFD_,
-            "glamdb.log",
-            O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK,
-            0600);
-        if (FileFD_ < 0 || !CheckFile(FileFD_)) {
-            return false;
-        }
-        struct stat info
-        { };
-        if (::fstat(FileFD_, &info) != 0) {
-            return false;
-        }
-        CurrentSize_ = static_cast<std::size_t>(info.st_size);
-        if (CurrentSize_ > Options_.MaxFileBytes) {
-            if (::ftruncate(FileFD_, 0) != 0) {
-                return false;
-            }
-            CurrentSize_ = 0;
-        }
-        return true;
-    }
-
-    bool Rotate() noexcept
-    {
-        ::close(FileFD_);
-        FileFD_ = -1;
-        if (Options_.FileCount == 1) {
-            if (::unlinkat(DirectoryFD_, "glamdb.log", 0) != 0 && errno != ENOENT) {
-                return false;
-            }
-        }
-        for (auto index = Options_.FileCount - 1; index > 0; --index) {
-            std::array<char, 32> source{};
-            std::array<char, 32> destination{};
-            FormatName(source.data(), source.size(), index - 1);
-            FormatName(destination.data(), destination.size(), index);
-            if (::renameat(DirectoryFD_, source.data(), DirectoryFD_, destination.data()) != 0 && errno != ENOENT) {
-                return false;
-            }
-        }
-        return OpenActive();
-    }
-
-    TLogOptions Options_;
-    int DirectoryFD_ = -1;
-    int FileFD_ = -1;
-    std::size_t CurrentSize_ = 0;
-};
-
-std::size_t FormatRecord(std::array<char, 2048>& buffer,
-    const TRecord& record,
-    std::uint64_t processID,
-    const TLogStats* stats) noexcept
-{
-    const auto seconds = static_cast<std::time_t>(record.TimestampUs / 1000000);
-    std::tm utc{};
-    ::gmtime_r(&seconds, &utc);
-    std::array<char, 48> timestamp{};
-    std::snprintf(timestamp.data(),
-        timestamp.size(),
-        "%04d-%02d-%02dT%02d:%02d:%02d.%06lluZ",
-        utc.tm_year + 1900,
-        utc.tm_mon + 1,
-        utc.tm_mday,
-        utc.tm_hour,
-        utc.tm_min,
-        utc.tm_sec,
-        static_cast<unsigned long long>(record.TimestampUs % 1000000));
-    const auto& event = record.Event;
-    auto length = std::snprintf(buffer.data(),
-        buffer.size(),
-        "{\"schema\":1,\"timestamp\":\"%s\",\"service\":\"glamdb\",\"level\":\"%s\",\"event\":\"%s\","
-        "\"operation\":\"%s\",\"outcome\":\"%s\",\"request_id\":\"%016llx%016llx\","
-        "\"duration_us\":%llu,\"row_count\":%llu,\"status_code\":%u",
-        timestamp.data(),
-        GetLevel(event),
-        GetEventName(event.Event),
-        GetOperationName(event.Operation),
-        GetOutcomeName(event.Outcome),
-        static_cast<unsigned long long>(processID),
-        static_cast<unsigned long long>(event.RequestID),
-        static_cast<unsigned long long>(event.DurationUs),
-        static_cast<unsigned long long>(event.RowCount),
-        event.StatusCode);
-    if (stats != nullptr && length > 0 && static_cast<std::size_t>(length) < buffer.size()) {
-        length += std::snprintf(buffer.data() + length,
-            buffer.size() - static_cast<std::size_t>(length),
-            ",\"submitted\":%llu,\"accepted\":%llu,\"sampled\":%llu,\"rate_limited\":%llu,"
-            "\"dropped_full\":%llu,\"dropped_contended\":%llu,\"dropped_stopped\":%llu,"
-            "\"dropped_sink\":%llu,\"written\":%llu,\"sink_errors\":%llu,\"backlog\":%llu,\"queue_capacity\":%zu",
-            static_cast<unsigned long long>(stats->Submitted),
-            static_cast<unsigned long long>(stats->Accepted),
-            static_cast<unsigned long long>(stats->Sampled),
-            static_cast<unsigned long long>(stats->RateLimited),
-            static_cast<unsigned long long>(stats->DroppedFull),
-            static_cast<unsigned long long>(stats->DroppedContended),
-            static_cast<unsigned long long>(stats->DroppedStopped),
-            static_cast<unsigned long long>(stats->DroppedSink),
-            static_cast<unsigned long long>(stats->Written),
-            static_cast<unsigned long long>(stats->SinkErrors),
-            static_cast<unsigned long long>(stats->Backlog),
-            stats->QueueCapacity);
-    }
-    if (length <= 0 || static_cast<std::size_t>(length) + 2 > buffer.size()) {
-        return 0;
-    }
-    buffer[static_cast<std::size_t>(length)] = '}';
-    buffer[static_cast<std::size_t>(length) + 1] = '\n';
-    return static_cast<std::size_t>(length) + 2;
-}
-
 } // namespace
-
-TLogStats GetProcessLogStats() noexcept
-{
-    const auto& counters = GetProcessCounters();
-    return {.Submitted = counters.Submitted.load(std::memory_order_relaxed),
-        .Accepted = counters.Accepted.load(std::memory_order_relaxed),
-        .Sampled = counters.Sampled.load(std::memory_order_relaxed),
-        .RateLimited = counters.RateLimited.load(std::memory_order_relaxed),
-        .DroppedFull = counters.DroppedFull.load(std::memory_order_relaxed),
-        .DroppedContended = counters.DroppedContended.load(std::memory_order_relaxed),
-        .DroppedStopped = counters.DroppedStopped.load(std::memory_order_relaxed),
-        .DroppedSink = counters.DroppedSink.load(std::memory_order_relaxed),
-        .Written = counters.Written.load(std::memory_order_relaxed),
-        .SinkErrors = counters.SinkErrors.load(std::memory_order_relaxed),
-        .Backlog = counters.Backlog.load(std::memory_order_relaxed),
-        .QueueCapacity = counters.QueueCapacity.load(std::memory_order_relaxed)};
-}
 
 struct TStructuredLogger::TImpl
 {
-    TImpl(const TLogOptions& options, std::unique_ptr<TLogSink> sink)
-        : Options_(options)
-        , Sink_(std::move(sink))
-        , Queue_(options.QueueCapacity)
-    {
-        std::random_device random;
-        ProcessID_ = (static_cast<std::uint64_t>(random()) << 32U) ^ random();
-        GetProcessCounters().QueueCapacity.fetch_add(Options_.QueueCapacity);
-    }
+    const TLogOptions Options;
+    const std::shared_ptr<TAtomicStats> Stats = std::make_shared<TAtomicStats>();
+    quill::LoggerImpl<TFrontendOptions>* Logger = nullptr;
+    std::atomic<bool> Stopped{false};
+    std::atomic<std::uint64_t> InFlight{0};
+    std::atomic<std::uint64_t> Sequence{0};
+    std::atomic<std::uint64_t> RequestID{0};
+    // One packed monotonic second/count permits a bounded CAS admission attempt.
+    std::atomic<std::uint64_t> SuccessWindow{0};
+    const std::uint64_t RequestPrefix =
+        static_cast<std::uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());
 
-    ~TImpl()
-    {
-        Shutdown();
-        GetProcessCounters().QueueCapacity.fetch_sub(Options_.QueueCapacity);
-    }
-
-    void Shutdown() noexcept
-    {
-        {
-            const std::lock_guard lock(Mutex_);
-            Stopped_.store(true);
-        }
-        Ready_.notify_one();
-        if (Worker_.joinable()) {
-            Worker_.join();
-        }
-    }
-
-    TLogStats GetStats() const noexcept
-    {
-        return {.Submitted = Submitted_.Get(),
-            .Accepted = Accepted_.Get(),
-            .Sampled = Sampled_.Get(),
-            .RateLimited = RateLimited_.Get(),
-            .DroppedFull = DroppedFull_.Get(),
-            .DroppedContended = DroppedContended_.Get(),
-            .DroppedStopped = DroppedStopped_.Get(),
-            .DroppedSink = DroppedSink_.Get(),
-            .Written = Written_.Get(),
-            .SinkErrors = SinkErrors_.Get(),
-            .Backlog = Backlog_.Get(),
-            .QueueCapacity = Options_.QueueCapacity};
-    }
+    explicit TImpl(TLogOptions options)
+        : Options(options)
+    { }
 
     bool AdmitSuccess() noexcept
     {
-        const auto second = SteadySeconds();
-        const auto current = (second & 0xffffffffU) << 32U;
-        auto previous = SuccessBucket_.load();
-        const auto count = (previous & 0xffffffff00000000ULL) == current ? previous & 0xffffffffU : 0;
-        return count < Options_.MaxSuccessPerSecond &&
-            SuccessBucket_.compare_exchange_strong(previous, current | (count + 1));
-    }
-
-    bool TryLog(const TLogEvent& event) noexcept
-    {
-        Submitted_.Add();
-        if (Stopped_.load()) {
-            DroppedStopped_.Add();
+        if (Sequence.fetch_add(1, std::memory_order_relaxed) % Options.SuccessSampleEvery != 0) {
+            Count(*Stats, &TAtomicStats::Sampled);
             return false;
         }
-        const auto success = event.Event == ELogEvent::RequestCompleted && event.Outcome == ELogOutcome::Ok;
-        if (success && SuccessSequence_.fetch_add(1) % Options_.SuccessSampleEvery != 0) {
-            Sampled_.Add();
+        const auto second = static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch())
+                .count());
+        auto window = SuccessWindow.load(std::memory_order_relaxed);
+        const auto sameSecond = (window >> 32U) == second;
+        if (sameSecond && (window & 0xffffffffU) >= Options.MaxSuccessPerSecond) {
+            Count(*Stats, &TAtomicStats::RateLimited);
             return false;
         }
-        if (success && !AdmitSuccess()) {
-            RateLimited_.Add();
+        const auto next = (second << 32U) | (sameSecond ? (window & 0xffffffffU) + 1 : 1);
+        if (!SuccessWindow.compare_exchange_strong(window, next, std::memory_order_relaxed)) {
+            Count(*Stats, &TAtomicStats::RateLimited);
             return false;
         }
-        std::unique_lock lock(Mutex_, std::try_to_lock);
-        if (!lock.owns_lock()) {
-            DroppedContended_.Add();
-            return false;
-        }
-        if (Stopped_.load()) {
-            DroppedStopped_.Add();
-            return false;
-        }
-        const auto limit = Options_.QueueCapacity - (success ? Options_.ImportantReserve : 0);
-        if (Count_ >= limit) {
-            DroppedFull_.Add();
-            return false;
-        }
-        Queue_[(Head_ + Count_) % Queue_.size()] = {.Event = event, .TimestampUs = NowUs()};
-        ++Count_;
-        Accepted_.Add();
-        Backlog_.Add();
-        lock.unlock();
-        Ready_.notify_one();
         return true;
     }
-
-    void WriteHealth() noexcept
-    {
-        const auto stats = GetStats();
-        const TRecord health{.Event = {.Event = ELogEvent::LoggerHealth}, .TimestampUs = NowUs()};
-        std::array<char, 2048> buffer{};
-        const auto size = FormatRecord(buffer, health, ProcessID_, &stats);
-        if (!Sink_->Write(std::string_view(buffer.data(), size))) {
-            SinkErrors_.Add();
-        }
-    }
-
-    void Run() noexcept
-    {
-        // A closed stderr pipe must become a counted sink error, never SIGPIPE.
-        sigset_t blocked;
-        sigemptyset(&blocked);
-        sigaddset(&blocked, SIGPIPE);
-        ::pthread_sigmask(SIG_BLOCK, &blocked, nullptr);
-        auto nextHealth = std::chrono::steady_clock::now() + HealthInterval;
-        for (;;) {
-            std::array<TRecord, BatchSize> batch{};
-            std::size_t count = 0;
-            {
-                std::unique_lock lock(Mutex_);
-                Ready_.wait_until(lock, nextHealth, [this]() {
-                    return Count_ != 0 || Stopped_.load();
-                });
-                count = std::min(Count_, batch.size());
-                for (std::size_t index = 0; index < count; ++index) {
-                    batch[index] = Queue_[(Head_ + index) % Queue_.size()];
-                }
-                Head_ = (Head_ + count) % Queue_.size();
-                Count_ -= count;
-                if (count == 0 && Stopped_.load()) {
-                    break;
-                }
-            }
-            bool failed = false;
-            for (std::size_t index = 0; index < count; ++index) {
-                std::array<char, 2048> buffer{};
-                const auto size = FormatRecord(buffer, batch[index], ProcessID_, nullptr);
-                if (size > 0 && Sink_->Write(std::string_view(buffer.data(), size))) {
-                    Written_.Add();
-                } else {
-                    SinkErrors_.Add();
-                    DroppedSink_.Add();
-                    failed = true;
-                }
-                Backlog_.Subtract();
-            }
-            if (std::chrono::steady_clock::now() >= nextHealth) {
-                WriteHealth();
-                nextHealth = std::chrono::steady_clock::now() + HealthInterval;
-            }
-            if (failed) {
-                std::unique_lock lock(Mutex_);
-                Ready_.wait_for(lock, std::chrono::milliseconds(100), [this]() {
-                    return Stopped_.load();
-                });
-            }
-        }
-        WriteHealth();
-    }
-
-    TLogOptions Options_;
-    std::unique_ptr<TLogSink> Sink_;
-    std::vector<TRecord> Queue_;
-    std::mutex Mutex_;
-    std::condition_variable Ready_;
-    std::size_t Head_ = 0;
-    std::size_t Count_ = 0;
-    std::thread Worker_;
-    std::uint64_t ProcessID_ = 0;
-    std::atomic<bool> Stopped_ = false;
-    std::atomic<std::uint64_t> NextID_ = 1;
-    std::atomic<std::uint64_t> SuccessSequence_ = 0;
-    std::atomic<std::uint64_t> SuccessBucket_ = 0;
-    TCounter Submitted_{GetProcessCounters().Submitted};
-    TCounter Accepted_{GetProcessCounters().Accepted};
-    TCounter Sampled_{GetProcessCounters().Sampled};
-    TCounter RateLimited_{GetProcessCounters().RateLimited};
-    TCounter DroppedFull_{GetProcessCounters().DroppedFull};
-    TCounter DroppedContended_{GetProcessCounters().DroppedContended};
-    TCounter DroppedStopped_{GetProcessCounters().DroppedStopped};
-    TCounter DroppedSink_{GetProcessCounters().DroppedSink};
-    TCounter Written_{GetProcessCounters().Written};
-    TCounter SinkErrors_{GetProcessCounters().SinkErrors};
-    TCounter Backlog_{GetProcessCounters().Backlog};
 };
+
+TLogStats GetProcessLogStats() noexcept
+{
+    return ReadStats(ProcessStats);
+}
+
+std::expected<std::unique_ptr<TStructuredLogger>, std::error_code> TStructuredLogger::Open(const TLogOptions& options)
+{
+    if (options.SuccessSampleEvery == 0 || options.MaxSuccessPerSecond == 0 || options.MaxSuccessPerSecond > 1000000) {
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
+    std::lock_guard lock(LifecycleMutex);
+    if (HasLogger || !RegisterThread()) {
+        return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
+    }
+    try {
+        auto impl = std::make_unique<TImpl>(options);
+        quill::BackendOptions backendOptions;
+        backendOptions.transit_event_buffer_initial_capacity = 16;
+        backendOptions.transit_events_soft_limit = 16;
+        backendOptions.transit_events_hard_limit = 16;
+        backendOptions.error_notifier = [stats = impl->Stats](const std::string& message) {
+            OnBackendNotification(*stats, message);
+        };
+        // A closed runtime pipe must report an error instead of terminating the
+        // application. Only the backend inherits the temporary SIGPIPE mask.
+        sigset_t mask;
+        sigset_t previous;
+        sigemptyset(&mask);
+        sigaddset(&mask, SIGPIPE);
+        const auto masked = ::pthread_sigmask(SIG_BLOCK, &mask, &previous) == 0;
+        try {
+            quill::Backend::start(backendOptions);
+        } catch (...) {
+            if (masked) {
+                ::pthread_sigmask(SIG_SETMASK, &previous, nullptr);
+            }
+            throw;
+        }
+        if (masked) {
+            ::pthread_sigmask(SIG_SETMASK, &previous, nullptr);
+        }
+        auto sink = TFrontend::create_or_get_sink<TStderrJsonSink>("glamdb.stderr");
+        impl->Logger = TFrontend::create_or_get_logger("glamdb",
+            std::move(sink),
+            quill::PatternFormatterOptions{"", "%H:%M:%S.%Qns", quill::Timezone::GmtTime},
+            quill::ClockSourceType::System);
+        auto logger = std::unique_ptr<TStructuredLogger>(new TStructuredLogger(std::move(impl)));
+        HasLogger = true;
+        return logger;
+    } catch (...) {
+        quill::Backend::stop();
+        return std::unexpected(std::make_error_code(std::errc::io_error));
+    }
+}
 
 TStructuredLogger::TStructuredLogger(std::unique_ptr<TImpl> impl)
     : Impl_(std::move(impl))
 { }
 
-TStructuredLogger::~TStructuredLogger() = default;
+TStructuredLogger::~TStructuredLogger()
+{
+    Shutdown();
+}
 
-std::expected<std::unique_ptr<TStructuredLogger>, std::error_code> TStructuredLogger::Open(const TLogOptions& options)
-try {
-    if (options.QueueCapacity < 2 || options.QueueCapacity > 1048576 ||
-        options.ImportantReserve >= options.QueueCapacity || options.SuccessSampleEvery == 0 ||
-        options.MaxSuccessPerSecond == 0 || options.FileCount == 0 || options.FileCount > 16 ||
-        options.MaxFileBytes < 4096 || options.MaxFileBytes > 1024ULL * 1024 * 1024 ||
-        (!options.Directory.empty() && options.Directory.front() != '/'))
-    {
-        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-    }
-    auto sink = std::make_unique<TLogSink>();
-    if (!sink->Open(options)) {
-        return std::unexpected(std::error_code(errno, std::generic_category()));
-    }
-    auto impl = std::make_unique<TImpl>(options, std::move(sink));
-    impl->Worker_ = std::thread([raw = impl.get()]() {
-        raw->Run();
-    });
-    return std::unique_ptr<TStructuredLogger>(new TStructuredLogger(std::move(impl)));
-} catch (const std::bad_alloc&) {
-    return std::unexpected(std::make_error_code(std::errc::not_enough_memory));
-} catch (const std::system_error& error) {
-    return std::unexpected(error.code());
-} catch (...) {
-    return std::unexpected(std::make_error_code(std::errc::io_error));
+bool TStructuredLogger::RegisterProducerThread() noexcept
+{
+    return !Impl_->Stopped.load() && RegisterThread();
 }
 
 bool TStructuredLogger::TryLog(const TLogEvent& event) noexcept
 {
-    return Impl_->TryLog(event);
+    auto& impl = *Impl_;
+    impl.InFlight.fetch_add(1);
+    struct TAdmission
+    {
+        std::atomic<std::uint64_t>& InFlight;
+        ~TAdmission()
+        {
+            InFlight.fetch_sub(1);
+        }
+    } admission{impl.InFlight};
+    Count(*impl.Stats, &TAtomicStats::Submitted);
+    if (impl.Stopped.load()) {
+        Count(*impl.Stats, &TAtomicStats::DroppedStopped);
+        return false;
+    }
+    if (!IsRegistered) {
+        Count(*impl.Stats, &TAtomicStats::DroppedUnregistered);
+        return false;
+    }
+    if (event.Event == ELogEvent::RequestCompleted && event.Outcome == ELogOutcome::Ok && !impl.AdmitSuccess()) {
+        return false;
+    }
+    try {
+        char requestID[33];
+        std::snprintf(requestID,
+            sizeof(requestID),
+            "%016llx%016llx",
+            static_cast<unsigned long long>(impl.RequestPrefix),
+            static_cast<unsigned long long>(event.RequestID == 0 ? NewRequestID() : event.RequestID));
+        static constexpr quill::MacroMetadata Metadata{"structured_log:0",
+            "TryLog",
+            "{schema} {service} {event} {level} {operation} {outcome} {request_id} {duration_us} {row_count} "
+            "{status_code}",
+            nullptr,
+            quill::LogLevel::Info,
+            quill::MacroMetadata::Event::Log};
+        const auto admitted = impl.Logger->log_statement<false>(&Metadata,
+            1,
+            "glamdb",
+            GetEventName(event.Event),
+            GetLevel(event),
+            GetOperationName(event.Operation),
+            GetOutcomeName(event.Outcome),
+            requestID,
+            event.DurationUs,
+            event.RowCount,
+            event.StatusCode);
+        Count(*impl.Stats, admitted ? &TAtomicStats::Accepted : &TAtomicStats::DroppedFull);
+        return admitted;
+    } catch (...) {
+        Count(*impl.Stats, &TAtomicStats::AdapterErrors);
+        return false;
+    }
 }
 
 std::uint64_t TStructuredLogger::NewRequestID() noexcept
 {
-    return Impl_->NextID_.fetch_add(1);
+    return Impl_->RequestID.fetch_add(1, std::memory_order_relaxed) + 1;
 }
 
 TLogStats TStructuredLogger::GetStats() const noexcept
 {
-    return Impl_->GetStats();
+    return ReadStats(*Impl_->Stats);
 }
 
 void TStructuredLogger::Shutdown() noexcept
 {
-    Impl_->Shutdown();
+    if (Impl_->Stopped.exchange(true)) {
+        return;
+    }
+    while (Impl_->InFlight.load() != 0) {
+        std::this_thread::yield();
+    }
+    try {
+        std::lock_guard lock(LifecycleMutex);
+        TFrontend::remove_logger(Impl_->Logger);
+        quill::Backend::stop();
+        HasLogger = false;
+    } catch (...) {
+        Count(*Impl_->Stats, &TAtomicStats::AdapterErrors);
+        // Attempt the join even after a removal/locking error. A rejected
+        // backend-thread stop remains observable; shared callback state stays
+        // owned by Quill until it actually stops.
+        try {
+            quill::Backend::stop();
+        } catch (...) {
+            Count(*Impl_->Stats, &TAtomicStats::AdapterErrors);
+        }
+    }
 }
 
 } // namespace NGlamDB::NTelemetry

@@ -28,15 +28,18 @@ services:
       options: {max-size: "10m", max-file: "3"}
   alloy:
     image: grafana/alloy:v1.21.3@sha256:8ab871206bd2d8f89277f53abffee5f452a293980788d52f85fa183a87a505a4
-    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy", "/etc/alloy/config.alloy"]
-    user: "${GLAMDB_LOG_UID:?set the application log writer UID}:${GLAMDB_LOG_GID:?set the application log writer GID}"
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy", "/etc/alloy"]
+    user: "${GLAMDB_ALLOY_UID:?set the collector UID}:${GLAMDB_ALLOY_GID:?set the collector GID}"
+    group_add: ["${GLAMDB_JOURNAL_GID:?set the systemd-journal group GID}"]
     environment:
-      GLAMDB_LOG_DIRECTORY: /var/log/glamdb
+      GLAMDB_JOURNAL_MATCHES: ${GLAMDB_JOURNAL_MATCHES:?set a specific application unit match}
       GLAMDB_ENVIRONMENT: ${GLAMDB_ENVIRONMENT:-local}
       LOKI_PUSH_URL: http://loki:3100/loki/api/v1/push
     volumes:
       - ./config.alloy:/etc/alloy/config.alloy:ro
-      - ${GLAMDB_LOG_DIRECTORY:?set the application log directory}:/var/log/glamdb:ro
+      - ./sources/journal.alloy:/etc/alloy/source.alloy:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
       - ${GLAMDB_ALLOY_STATE_DIR:?set an owned Alloy state directory}:/var/lib/alloy
     ports:
       - "127.0.0.1:${ALLOY_HTTP_PORT:-12345}:12345"

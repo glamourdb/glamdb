@@ -1,118 +1,148 @@
-# Logging validation — 2026-11-10
+# Logging validation — 2026-11-11
 
-Executed on macOS arm64 with AppleClang 21, Python 3.14.3, CMake/Ninja,
-clang-format/clang-tidy 18.1.8. This verifies operational logging independently
-of storage durability qualification.
+Executed on macOS arm64, AppleClang 21.0.0, Python 3.14.3, CMake 4.4.4,
+Ninja 1.13.2 and LLVM format/tidy 18.1.8. These checks qualify the independent
+logging adapters and collection pipeline, not storage durability or a native
+HTTP/scanner server.
 
-## Executed checks
+## Replacement and regression checks
 
-- `python3 -m unittest discover -s tests/logging -v`: **15 PASS**. The suite
-  builds the actual C++ producer when `GLAMDB_LOG_PROBE` is unset; CTest supplies
-  its built probe. Coverage includes JSON/opaque correlation, error/lifecycle
-  admission, sample and rate limits, eight concurrent producers, deliberately
-  blocked stderr, sink errors, rotation, smaller-budget reopen, file permissions,
-  symlink/FIFO rejection, exclusive directory ownership, secret-field projection
-  and actual Prometheus snapshot values.
-- `cmake -S . -B build/logging -DGLAMDB_IO_ONLY=ON -DBUILD_TESTING=ON`, build and
-  `ctest --test-dir build/logging --output-on-failure`: **165/165 PASS**. The same
-  configure/build with `GLAMDB_ENABLE_ASAN=ON` and `GLAMDB_ENABLE_UBSAN=ON` in
-  `build/logging-sanitized`: **165/165 PASS**. Ninja must be on PATH for tooling
-  tests that launch nested CMake. A first run lacked that PATH entry and failed
-  `glamdb.tooling.cmake-configuration`; adding it resolved both nested cases.
-- Strict `-std=c++23 -Wall -Wextra -Wpedantic -Werror` compilation of the CLI
-  translation unit: **PASS**. CLI stdout logic is unchanged.
-- LLVM 18 format check of the 68 IO-profile sources: **PASS**; focused LLVM 18
-  tidy for logger, probe and CLI: **PASS**, no project diagnostics. The current
-  macOS SDK's C++ library uses builtins unsupported by LLVM 18. For analysis only,
-  the official libc++ 18.1.8 source headers were extracted under ignored
-  `artifacts/logging-tools`, with their upstream `__config_site.in` configured
-  for pthread/ABI1 and the upstream default assertion handler copied to its
-  generated include name. `-nostdinc++ -isystem <those headers> -isysroot <SDK>`
-  supplied a matching analysis library. No system toolchain/header was changed.
-- Loki **3.7.9** config verification and Alloy **1.21.3** `validate`: **PASS**.
-  Official Darwin arm64 archive SHA256s match `deploy/logging/versions.lock.json`.
-- Official Compose **5.7.0** daemonless rendering of the base deployment and the
-  optional Grafana variant: **PASS**. Both use mandatory path/UID settings;
-  Grafana additionally requires a secret file. Resolved multi-platform registry
-  manifest digests are pinned. Rendering does not start containers.
-- `python3 -m py_compile tools/logging/*.py tests/logging/*.py` and
-  `git diff --check`: **PASS**.
+The previous native/Python queue, worker and file-rotation implementations were
+replaced with Quill 13.0.0 and stdlib logging/python-json-logger 4.2.0. The old
+suite passed 15 tests before replacement. New contracts were observed failing
+against that implementation (standard handler ownership, truthful delivery
+availability and producer registration/budgets), then passing with the real
+libraries. File ownership/symlink/rotation tests were removed with application
+file mode; runtime journal quotas/rotation require the separate Linux gate below.
 
-## Real ingestion, filtering and outage recovery
+Final executed commands/results:
 
-Executed the harness from [LOGGING.md](LOGGING.md) using the official native
-Loki/Alloy binaries and the actual CMake-built logging probe, including
-`--exercise-outage`. The host filesystem was approximately 93% full. Shipped
-Loki correctly rejected writes at its **90%** WAL threshold, so the isolated
-small-fixture harness used the explicit **test-only**
-`--wal-disk-threshold 0.99` argument. Deployment configuration stays at 0.9.
+- `cmake -S . -B build/logging-quill -G Ninja -DGLAMDB_IO_ONLY=ON -DBUILD_TESTING=ON -DPython3_EXECUTABLE="$PWD/.venv/bin/python"`,
+  build, then `ctest --test-dir build/logging-quill --output-on-failure`:
+  **162/162 PASS**, including **17 logging tests** (sixteen pass on macOS; the Linux ENOSPC device test skips). The logging test uses the
+  actual CMake-built Quill producer. It covers success sampling/rate limits,
+  errors/lifecycle, maximum typed records, eight-producer saturation, sixty-four
+  sequential/churning producer attempts constrained to sixteen lifetime queues,
+  blocked and closed runtime pipes, concurrent shutdown, destruction/reopen and
+  cumulative process counters. Python uses actual QueueHandler/QueueListener /
+  JsonFormatter with secret projection, stdout preservation, slow/full queue,
+  sink-error callback and close/admission tests. A real closed pipe exposed
+  CPython exit status 120 from poisoned global stderr; the unbuffered standard
+  stderr stream fix was verified RED/GREEN in a child process. Slow/error Python streams are
+  explicit unit doubles; native pipes and Quill are real.
+- The same configure/build/CTest with `GLAMDB_ENABLE_ASAN=ON` and
+  `GLAMDB_ENABLE_UBSAN=ON` in `build/logging-quill-sanitized`:
+  **162/162 PASS**. This includes logger teardown/reopen and pipe failure.
+- `cmake --build build/logging-quill --target format-check quality-negative-check`:
+  **PASS**, LLVM 18 formatting of 68 IO-profile sources and intentional
+  formatting/analyzer violations rejected. Focused LLVM 18 tidy of
+  `structured_log.cpp`, `logging_probe.cpp` and CLI `main.cpp`: **PASS**, no
+  project diagnostics, using the previously verified libc++ 18.1.8 source
+  headers and the current SDK sysroot for analysis. The ordinary full `tidy-check`
+  target cannot use this host's SDK/STL with LLVM 18 directly; that attempted run
+  failed on missing standard headers and unrelated existing source diagnostics.
+  It is not recorded as a passing whole-project tidy gate.
+- Strict native CLI translation-unit compilation with
+  `-std=c++23 -Wall -Wextra -Wpedantic -Werror`: **PASS**. Its stdout generation
+  is unchanged; a fully linked storage CLI was not rebuilt because this worktree
+  has no installed Arrow/Iceberg/SQLite prefix.
+- `cmake -P cmake/dependencies/VerifySubmodules.cmake`: **PASS**, including the
+  exact Quill release commit. The installed formatter matches its pinned PyPI
+  wheel. The upstream MIT/BSD licenses were inspected and dependency instructions
+  updated. The Python runtime requires 3.10 or later.
+- Pinned Alloy 1.21.3 `validate` of the common pipeline with each journal and
+  Docker JSON source: **PASS**. Daemonless Compose 5.7.0 rendering of the base
+  and optional private Grafana deployments: **PASS**. Archive SHA256s match the
+  deployment lock. `py_compile` and `git diff --check`: **PASS**.
 
-Results:
+## Real ingestion and outages
 
-1. Ten native append-error events were searchable in Loki with their literal
-   `duration_us=123`, `row_count=7`, status 503 and generated request IDs.
-2. A synthetic application event was ingested and queried by its generated
-   correlation ID. Password, Authorization, Cookie, query, body, path, exception
-   text and nested secret fields were absent from the stored JSON. Organization
-   and database slugs, status, revision and duration survived projection.
-3. A raw JSON record lacking schema 1 was discarded. Query results retained
-   only configured stream labels plus Loki's bounded service metadata; query-time
-   JSON extraction was not mistaken for indexed labels. Actual collector
-   `loki_process_dropped_lines_total{reason="invalid_schema"}` increased.
-4. Only the harness-owned Loki process was stopped. After finite retries,
-   `loki_write_dropped_entries_total` reported **33** dropped entries. Restarting
-   that Loki against its temporary data directory made new fixtures searchable.
-   Both the initial search and the post-outage search returned **PASS**.
-5. Raw service metrics were fetched, including actual sent/dropped/retry counts
-   and `loki_ingester_wal_disk_usage_percent` of approximately **0.93**. Its units
-   are 0..1, despite the name. All harness child processes were terminated.
+The harness uses real pinned native Loki 3.7.9 and Alloy 1.21.3 binaries,
+disposable child processes, unused loopback ports and a temporary directory.
+The file source is explicitly a test runtime capture of stderr, not application
+file logging. Actual producer output reaches the actual collector/storage.
 
-The harness records `result.json`, service logs and raw `.prom` metrics under
-ignored `artifacts/logging-e2e`. It creates fresh temporary log/Loki/collector
-state and does not touch existing services, VMs, warehouses or user data.
+```sh
+.venv/bin/python tools/logging/run-local-e2e.py \
+  --loki-binary artifacts/logging-tools/loki-darwin-arm64 \
+  --alloy-binary artifacts/logging-tools/alloy-darwin-arm64 \
+  --probe build/logging-quill/tests/glamdb_logging_probe \
+  --exercise-outage --wal-disk-threshold 0.99
+```
 
-## Admission microbenchmark
+**PASS**: ten native append-error records and one real Python-adapter event
+were searchable with literal status/duration/row fields and generated correlation.
+A separate synthetic raw fixture verified collector projection: password,
+Authorization, Cookie, query, body, path, exception and nested secret markers were
+absent from stored content; missing schema was rejected. Record labels stayed
+within the finite configured set and Loki's bounded service metadata.
 
-An optimized standalone probe exercised the logger only; no HTTP handling,
-Arrow work, database operation, payload serialization or service-side storage
-was performed. These are workload-specific admission measurements, **not**
-application throughput claims or deployment capacity guarantees:
+Restarting only the harness-owned Alloy with its state directory made new events
+searchable. Stopping only its Loki exhausted finite retries and increased actual
+`loki_write_dropped_entries_total` by **32**. Restarting that Loki made new native,
+Python and projection fixtures searchable. Both collector-restart and
+post-outage results were **PASS**. No pre-existing service was managed.
+The host was above Loki's normal 90% WAL filesystem threshold, so the small
+fixture used the explicit 99% test override. Production remains at 90%; this run
+does not demonstrate full-disk ingestion or retention deletion timing.
 
-- Default policy, 10,000,000 successful request-log attempts: 9,900,000 sampled
-  out, 99,980 rate-limited, 20 request events plus two lifecycle events admitted
-  and written, zero terminal backlog. Elapsed about 0.162 seconds; about 6 KiB
-  retained including the final health record. This demonstrates that the success
-  rate cap remains finite when attempted log volume increases.
-- Forced overload, eight threads × 100,000 error events with a 32-entry queue:
-  800,002 total attempts including lifecycle, 1,423 written, 638,563 contended
-  drops and 160,016 queue-full drops. Elapsed about 0.106 seconds; terminal
-  accounting exactly balanced, zero backlog and about 363 KiB retained.
-- The separate blocked-stderr test issues 500,000 events without draining the
-  child's stderr pipe. The producer exits within its 10-second deadline, with
-  at most 32 queued plus 64 worker records. It deliberately terminates the test
-  process without waiting for a blocked OS write; normal graceful shutdown can
-  still wait for an OS sink.
+## Linux sink failure proof
 
-Timing and drop distributions vary with scheduling/hardware. Raw local output
-is in ignored `artifacts/logging-native-benchmark.json`. Repeat with the probe's
-`default` and `stress` modes against disposable directories when sizing a host.
+An isolated read-only Linux arm64 container with Python **3.13.11**, no network,
+128 MiB memory and a half-CPU limit ran the actual pinned formatter and adapter
+from RAM. **8/8 Python tests PASS**, including the real `/dev/full` ENOSPC device
+and a closed OS pipe. Before the stream-ownership fix, `/dev/full` counted one
+sink error but the interpreter exited **120**; afterward the same child emitted
+`submitted=1`, `accepted=1`, `sink_errors=1` and exited **0**. No custom writer or
+retry loop was added: the handler uses standard unbuffered IO on owned stderr.
+The test container was removed afterward. A Linux compiler-image attempt hit
+its disposable VM filesystem limit and was stopped; no native Linux compiler
+qualification is claimed. Native Quill and sanitizers were tested on macOS.
 
-## Not established by these checks
+## Measurement scope and costs
 
-- This branch did not run the full Arrow/Iceberg engine build or full CLI
-  integration suite; its dependency prefix was unavailable. The CLI translation
-  unit compiled, and the independent IO/logger suites ran. No storage writer,
-  publication, recovery ordering or public storage API was changed.
-- Container execution of this Loki/Alloy/Grafana Compose deployment, Linux
-  filesystem quotas/ownership and a remote authenticated TLS gateway were not
-  exercised here. Native binaries prove ingestion/query/projection/outage
-  behavior; Compose rendering proves configuration syntax. Complete the Linux
-  operator setup and run `smoke.py` on the deployed stack before rollout.
-- The optional Grafana service was not launched in this validation. Its secret
-  and datasource mounts were rendered, and its image is pinned; verify login
-  and Explore against the deployed Loki through the operator-only endpoint.
-- Seven elapsed days of Compactor deletion, power-loss recovery, HA, production
-  peak throughput and long-duration memory/disk behavior were not tested. The
-  seven-day retention configuration was accepted; this is not proof of a
-  deletion deadline. A hard storage quota and disk/readiness/drop alerts remain
-  required deployment prerequisites.
+One local diagnostic trial compared the previous source revision
+`d2ffdd2054598dcdc5055ff847e905cfa2b3b419` with the library adapters using
+100,000 attempted single-thread error events and stderr attached to `/dev/null`.
+Both use the same C++23 `-O2 -pthread` compiler; Python uses the same 3.14.3
+interpreter. Per-call samples exclude shutdown, while CPU/RSS include the whole
+process. Sample storage contributes to RSS. There was no CPU pinning or isolated
+benchmark host. The queues saturate; these are attempted-admission measurements,
+not end-to-end delivery latency or a production capacity claim.
+
+Native previous p50/p95/p99 were **83/208/250 ns**; Quill was
+**333/500/542 ns**. Producer elapsed time was **25,482/38,140 us**, CPU time
+**55,274/107,915 us**, peak RSS **2,719,744/2,785,280 bytes**, and actual admitted
+counts **11,520/8,032** (previous/library respectively). Different finite queue
+representations and scheduling affect admission loss. The optimized diagnostic
+executable grew from **44,568 to 461,608 bytes**; this is not an installed-engine binary comparison.
+
+Python previous p50/p95/p99 were **8,041/9,167/15,125 ns**; stdlib logging was
+**11,541/12,750/18,416 ns**. Producer elapsed time was **0.845/1.292 s**, CPU time
+**1.111/1.618 s**, peak RSS **26,591,232/29,081,600 bytes**, and actual admitted
+counts **4,745/9,426**. The bounded queue held 64 entries in both runs.
+No speedup is claimed: the migration removes maintained infrastructure while
+adding the measured library overhead.
+
+The two implementation files shrank from **662 + 282 = 944 lines** to
+**439 + 219 = 658 lines**. Tests/configuration/docs are additional; the upstream
+Quill source and dependency footprint are not counted as removed project code.
+
+## Remaining runtime/operator gates
+
+- Real journald quota/rotation, Docker json-file rotation and native sink ENOSPC
+  remain pending. Python's real Linux `/dev/full` behavior is verified above;
+  it does not establish a runtime journal's retention or native Linux behavior.
+  Use a task-owned capped volume, emit beyond the configured runtime limit,
+  restart the collector and verify both retained bytes and new-event search.
+- Docker deployment containers and private Grafana were rendered but not started
+  in this run. Grafana login, remote TLS/authentication and multi-node retention
+  remain deployment checks. Local Loki/Alloy ingestion was real.
+- Native output has no exact delivered/backlog metric. Quill callback drop
+  reports are delayed and duplicate the queue-loss observation; their count is
+  never added to queue rejection. Runtime/collector loss can occur after a
+  successful application admission and needs independent monitoring.
+- A permanently blocked OS sink can delay graceful shutdown. Producer admission
+  remains bounded; this suite releases its deliberate pipe block before joining.
+  Join workers before object destruction; restart the process to obtain a new
+  lifetime producer-allocation budget after worker churn exhausts sixteen slots.

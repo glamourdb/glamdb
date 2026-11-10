@@ -1,333 +1,249 @@
 # Operational logging
 
-The CLI now emits structured operational events to stderr. Set
-`GLAMDB_LOG_DIRECTORY` to an existing absolute directory outside the warehouse
-(or a new leaf directory under an existing parent) to select private, rotated
-JSONL files instead. The internal logger is independent of the storage engine;
-no log acknowledgment authorizes a committed storage response. Parquet field
-metrics describe user-data files and are not operational logs.
+The native CLI and Python control-plane adapter emit best-effort JSON to **stderr**.
+CLI stdout remains its machine-readable command result. The application has no
+file logging mode or file rotation. `GLAMDB_LOG_DIRECTORY` is no longer used.
+The normal path is application → runtime journal → Alloy → Loki → Grafana.
+Administrative audit and storage outcomes remain in transactional metadata;
+a log admission or Loki acknowledgment never authorizes a committed response.
 
-`deploy/logging` provides a single-node Loki store, an Alloy file collector and
-an optional standalone Grafana search UI. The Python adapter in
-`tools/logging/glamdb_logging.py` supports control-plane lifecycle, request and
-organization/database change events. Its caller must wire it explicitly; the
-adapter does not install middleware or alter storage writers. These logs are
-best effort. Authoritative administrative audit and storage outcomes belong in
-their transactional journals.
+## Libraries and event boundary
 
-The organization gateway integrates the Python adapter when both components
-are installed. It emits supervisor start/stop and administrative change events,
-projecting only validated receipt IDs, revisions and outcomes. Its transactional
-audit remains authoritative; retries can repeat operational notifications.
-Set GLAMDB_LOG_DIRECTORY to a dedicated per-process directory and register it
-as an Alloy file source. Do not share the rotation directory with a native
-writer. A configured sink that cannot be opened fails gateway startup; no
-raw Caddy request JSON is added to this schema.
+Native logging uses [Quill 13.0.0](https://github.com/odygrd/quill/releases/tag/v13.0.0),
+MIT, pinned at `eb802a37c7d585840324886a3d8648c9c2159952` in
+`third_party/lock.json`. Its public JSON console sink owns JSON escaping,
+serialization and writes. A small subclass redirects its inherited stream to an
+owned duplicate of stderr because the upstream default selects stdout. The
+stream is unbuffered; no application writer, queue, retry thread or rotation sits
+beside Quill. Darwin's duplicate uses `F_SETNOSIGPIPE`; the Linux backend inherits
+a blocked SIGPIPE mask. Process-wide signal handlers are preserved.
 
-## Choice and source review
+Python uses stdlib `logging`, `QueueHandler`, `QueueListener` and
+[python-json-logger 4.2.0](https://pypi.org/project/python-json-logger/4.2.0/),
+BSD-2-Clause. The verified wheel hash is in `tools/logging/requirements.txt`.
+The few handler overrides count actual admission/errors, preserve the domain
+projection and permit shutdown of a full bounded queue. A standard unbuffered
+IO stream owns a duplicate of stderr so failed writes cannot poison CPython's
+global stderr buffer and change its exit status to 120. No custom worker,
+network transport or file writer remains.
 
-Reviewed against upstream documentation on **2026-11-10**:
+`TLogEvent` has finite event/operation/outcome enums, generated correlation,
+duration, row count and status. It accepts no text, paths, headers or payload.
+Python `sanitize_record` projects the same fields plus a bounded revision and
+validated organization/database IDs (lowercase UUID or legacy slug up to 64
+characters). Integers are bounded at `2**63-1` in Python; native values retain
+their unsigned types. Unknown fields and exception strings are discarded.
 
-- **Loki + Alloy + Grafana, selected.** Loki indexes stream labels and searches
-  log content with LogQL. The existing metrics UI can search logs without a
-  second account/UI system. Low-cardinality streams and bounded query windows
-  suit sampled application events. Wide content searches still cost work:
-  adding a request ID as an indexed label is not a shortcut. See
-  [Loki labels](https://grafana.com/docs/loki/latest/get-started/labels/) and
-  [TSDB storage](https://grafana.com/docs/loki/latest/operations/storage/tsdb/).
-  Alloy tails files and forwards batches. Its optional remote-write WAL and
-  custom queue settings are experimental in this release; this configuration
-  uses stable components without that WAL. See
-  [Alloy file source](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.file/)
-  and [write client](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.write/).
-- **VictoriaLogs.** A real compact alternative with a single executable,
-  built-in UI, field/full-text search using LogsQL and a Grafana plugin. It is
-  attractive when starting a separate log service; adopting it here adds a
-  different query language and datasource plugin. No relative throughput or
-  memory claim has been benchmarked in this repository. See
-  [VictoriaLogs](https://docs.victoriametrics.com/victorialogs/),
-  [LogsQL](https://docs.victoriametrics.com/victorialogs/logsql/) and
-  [Grafana integration](https://docs.victoriametrics.com/victorialogs/integrations/grafana/).
-- **OpenSearch + Data Prepper + Dashboards.** Supports indexed document search,
-  transformations and PPL analytics. The upstream log-analytics deployment uses
-  a collector, Data Prepper, OpenSearch and Dashboards; those services add
-  operational components for this small deployment. Prefer it when document
-  indexing and its security/search ecosystem are requirements. See the
-  [official ingestion walkthrough](https://docs.opensearch.org/latest/observing-your-data/log-ingestion/)
-  and [Data Prepper](https://docs.opensearch.org/latest/data-prepper/).
+Quill's native JSON envelope includes static source metadata and a constant
+message template; named argument values, including numbers, are strings.
+Its timestamp is Unix nanoseconds. Python emits typed JSON numbers and a UTC
+RFC3339 timestamp. Alloy validates schema/correlation, normalizes numeric fields
+and timestamps and rebuilds the finite domain record. Static Quill metadata and
+any unlisted fields are removed before forwarding. Request IDs are content,
+never indexed labels. Only `service`, trusted `environment`, `event` and `level`
+are configured stream labels; Loki can add bounded service/detected-level fields.
 
-**Promtail reached EOL on March 2, 2026**; it receives no future updates.
-New deployments use Alloy. See the
-[upstream EOL notice](https://grafana.com/docs/loki/latest/send-data/promtail/).
-Images are versioned and digest-pinned in `versions.lock.json`; Loki 3.7.9 and
-Alloy 1.21.3 were published October 20 and October 28, 2026 respectively:
-[Loki release](https://github.com/grafana/loki/releases/tag/v3.7.9),
-[Alloy release](https://github.com/grafana/alloy/releases/tag/v1.21.3).
-Review release notes and security fixes when updating all matching pins.
+Generate correlation at the request boundary; do not trust a supplied header.
+Never pass passwords, access/refresh tokens, Authorization, Cookie, request
+bodies, SQL/user rows, raw URL/query/path or arbitrary exception text to logs.
+Encoded secrets deliberately placed in allowed numeric/ID fields cannot be
+recognized reliably. Collector projection is additional defense, not permission
+to feed it raw access logs or credentials.
 
-## Producer contract and limits
+## Resource and lifecycle contract
 
-Native API: `NGlamDB::NTelemetry::TStructuredLogger::Open`, `NewRequestID`,
-`TryLog`, `GetStats`, `Shutdown`, in `core/telemetry/structured_log.h`.
-Creation/opening the logger may allocate and perform IO. `TryLog` copies a fixed
-record into a preallocated queue using a single mutex try-lock: it never waits
-for that mutex, allocates, writes files or contacts the network. Every failure
-to admit a record is counted. A single worker formats and writes events.
+`TStructuredLogger::Open` starts one process-owned Quill backend and preallocates
+the calling thread. Only one logger may be active in a process. Call
+`RegisterProducerThread()` during each worker's initialization, before serving
+operations; unregistered callers are rejected without creating a queue.
 
-Default limits:
+The frontend explicitly selects **BoundedDropping** with **64 KiB per producer**.
+At most **sixteen producer allocations per process lifetime**, including Open,
+are allowed. Slots are intentionally never recycled: a stalled backend may
+retain queues after producer exit, so a concurrent-thread limit alone would
+not bound churn. Use a stable worker pool; after exhausting the lifetime budget,
+new producer registration fails until process restart. Queues reserve up to
+128 KiB each in Quill's backing mapping (logical capacity plus wrap scratch),
+plus library metadata. The backend's per-producer transit buffer starts and
+stops at **sixteen events**; the global soft processing limit is sixteen.
+Records contain only fixed enums, a 32-hex correlation and fixed integers;
+the maximum native JSON envelope is tested below **1,024 bytes**. This bounds
+logging storage, not the application's entire RSS or allocator overhead.
 
-- 8,192 queued native records plus at most 64 worker records; about 0.5 MiB of
-  record storage. Sixty-four queue slots are reserved from successful requests.
-  Python uses 4,096 entries and small bounded critical sections; it is intended
-  for the control plane, not native data-path throughput.
-- Successful `request_completed` events: one candidate per 100 successes,
-  **at most 20 candidates per monotonic second per logger**, before queue
-  admission. This is fixed sampling, not a statistically unbiased estimator.
-  An atomic admission race can conservatively reject another candidate.
-- Errors, denied/unknown outcomes, lifecycle and administrative changes bypass
-  success sampling/rate limiting. All remain subject to bounded admission and
-  sink failures; an error storm cannot allocate an unlimited queue.
-- Four files including the active `glamdb.log`, each at most 16 MiB, totaling
-  **64 MiB**. Rotation renames files; there is no compression subprocess or
-  copy-truncate race. Opening a smaller budget removes excess/oversized
-  archives and truncates an oversized active log. Changing budgets deliberately
-  reduces retained history. A nonblocking directory lock enforces one rotation
-  owner per directory; concurrent owners fail setup.
-- File mode 0600; directory owned by the writer and not group/other writable.
-  Active files and archives must be owned, single-link regular files. Symlinks
-  and special files fail setup. Parent directories must be trusted. stderr has
-  no in-process file retention; configure container/journal retention there.
+Create one service-owned Python logger at startup and close it during teardown.
+It has one listener and a default **4,096-record** `queue.Queue`; configurable
+capacity is 2..65,536. Its finite record is below **4,096 bytes** serialized;
+Python object overhead is additional. Thread count does not create more queues.
+The admission lock is acquired without waiting; `QueueHandler` uses
+`put_nowait`, so overflow cannot wait for the sink or recursively log failures.
 
-Schema 1 has a UTC timestamp, fixed service, finite event/operation/outcome,
-level, generated 32-hex request ID, duration in microseconds, row count and
-transport status. The native API has no free-text field. Python additionally
-allows a nonnegative revision and explicitly validated organization/database
-IDs (lowercase slugs up to 64 characters, or lowercase UUIDs). Numeric fields
-are unsigned native values or Python integers bounded at `2**63-1`.
+For both adapters, successful `request_completed` events sample one candidate
+per 100 successes and admit at most twenty candidates per monotonic second by
+default. Lifecycle, administrative events, denied/unknown outcomes and errors
+bypass success sampling but share bounded transport capacity. The native
+cross-thread global limit uses a conservative atomic admission decision;
+per-call-site library rate macros would change that aggregate policy.
 
-Do not copy a supplied request-ID/header into these fields: generate an ID at
-the request boundary, return it to the caller and reuse it for related events.
-Never put passwords, API tokens, Authorization, Cookie, bodies, raw URLs/query
-values, exception messages, user data, SQL text, filesystem paths or identifiers
-outside the defined schema into logs. Python projects an allowlist instead of
-redacting arbitrary text. Alloy reconstructs that allowlist again, dropping
-extra fields before forwarding. Records without schema 1 or a generated-format
-request ID are rejected and counted as `invalid_schema`. Invalid enum values are replaced; invalid IDs
-are removed/replaced. This protects the stream only when producers use the
-contract; encoded secrets deliberately placed in permitted numeric/ID fields
-cannot be detected reliably.
+`TryLog`/`emit` perform no network/file IO, flush or sink retry. Native queue
+allocation belongs to Open/producer registration. Both APIs are best effort;
+a failed event does not change the database or administrative outcome.
+Shutdown closes admission, waits in-flight callers and lets the library drain.
+Join application workers before destroying the logger. A blocked OS sink can
+still delay clean shutdown; process crashes can lose queued events. Operational
+logging is not a durable audit journal.
 
-Only `service`, `environment`, `event`, `level` are configured stream labels;
-Loki may add its bounded `service_name`/detected-level metadata. IDs, filenames,
-queries and paths are never indexed labels. For multiple nodes, add authoritative
-cluster/namespace/pod/container/node labels in deployment discovery, and review
-stream budgets before doing so. Do not derive them from client input.
+## Actual metrics integration
 
-`logger_health` is emitted every five seconds and on clean shutdown, with
-submitted/accepted/sampled/rate-limited/written counts, each drop reason,
-sink errors, backlog and capacity. Synthetic health records are excluded from
-application `accepted`/`written` totals. `GetProcessLogStats()` retains actual
-process counters after logger destruction;
-its backlog/capacity gauges describe live loggers. The monitoring publisher can
-consume this internal API. Python `render_prometheus(logger.snapshot())` formats
-the same bounded metric names for the supervisor endpoint; this library does not add an HTTP server.
-Native backlog includes the fixed worker batch. Snapshots during concurrent
-activity are approximate; terminal accounting is checked after shutdown.
+Native `GetStats()` and `GetProcessLogStats()` expose submitted, Quill-admitted,
+sampled, rate-limited, queue-rejected, unregistered/stopped and adapter-error
+counts. Quill's backend callback increments notification counts and parses the
+pinned library's bounded-dropping report count. `QuillReportedDropped` is a
+delayed observation of queue loss, **not an additional loss category**; do not
+add it to `DroppedFull`. `SinkErrors` counts actual upstream `fwrite`/`fflush`
+error callbacks. Other backend notifications remain visible without logging
+arbitrary exception text. Capacity and lifetime producer count are known budgets.
 
-On full/contended queues the producer returns false immediately. On sink failure
-records are dropped, counters increase and the worker backs off for 100 ms;
-there is no request-thread retry or fallback to warehouse IO. SIGPIPE on the
-worker becomes a sink error. OS writes can still stall the worker and shutdown;
-stop producers before destruction. Process crashes can lose queued/unflushed
-logs. Operational files are not fsynced and are not a durable audit journal.
-CLI stdout JSON and the storage write/publication protocol are unchanged.
-Legacy human CLI diagnostics on stderr are not collector input; file mode is
-recommended for central collection.
+Quill exposes no exact per-event delivery, sink-loss count or live backlog in
+this integration. Those metrics are omitted; zeros must not imply availability.
+A stuck backend can delay its drop callback. Queue rejection counters still
+advance on the operation path. Process counters outlive logger destruction and
+callback state is retained until the backend stops, independently of metrics
+objects. Snapshots during concurrent updates are approximate.
 
-Python integration:
+Python `snapshot()` exposes actual QueueHandler admissions, queue-full,
+contention/stopped drops, sample/rate decisions, adapter errors, StreamHandler
+error callbacks and configured capacity. It makes no delivery/backlog claim.
+Attach a standard metrics-library collector to the snapshot callback; the
+logging adapter owns neither a Prometheus serializer nor an HTTP server.
 
 ```python
 from glamdb_logging import StructuredLogger
 
-logger = StructuredLogger(directory="/srv/glamdb-observability/application")
-request_id = logger.new_request_id()
+logger = StructuredLogger()
 logger.emit("request_completed", operation="auth", outcome="denied",
-            request_id=request_id, status_code=403, duration_us=500)
-logger.emit("org_updated", operation="organization", outcome="ok",
-            revision=12, org_id="example-team", database_id="example-db")
-# On process shutdown after stopping producers:
+            request_id=logger.new_request_id(), status_code=403, duration_us=500)
+# Stop request producers and unregister metrics consumers during service teardown.
 logger.close()
 ```
 
-Make `tools/logging` importable in the supervisor's packaging or explicitly load
-that module. Do not log raw Caddy access JSON into this file: it needs a trusted
-normalizer to the schema above, with success sampling and field projection.
+## Runtime journal and collection
 
-## Linux deployment and external setup
+Keep journal storage separate from the warehouse and enforce an actual disk
+quota. A retention period alone cannot bound bytes at arbitrary event rates.
+For a systemd service use `StandardError=journal` and a fixed unit identifier;
+do not redirect stderr to an application-managed rotating file. For example,
+set `SystemMaxUse=64M`, `RuntimeMaxUse=64M`, `MaxRetentionSec=7day` and a
+measured rate limit for a dedicated journal. These settings are owned by
+journald; verify the effective configuration and size for other units if they
+share that journal. Runtime rate limits may discard events too.
 
-Assumptions: a Linux Docker host with Compose v2, a dedicated filesystem/quota
-for logging, one application writer and an operator-only Grafana. No cloud
-account, DNS name, certificate, secret or remote host is provisioned by Compose.
+Install `deploy/logging/config.alloy` alongside **one** source configuration.
+`deploy/logging/sources/journal.alloy` selects a specific systemd unit using
+`GLAMDB_JOURNAL_MATCHES`, for example `_SYSTEMD_UNIT=glamdb.service`, reads the
+persistent journal and forwards only JSON that passes the shared projection.
+Grant the collector journal-group read access, not warehouse access. Preserve
+Alloy's state directory across restart. Journal truncation or outage longer
+than runtime retention causes unrecoverable gaps; duplicate replay is possible.
 
-1. Install Docker Engine/Compose using the distribution's supported packages.
-   Reserve log storage **separate from the warehouse**. A suggested starting
-   budget is a 20 GiB dedicated filesystem for Loki and a separately bounded
-   filesystem for application/collector/Grafana state. Apply a real filesystem
-   or project quota; Compose bind mounts do not enforce byte quotas. Verify with
-   `findmnt -T /srv/glamdb-observability/loki` and your filesystem's quota tool.
-   Do not enable the stack on an unbounded shared warehouse filesystem.
-2. Create directories with the actual application UID/GID; the example below
-   uses 10001. Loki uses 10001, Grafana uses 472. These are new directories;
-   inspect existing paths before changing ownership.
+For Docker, either use the `journald` driver and the journal source, or select
+the `json-file` driver with `max-size=16m`, `max-file=4`, `mode=non-blocking`,
+`max-buffer-size=1m` and `sources/docker-json.alloy`. Mount only that application's
+runtime JSON log directory read-only, set `GLAMDB_DOCKER_LOG_GLOB` to its
+`*-json.log` file and mount the source as `/etc/alloy/source.alloy` instead of
+the journal source. Add that variable explicitly to the collector environment
+and replace the journal/machine-ID mounts with the selected Docker log-directory
+mount; choose a collector UID with read access to those runtime-owned files. The source decodes Docker's envelope and drops stdout before
+domain projection. It needs no Docker socket. Do not use this source with the
+binary `local` driver. Docker rotates its own files; do not add logrotate.
+Kubernetes deployments likewise use container stderr and kubelet/cluster logging
+rotation; use trusted pod discovery and the same finite projection/label budget.
 
-   ```sh
-   sudo install -d -m 0700 -o 10001 -g 10001 /srv/glamdb-observability/application
-   sudo install -d -m 0700 -o 10001 -g 10001 /srv/glamdb-observability/alloy
-   sudo install -d -m 0700 -o 10001 -g 10001 /srv/glamdb-observability/loki
-   export GLAMDB_LOG_UID=10001 GLAMDB_LOG_GID=10001
-   export GLAMDB_LOG_DIRECTORY=/srv/glamdb-observability/application
-   export GLAMDB_ALLOY_STATE_DIR=/srv/glamdb-observability/alloy
-   export GLAMDB_LOKI_DATA_DIR=/srv/glamdb-observability/loki
-   export GLAMDB_ENVIRONMENT=production
-   docker network inspect glamdb-observability >/dev/null 2>&1 || docker network create glamdb-observability
-   docker compose -f deploy/logging/compose.yaml config --quiet
-   docker compose -f deploy/logging/compose.yaml up -d
-   ```
-
-3. Set the same `GLAMDB_LOG_DIRECTORY` in the application service environment.
-   Under a container, mount the corresponding host directory writable into the
-   application and set the variable to its **container** path. Mount only that
-   log directory read-only into Alloy; never mount the warehouse or Docker socket.
-   Alloy runs as the same UID as the writer to read 0600 files. Preserve its
-   state directory across upgrades. Positions corruption restarts reading at
-   the beginning, so duplicates are possible. Only the active filename is
-   discovered; rapid rotation or long collector downtime can lose archives.
-4. If the monitoring stack supplies Grafana, connect it to
-   `glamdb-observability` and provision `grafana-datasource.yaml` (UID `loki`, URL
-   `http://loki:3100`). The monitoring stack already uses that UID. Otherwise
-   use the **optional** standalone UI below. Run one Grafana stack per port.
-
-   ```sh
-   sudo install -d -m 0700 -o 472 -g 472 /srv/glamdb-observability/grafana
-   export GLAMDB_GRAFANA_DATA_DIR=/srv/glamdb-observability/grafana
-   export GLAMDB_GRAFANA_PASSWORD_FILE=/srv/glamdb-secrets/grafana-admin-password
-   # Provision a strong password through your secret manager into this file.
-   # The container must be able to read it: owner UID472, mode0400.
-   docker compose -f deploy/logging/compose.yaml -f deploy/logging/compose.grafana.yaml config --quiet
-   docker compose -f deploy/logging/compose.yaml -f deploy/logging/compose.grafana.yaml up -d
-   ```
-
-   Open `http://127.0.0.1:3000`, sign in as `operator` with the provisioned
-   password, open Explore and select **Loki**. Existing Grafana data keeps its
-   existing administrator credentials; replacing the file does not reset them.
-   Anonymous access and signup are disabled. For remote administration, use a
-   secured SSH tunnel or an authenticated TLS reverse proxy with firewall rules;
-   no credentials belong in datasource URLs, source files or browser storage.
-5. Verify `curl --fail http://127.0.0.1:3100/ready` and
-   `curl --fail http://127.0.0.1:12345/-/ready`. Run a disposable CLI command with
-   file logging enabled, then use the queries below. For an automated synthetic
-   fixture, run `python3 tools/logging/smoke.py --log-directory "$GLAMDB_LOG_DIRECTORY"`
-   as the log owner. It writes fake secret strings to test collector projection;
-   never substitute real credentials.
-
-The Loki API has authentication disabled **inside the private network**; loopback
-ports 3100/12345 and Grafana 3000 are the only host bindings. Network membership
-is an operator trust boundary, not tenant authorization. Do not expose Loki or
-Alloy directly on a public interface, or give application users network access.
-For remote collectors, place Loki behind an authenticated TLS/mTLS gateway,
-restrict push/query paths separately, provision client credentials via mounted
-secret files and configure certificate validation. Grafana login alone does not
-protect a separately exposed Loki API. Central logs may span organizations;
-operator access must be limited independently of application data permissions.
-
-## Retention, capacity and failure policy
-
-Loki uses TSDB v13, 24-hour index periods, persistent chunks/WAL and Compactor
-retention of **168 hours**. Deletion is asynchronous: the 10-minute compaction
-cycle and two-hour delete delay mean retention is not an exact deletion deadline.
-Compactor state must persist. See
-[upstream retention](https://grafana.com/docs/loki/latest/operations/storage/retention/).
-The filesystem store has no disk-space eviction policy; a quota and disk alerts
-are mandatory. See
-[filesystem storage limits](https://grafana.com/docs/loki/latest/operations/storage/filesystem/).
-
-Loki caps ingestion at 1 MiB/s with a 2 MiB burst, 256 KiB/s per stream, 1,000
-streams and 4 KiB lines; query windows are at most 24 hours/1,000 returned entries.
-These are protection settings, not demonstrated capacity guarantees. In a
-sizing example of 600 bytes/event, 20 successful events/s produce about 7.3 GB raw in
-seven days, before errors, metadata, indexes/WAL, compression and replicas. Size
-from measured event bytes and actual error rate. Retention does not guarantee
-seven days of availability if admission/quota limits are exceeded.
-
-Single-node filesystem Loki has no HA. Use an object store, authenticated
-endpoints, replicated Loki topology and measured capacity for larger production
-workloads. Apply object-store lifecycle only with the documented chunk-prefix
-rules and a longer expiry than Compactor retention/delete delay; do not blindly
-expire indexes or cluster metadata.
-
-The shipped WAL guard rejects new writes above **90% filesystem use**, checks
-the whole WAL filesystem, and resumes below the threshold. Preserve that guard:
-`loki_ingester_wal_disk_usage_percent` is a **0..1 fraction** despite its name;
-`loki_ingester_wal_disk_full_failures_total` records threshold/full-write failures.
-See [WAL behavior](https://grafana.com/docs/loki/latest/operations/storage/wal/).
-A full log volume must not fill the warehouse volume.
-
-Alloy batches 256 KiB/one second, times out requests after five seconds and uses
-six bounded retries with 0.5..5-second backoff. Exhausted batches are dropped and
-counted. No collector WAL is enabled; local files and positions are not an
-end-to-end durable queue, and collector restarts can lose in-flight batches.
-Container memory limits are 256 MiB Alloy, 1 GiB Loki and 512 MiB optional Grafana;
-CPU/PID limits and bounded Docker logs are configured too. Native stderr stalls
-can delay shutdown; application record admission stays bounded.
-
-Watch native/Python drop/sink-error/backlog counters, Alloy
-`loki_write_dropped_entries_total`, `loki_write_batch_retries_total` and sent-entry
-progress, Loki `loki_discarded_samples_total`, WAL usage/failures, container memory,
-filesystem free space, Compactor retention operations and scrape/readiness state.
-Native counters require host metrics integration; health logs alone cannot signal
-a stuck sink. Do not derive exact request rates from sampled logs. During outages
-restore connectivity/free capacity, verify new events are searchable and inspect
-drop counters; do not replay old archives into live streams without accounting
-for duplicates, timestamp limits and retention.
-
-## Search and checks
-
-Use a narrow time range in Grafana Explore, then expand it only when needed:
-
-```logql
-{service="glamdb", environment="production", level="error"} | json
-{service="glamdb"} | json | request_id="0123456789abcdef0123456789abcdef"
-{service="glamdb", event="request_completed"} | json | operation="append" | duration_us > 100000
-{service="glamdb", event="logger_health"} | json | dropped_full > 0
-{service="glamdb", event="org_updated"} | json | org_id="example-team"
-```
-
-Local independent verification (no Arrow/Iceberg required):
+The supplied Compose defaults to journald collection on a Linux host:
 
 ```sh
-python3 -m unittest discover -s tests/logging -v
-cmake -S . -B build/logging -DGLAMDB_IO_ONLY=ON -DBUILD_TESTING=ON
+export GLAMDB_ALLOY_UID=10001 GLAMDB_ALLOY_GID=10001
+export GLAMDB_JOURNAL_GID=$(getent group systemd-journal | cut -d: -f3)
+export GLAMDB_JOURNAL_MATCHES='_SYSTEMD_UNIT=glamdb.service'
+export GLAMDB_ENVIRONMENT=production
+export GLAMDB_ALLOY_STATE_DIR=/srv/glamdb-observability/alloy
+export GLAMDB_LOKI_DATA_DIR=/srv/glamdb-observability/loki
+# Create owned, quota-limited state directories; do not chown existing data blindly.
+docker network create glamdb-observability
+docker compose -f deploy/logging/compose.yaml config --quiet
+docker compose -f deploy/logging/compose.yaml up -d
+```
+
+Loki/Alloy versions and image digests remain in `versions.lock.json`.
+Only loopback ports 3100/12345 are published. Loki's authentication is disabled
+inside the private observability network: membership is an operator trust
+boundary, not tenant authorization. Never expose Loki/Alloy to application
+users or public interfaces. For remote collectors use an authenticated TLS/mTLS
+gateway and mounted secret files. Grafana login does not protect another exposed
+Loki API. Connect the existing private Grafana datasource, or use
+`compose.grafana.yaml` with `GLAMDB_GRAFANA_DATA_DIR` and the mandatory
+`GLAMDB_GRAFANA_PASSWORD_FILE`. Anonymous access/signup remain disabled. Open
+`http://127.0.0.1:3000` through an authenticated operator tunnel, then Explore → Loki.
+
+## Storage limits, outages and checks
+
+Loki keeps the existing TSDB v13/filesystem setup with **168-hour** Compactor
+retention, a ten-minute compaction interval and two-hour delete delay. Retention
+is asynchronous and is not disk eviction. A suggested starting dedicated Loki
+volume is 20 GiB; size it from measured event bytes and error rate and apply a
+real filesystem/project quota. Loki limits are 1 MiB/s ingestion, 2 MiB burst,
+256 KiB/s per stream, 1,000 streams and 4 KiB lines; queries are capped at a
+24-hour window/1,000 entries. These are protections, not capacity guarantees.
+At 600 bytes/event, twenty successes/s alone are about 7.3 GB raw per seven days,
+before errors, WAL, indexes, compression and replicas.
+
+The WAL rejects new writes above **90% filesystem use**. Watch
+`loki_ingester_wal_disk_usage_percent` (0..1 despite its name),
+`loki_ingester_wal_disk_full_failures_total` and discarded samples. A full log
+volume must not fill the warehouse. Alloy batches 256 KiB/one second, has a
+five-second timeout and six finite retries with 0.5..5-second backoff. Exhausted
+batches are dropped and counted; no collector WAL is enabled. Observe actual
+producer rejection/sink callbacks, runtime drop statistics,
+`loki_write_dropped_entries_total`, batch retries, sent progress, readiness,
+container memory, quota/free space and Compactor operations. Missing metrics
+and a stuck sink must remain visible; sampled logs cannot establish request RPS.
+
+```sh
+.venv/bin/python -m pip install --require-hashes --only-binary=:all: --no-deps -r tools/logging/requirements.txt
+.venv/bin/python -m unittest discover -s tests/logging -v
+cmake -S . -B build/logging -DGLAMDB_IO_ONLY=ON -DPython3_EXECUTABLE="$PWD/.venv/bin/python"
 cmake --build build/logging --parallel 2
 ctest --test-dir build/logging --output-on-failure
 ```
 
-For real collector/storage checks, download Loki 3.7.9 and Alloy 1.21.3 for your
-platform from the release links above, verify their published SHA256SUMS and
-extract into ignored `artifacts/logging-tools`. Then run:
+The native integration harness uses the exact archive hashes in the deployment
+lock, unused loopback ports and disposable child Loki/Alloy processes. Its file
+source is explicitly a **test runtime capture**, not application file logging:
 
 ```sh
-python3 tools/logging/run-local-e2e.py \
+.venv/bin/python tools/logging/run-local-e2e.py \
   --loki-binary artifacts/logging-tools/loki-darwin-arm64 \
   --alloy-binary artifacts/logging-tools/alloy-darwin-arm64 \
   --probe build/logging/tests/glamdb_logging_probe --exercise-outage
 ```
 
-The harness owns only its child processes, uses unused loopback ports and a
-fresh temporary data directory, terminates its children and records results,
-service logs and raw metrics in `artifacts/logging-e2e`. The outage option stops
-its own Loki, checks counted retry exhaustion, restarts it and checks new logs.
-It never manages a pre-existing VM/service. On a host already above 90% disk use,
-a **test-only** `--wal-disk-threshold 0.99` can exercise the pipeline with a tiny
-fixture; it does not change deployment configuration and should not be used for
-normal operation. See [recorded validation](LOGGING_VALIDATION.md) for executed
-results, environment and remaining limits.
+It queries actual native events/correlation, rejects malformed schema and
+secret-marker fields, stops only its own Loki, checks finite retry loss and
+verifies new events after restart. `--wal-disk-threshold 0.99` is a tiny-fixture
+host override, never production configuration. Linux journald/Docker rotation
+requires its own real runtime verification; the macOS harness cannot certify it.
+See [validation evidence](LOGGING_VALIDATION.md) for current executed limits.
+
+Useful narrow queries:
+
+```logql
+{service="glamdb", environment="production", level="error"} | json
+{service="glamdb"} | json | request_id="0123456789abcdef0123456789abcdef"
+{service="glamdb", event="request_completed"} | json | operation="append" | duration_us > 100000
+```
+
+Primary configuration references: [Quill](https://github.com/odygrd/quill/tree/v13.0.0),
+[stdlib handlers](https://docs.python.org/3/library/logging.handlers.html),
+[Alloy journal](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.journal/),
+[Alloy processing](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.process/),
+[Loki retention](https://grafana.com/docs/loki/latest/operations/storage/retention/) and
+[Loki authentication](https://grafana.com/docs/loki/latest/operations/authentication/).
