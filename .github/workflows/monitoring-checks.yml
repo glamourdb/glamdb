@@ -1,0 +1,44 @@
+name: Monitoring checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  monitoring:
+    name: Metrics, dashboards, and resource collector
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the proposed change
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Fetch and verify pinned validators
+        run: |
+          python3 tools/monitoring/fetch_tool.py prometheus
+          python3 tools/monitoring/fetch_tool.py kubeconform
+      - name: Test rules, resources, native telemetry, and dashboard queries
+        run: >-
+          python3 tools/monitoring/check.py
+          --promtool artifacts/monitoring/bin/promtool
+          --cxx g++
+          --kubeconform artifacts/monitoring/bin/kubeconform
