@@ -1,5 +1,15 @@
 # Workbench validation record — 2026-11-10
 
+Rebase integration: source branch rebased onto main `b3fed8b` (PR #5 native
+catalog/coordinator/API). Six documentation conflicts were combined so both
+native implementation status/build guidance and client/public-demo instructions
+remain. Native sources, public headers, CMake and CTest drivers are unchanged
+relative to main. Root pytest explicitly collects `test_*.py`; native
+`*_test.py` command drivers remain owned by CTest and require compiled binaries.
+The native Linux dependency/build suites are separate from this macOS client
+verification; the earlier scaffold results below are historical, not a claim
+that the newly merged C++ API was rebuilt here.
+
 Public-demo/branding follow-up: both supplied PNGs are copied unchanged and
 SHA256 checked. New browser-only mode runs without a token, network API or
 browser storage, including under /glamdb/. New local validation has **374 Python

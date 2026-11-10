@@ -17,7 +17,8 @@ receipt as evidence of C++ or power-loss durability.
 
 **Tech stack:** Python 3.13, pytest, httpx, PyArrow, FastAPI/Uvicorn for the mock
 adapter; dependency-free browser HTML/CSS/ES modules; Node test runner and
-Playwright browser tests. Existing C++23/CMake scaffolding remains buildable.
+Playwright browser tests. The C++ API/catalog/coordinator and their Linux build
+remain independent of client/mock dependencies.
 
 **Spec:** glamdb-rfc README, PERSON_4_SDK_UI, CONTRACTS C-TYPES/C-RESULT/C-API/
 C-PAGES, ACCEPTANCE T-TYPES/T-SCAN/T-NET/T-HANDOFF, EXTENSIONS X-NET; repository
@@ -26,7 +27,8 @@ a runtime dependency of installed clients.
 
 ## Scope rulings
 
-- R1: the original repository currently has no usable core/HTTP API. Implement
+- R1: the initial base had no usable core/HTTP API. Rebase on PR #5 preserves its
+  C++ facade/catalog/coordinator; production files/scanner/HTTP remain pending. Implement
   the complete requested integrated path with a clearly marked mock seam for
   roles 1–3, as explicitly requested for missing collaborators' implementations.
   Real fixtures, SDK, UI, transport/IPC tests and evidence validation are not mocks.
@@ -41,7 +43,7 @@ a runtime dependency of installed clients.
 - R5: the latest repository explicitly reserves a browser UI and npm tests.
   Plain ES modules are used for that browser code; backend/verification/SDK are
   Python and the existing engine remains C++. No Rust or alternative writer.
-- R6: macOS can validate the scaffold and clients but cannot qualify the
+- R6: macOS validates clients and the historical scaffold baseline, but cannot qualify the
   LINUX-LOCAL-1 power-loss profile. NOT RUN is a first-class report status.
 
 ## Ownership and exact boundaries

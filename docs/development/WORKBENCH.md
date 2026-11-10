@@ -2,7 +2,7 @@
 
 The implemented participant-four slice contains independent verification tools,
 a standalone Python network SDK, and a browser workbench. A **disposable mock**
-supplies the missing core/HTTP dependencies. It does not write Parquet or an
+supplies the missing production-file/scanner/HTTP dependencies. It does not write Parquet or an
 Iceberg/SQLite catalog. All mock data and operation outcomes vanish on restart.
 Real storage integration and qualification remain open.
 

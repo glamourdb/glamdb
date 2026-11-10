@@ -1,5 +1,11 @@
 # Контекст и передача владельцу проекта
 
+После rebase на main `b3fed8b` в репозитории также присутствуют SQLite catalog,
+write/recovery coordinator, public C++ facade, canonical Arrow input и CLI из
+PR #5. Их код сохранён без изменений. Production FileIO/Parquet backend, scanner
+и HTTP adapter всё ещё отсутствуют; текущие SDK/UI продолжают использовать
+явный mock. Нативная часть и клиентские деморежимы имеют отдельные проверки.
+
 Реализована автономная часть участника 4: golden fixtures и независимые
 проверки, инструменты fault-evidence, сетевой Python SDK и розовый UI.
 Отсутствующие зависимости участников 1–3 заменены явным disposable mock.
@@ -15,6 +21,10 @@ UI работает на http://127.0.0.1:8765; токен задаётся в G
 снимки и смотреть схему, статистику, файлы, Explain и исходы операций.
 Перезапуск mock-сервера удаляет все его данные.
 
+Публичное демо: https://nnrpi.github.io/glamdb/, без токена. Оно работает
+в браузере каждого посетителя, выгружает JSON и сбрасывается при reload/reset.
+Оба присланных логотипа используются в UI и остаются конфигурируемыми.
+
 Дизайн — фуксия и другие розовые оттенки, бантики, искорки, губки.
 Цвета, основные размеры, шрифты, скругления, тени, бренд, основные тексты
 и украшения вынесены в `ui/config/theme.json`. Изменения подтягиваются
@@ -26,11 +36,12 @@ UI работает на http://127.0.0.1:8765; токен задаётся в G
 
 - Текущая стадия — append v0 из переработанного RFC. Дубликаты ключей
   сохраняются; upsert, delete, compaction, jobs, S3 и schema evolution выключены.
-- Backend, SDK и проверяющие инструменты написаны на Python, существующее
+- Mock HTTP adapter, SDK и проверяющие инструменты написаны на Python, нативное
   ядро остаётся C++. Для браузера использованы HTML/CSS/ES modules: это
   позволяет менять оформление без сборки frontend или бинарника.
 - Формы `/v0` для коллекций и сканов — документированный предварительный
-  контракт адаптера. Его надо согласовать с реальным facade, когда он появится.
+  контракт адаптера. Public C++ facade уже есть в PR #5; сканы/метаданные и
+  окончательный HTTP контракт согласуются при подключении production backend.
 - Theme-конфиг меняется оператором на диске. UI делает локальный preview
   и download, но не получает привилегированную ручку записи файлов сервера.
 - UI хранит исходы операций только до перезагрузки вкладки. Для восстановления
@@ -62,18 +73,21 @@ UI работает на http://127.0.0.1:8765; токен задаётся в G
 
 ## Что ещё требует настоящего ядра
 
-Нельзя утверждать, что готова вся БД или пройдены G1–G4. Не реализованы
-настоящий Parquet writer/reader, Iceberg/catalog publication, SQLite recovery,
-реальное pruning, restart/reopen, durable receipts и физическая power-loss
+Нельзя утверждать, что готова вся БД или пройдены G1–G4. В PR #5 уже есть
+catalog publication, SQLite recovery, operation receipts и restart/reopen
+на уровне каталога/координатора; их границы описаны в COORDINATOR.md.
+Остаются production FileIO/Parquet writer/reader, scanner/pruning и HTTP adapter,
+успешный полный append/read настоящих файлов и физическая power-loss
 квалификация. Файлы/row groups в UI синтетические; неизвестные байты остаются
-null. Модель fault ordering предполагает атомарный durable catalog commit
+null. Клиентская fault-модель предполагает атомарный durable catalog commit
 и не моделирует SQLite journal/pages целиком.
 
-После появления участников 1–3 нужно подключить один C++ write authority,
-сверить контракт, прогнать golden/metrics fixtures на настоящих файлах,
-повторить SDK/UI roundtrip и T-HANDOFF, затем выполнить process-crash и
-qualified Linux/ext4 power-тесты на отдельном устройстве. Рабочий пользовательский
-том для destructive tests не использовался.
+Следующий шаг — подключить единственный C++ write authority к HTTP adapter
+после production file/scanner backend, сверить DTO/ошибки/recovery и прогнать
+golden/metrics fixtures на настоящих файлах. Затем повторить SDK/UI roundtrip
+и T-HANDOFF, полные file fault/process-crash кампании и qualified Linux/ext4
+power-тесты на отдельном устройстве. Рабочий пользовательский том для
+destructive tests не использовался.
 
 Подробные результаты — [WORKBENCH_VALIDATION.md](WORKBENCH_VALIDATION.md),
 вопросы без ожидания ответа — [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md).
