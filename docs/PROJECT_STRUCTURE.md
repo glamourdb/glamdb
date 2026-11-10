@@ -51,6 +51,8 @@ glamdb/
 ├── deploy/alerting/
 ├── tools/alerting/
 ├── tools/verification/
+├── tools/monitoring/
+├── deploy/monitoring/
 ├── probes/
 ├── benchmarks/
 ├── sdk/

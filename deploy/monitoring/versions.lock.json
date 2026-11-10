@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "images": {
+    "prometheus": {
+      "registry": "registry-1.docker.io",
+      "repository": "prom/prometheus",
+      "tag": "v3.13.5",
+      "digest": "sha256:aafa9d694e6a883c02db516d9f6e5b84e14195f49a2a6456a4cca815edda72b9",
+      "image": "prom/prometheus:v3.13.5@sha256:aafa9d694e6a883c02db516d9f6e5b84e14195f49a2a6456a4cca815edda72b9",
+      "checked_at": "2026-11-10"
+    },
+    "grafana": {
+      "registry": "registry-1.docker.io",
+      "repository": "grafana/grafana",
+      "tag": "13.3.0",
+      "digest": "sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205",
+      "image": "grafana/grafana:13.3.0@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205",
+      "checked_at": "2026-11-10"
+    },
+    "node-exporter": {
+      "registry": "registry-1.docker.io",
+      "repository": "prom/node-exporter",
+      "tag": "v1.12.1",
+      "digest": "sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0",
+      "image": "prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0",
+      "checked_at": "2026-11-10"
+    },
+    "cadvisor": {
+      "registry": "ghcr.io",
+      "repository": "google/cadvisor",
+      "tag": "0.60.6",
+      "digest": "sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a",
+      "image": "ghcr.io/google/cadvisor:0.60.6@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a",
+      "checked_at": "2026-11-10"
+    },
+    "kube-state-metrics": {
+      "registry": "registry.k8s.io",
+      "repository": "kube-state-metrics/kube-state-metrics",
+      "tag": "v2.20.0",
+      "digest": "sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b",
+      "image": "registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b",
+      "checked_at": "2026-11-10"
+    },
+    "python": {
+      "registry": "registry-1.docker.io",
+      "repository": "library/python",
+      "tag": "3.13.11-slim-bookworm",
+      "digest": "sha256:20080e807bfc404f8450b185cf0fc95d553462673598549613735f70a5b4d5d0",
+      "image": "library/python:3.13.11-slim-bookworm@sha256:20080e807bfc404f8450b185cf0fc95d553462673598549613735f70a5b4d5d0",
+      "checked_at": "2026-11-10"
+    }
+  },
+  "downloads": {
+    "prometheus": {
+      "version": "3.13.5",
+      "release": "https://github.com/prometheus/prometheus/releases/tag/v3.13.5",
+      "darwin-arm64": {
+        "sha256": "909a07556df18afccdc8eb2c80c0b14f347b631b0e34c95bcabfd6d6a0080c92"
+      },
+      "linux-amd64": {
+        "sha256": "0388822ace519c5a3a8ef556a541ce1b536e21d872f82deded465bd27a5a0699"
+      }
+    },
+    "node-exporter": {
+      "version": "1.12.1",
+      "release": "https://github.com/prometheus/node_exporter/releases/tag/v1.12.1",
+      "darwin-arm64": {
+        "sha256": "35b246a34af55a8f0c3f11067f17aecf9836cfd4689bde364776b3a4ad3a84d6"
+      }
+    },
+    "kubeconform": {
+      "version": "0.8.0",
+      "release": "https://github.com/yannh/kubeconform/releases/tag/v0.8.0",
+      "darwin-arm64": {
+        "sha256": "f84f4dfbebf4a6b0b230385fa065a39ea35e02608c2b50d025dcf64775a69d67"
+      }
+    }
+  }
+}
