@@ -31,6 +31,13 @@ passed. New regressions were observed failing before their fixes, including the
 original UI's foreign-snapshot reconnect error. Desktop screenshots were checked.
 Raw output: `artifacts/review-5843480730-check.log` (ignored).
 
+Public demo refreshed at https://nnrpi.github.io/glamdb/ from code commit
+`8a4489638294f4c8969787354d2aab36d2b600fe`; artifact commit
+`5983b3cd24b7b43e1f2decc38de3f9053cd4540d`. GitHub Pages reports a successful
+deployment. Anonymous HTTPS200 and exact SHA256 matches passed for index.html,
+app.js, api.js, model.js and both PNG logos; **all five external Chromium
+scenarios passed** against the updated site. This remains a browser-only demo.
+
 These results exercise client/verifier/mock behavior, including real local
 HTTP/HTTPS and browser transports. Native C++ sources, public headers, native
 tests, CMake and dependencies remain unchanged from main `b3fed8b`. Native
