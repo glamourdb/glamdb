@@ -1,5 +1,10 @@
 # Monitoring validation
 
+The Monitoring checks workflow runs the reproducible component/rule/dashboard
+gate and strict Kubernetes schema validation on Ubuntu, using locked upstream
+validator checksums. Workflow syntax and security lint passed locally; its
+hosted result is reported separately by the PR checks.
+
 Executed on 2026-11-10. Host: Darwin arm64, 16 GiB RAM, AppleClang 21.0.0,
 Python 3.14.3. Native component checks also used GCC 16.2 and LLVM 18.1.8
 analysis/formatting. Runtime collection used a dedicated disposable Linux VM:
