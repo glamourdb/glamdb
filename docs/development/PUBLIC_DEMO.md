@@ -1,5 +1,11 @@
 # Public browser demo and logos
 
+Published URL: **https://nnrpi.github.io/glamdb/**. Public HTTPS access is enabled
+on the fork; Pages source is `gh-pages`, path `/`. Anonymous HTTPS, both logo
+checksums and all five public Chromium scenarios passed against this live URL.
+Published artifact commit: `eeeb476523020dc0f4c7b8ed8a7452647edc16e2`, built from
+source commit `9c61a1a4789fb2e8d3a14425146c660803b29cff`.
+
 This mode publishes the same pink workbench as static HTML/CSS/ES modules on
 GitHub Pages. A visitor needs only a browser. There is no token prompt, shared
 API, account database or local Python prerequisite.

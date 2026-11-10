@@ -36,6 +36,8 @@ demo. See [public demo and publishing](docs/development/PUBLIC_DEMO.md).
 The supplied wordmark/transparent mark are used in login, sidebar, avatar and
 favicon; artwork paths and sizes remain runtime theme settings.
 
+**[Open the public demo](https://nnrpi.github.io/glamdb/)** — anyone can try it.
+
 Launch the workbench (Python 3.13 and Node 22+):
 
 ```sh

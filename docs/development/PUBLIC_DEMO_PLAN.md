@@ -35,8 +35,15 @@ must work both at origin root and /glamdb/ on project Pages.
   logos loaded, create/append/filter/history/JSON, isolated visits and reset,
   mobile and config. Retest connected-server paths and full Python suite.
 - [x] Document both modes and publication; update AGENTS/README/status.
-- [ ] Publish tested static output on fork gh-pages, enable HTTPS Pages, verify
+- [x] Publish tested static output on fork gh-pages, enable HTTPS Pages, verify
   returned public URL and browser behavior, update fork branch and PR #4.
 
 The browser mock is for product demonstration, not native engine correctness,
 HTTP/SDK interoperability or durability evidence. All real engine gates stay open.
+
+Published: https://nnrpi.github.io/glamdb/. Pages reports public=true,
+https_enforced=true, source gh-pages:/, status built. Five live-site Chromium
+scenarios and anonymous HTTPS/logo SHA256 checks passed. Local full validation:
+374 Python, 26 Node unit and 23 Chromium tests PASS. Fresh review findings were
+fixed with observed failing regressions; the final narrow review found no
+important regressions.

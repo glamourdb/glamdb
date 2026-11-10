@@ -10,6 +10,13 @@ for the separate UI-only semantics and publishing path. The original baseline
 record below remains evidence for its earlier scope; neither mode qualifies core
 storage durability.
 
+Live publication: https://nnrpi.github.io/glamdb/, fork gh-pages artifact
+`eeeb476523020dc0f4c7b8ed8a7452647edc16e2`. GitHub reports built/public/HTTPS
+enforced. Anonymous HTTP200 and exact logo SHA256 checks passed; all five
+public-demo browser scenarios passed against the external URL. No token or
+private/runtime files were published. PR synchronization with newer main is
+tracked separately from the successful public deployment.
+
 Scope: independent participant-four tools, Python network SDK, browser UI and a
 disposable mock for absent core/HTTP dependencies. **No G1–G4 or production N
 gate is declared complete.** The HTTP/HTTPS and Chromium tests below use real
