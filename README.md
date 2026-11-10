@@ -50,6 +50,9 @@ Current work focuses on qualifying and improving the existing append engine:
   ([#109](https://github.com/glamourdb/glamdb/issues/109)).
 - Bounded Parquet reads and file/row-group pruning for selective scans
   ([#46](https://github.com/glamourdb/glamdb/issues/46)).
+**[Open the public demo](https://nnrpi.github.io/glamdb/)** — anyone can try it.
+An optional [password-protected deployment](docs/development/PROTECTED_DEMO.md)
+requires a server host; it does not change this anonymous Pages publication.
 
 ### Planned
 

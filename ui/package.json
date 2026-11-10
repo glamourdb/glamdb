@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --test",
     "test:e2e": "playwright test",
+    "test:e2e:protected": "playwright test --config playwright.protected.config.mjs",
     "test:e2e:headed": "playwright test --headed",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

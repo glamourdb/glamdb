@@ -98,6 +98,10 @@ The same UI can publish as a static browser-only demo on GitHub Pages. It has
 no API token or shared backend: tab-local rows/operations disappear on reload.
 JSON export is available there; network SDK and Arrow IPC remain connected-server
 features. Do not present BrowserDemoAPI as the public HTTP or durable core API.
+An optional Caddy deployment protects all demo files with an HTTPS shared-password
+gate; see [PROTECTED_DEMO.md](docs/development/PROTECTED_DEMO.md). It requires a
+server host and does not protect or replace the existing anonymous Pages URL
+merely by merging the code. No gate secrets belong in frontend assets.
 
 The first milestone is an embedded, synchronous, durable **append store** on
 local disk. A store has one owning process and one serialized writer; reads may
@@ -293,6 +297,10 @@ the first page against requested/opened snapshots and preserves consumer/decode
 errors through owner cleanup; returned batches retain their buffers. See
 [client conformance](docs/development/CLIENT_CONFORMANCE.md) for separate native
 and mock export/ownership tests and the browser framing validator's scope.
+For the separate real-Caddy website access tests, run
+`python3 scripts/fetch-demo-caddy.py` then `bash scripts/check-protected-demo.sh`.
+This suite requires Caddy/OpenSSL/Chromium, opens only loopback listeners, creates
+disposable TLS/credentials and never installs a test CA into OS trust stores.
 Mock faults require explicit development configuration. Do not give the mock a
 production store path. Every production write must eventually use the C++ core.
 

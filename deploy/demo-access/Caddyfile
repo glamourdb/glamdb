@@ -1,0 +1,28 @@
+{
+	admin off
+	persist_config off
+	http_port {$GLAMDB_DEMO_HTTP_PORT:80}
+}
+
+https://{$GLAMDB_DEMO_HOST} {
+	bind {$GLAMDB_DEMO_BIND:0.0.0.0}
+	{$GLAMDB_DEMO_TLS}
+
+	route {
+		header {
+			Cache-Control "private, no-store"
+			X-Content-Type-Options nosniff
+			Referrer-Policy no-referrer
+			Strict-Transport-Security "max-age=31536000"
+			X-Frame-Options DENY
+		}
+		header -Server
+		basic_auth {
+			{env.GLAMDB_DEMO_USER} {env.GLAMDB_DEMO_PASSWORD_HASH}
+		}
+		@hidden path_regexp hidden (^|/)\.
+		respond @hidden 404
+		root * "{env.GLAMDB_DEMO_ROOT}"
+		file_server
+	}
+}
