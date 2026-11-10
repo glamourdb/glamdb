@@ -1,0 +1,572 @@
+{
+  "scope": {
+    "cluster": "local",
+    "service": "glamdb"
+  },
+  "selectors": {
+    "gateway": "job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"",
+    "http": "cluster=\"local\",service=\"glamdb\"",
+    "node": "job=\"node\",cluster=\"local\"",
+    "pod": "cluster=\"local\",namespace=\"default\",pod=\"glamdb\"",
+    "native": "cluster=\"local\",service=\"glamdb\",service_instance=\"core\"",
+    "alloy": "job=\"alloy\",cluster=\"local\"",
+    "transport": "job=\"glamdb-alert-transport\",cluster=\"local\"",
+    "manager": "job=\"alertmanager\",cluster=\"local\"",
+    "loki": "job=\"loki\",cluster=\"local\""
+  },
+  "max_age_seconds": 90,
+  "evaluation_interval": "15s",
+  "hold": {
+    "OK": "2m",
+    "WARN": "2m",
+    "ALARM": "1m",
+    "NODATA": "2m"
+  },
+  "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+  "checks": [
+    {
+      "id": "gateway_availability",
+      "query": "1-min(up{$gateway})",
+      "warn": 0.5,
+      "alarm": 1,
+      "fresh": [
+        "up{$gateway}"
+      ],
+      "guards": [],
+      "summary": "Gateway scrape availability",
+      "description": "ALARM means a configured gateway target fails scraping; NODATA means target data is missing. This is not an end-to-end readiness probe.",
+      "notify_nodata": true
+    },
+    {
+      "id": "http_error_ratio",
+      "query": "((sum(glamdb:http_errors:rate5m{$http}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{$http}), 0.000001)) * (sum(glamdb:http_requests:rate5m{$http}) * 300 >= bool 100)",
+      "warn": 0.01,
+      "alarm": 0.05,
+      "fresh": [
+        "up{$gateway}",
+        "caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\"}"
+      ],
+      "guards": [
+        "min(up{$gateway}) == 1"
+      ],
+      "summary": "HTTP 5xx ratio",
+      "description": "Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+      "notify_nodata": true
+    },
+    {
+      "id": "http_upstream_ratio",
+      "query": "((sum(glamdb:http_upstream_failures:rate5m{$http}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{$http}), 0.000001)) * (sum(glamdb:http_requests:rate5m{$http}) * 300 >= bool 100)",
+      "warn": 0.01,
+      "alarm": 0.05,
+      "fresh": [
+        "up{$gateway}",
+        "caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\"}"
+      ],
+      "guards": [
+        "min(up{$gateway}) == 1"
+      ],
+      "summary": "HTTP 502/504 proxy ratio",
+      "description": "Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+      "notify_nodata": true
+    },
+    {
+      "id": "http_latency_p95",
+      "query": "max(glamdb:http_request_duration_seconds:p95{$http})",
+      "warn": 0.5,
+      "alarm": 2,
+      "fresh": [
+        "up{$gateway}",
+        "caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\"}",
+        "caddy_http_request_duration_seconds_bucket{$gateway,handler=\"reverse_proxy\"}"
+      ],
+      "guards": [
+        "min(up{$gateway}) == 1",
+        "sum(glamdb:http_requests:rate5m{$http}) * 300 >= 100"
+      ],
+      "summary": "HTTP p95 latency",
+      "description": "Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
+      "notify_nodata": false
+    },
+    {
+      "id": "http_overload_ratio",
+      "query": "((sum(rate(caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\",code=~\"429|503\"}[5m])) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{$http}), 0.000001)) * (sum(glamdb:http_requests:rate5m{$http}) * 300 >= bool 100)",
+      "warn": 0.01,
+      "alarm": 0.05,
+      "fresh": [
+        "up{$gateway}",
+        "caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\"}"
+      ],
+      "guards": [
+        "min(up{$gateway}) == 1"
+      ],
+      "summary": "HTTP overload ratio",
+      "description": "429/503 responses over five minutes, with at least 100 total requests.",
+      "notify_nodata": false
+    },
+    {
+      "id": "http_auth_failures",
+      "query": "sum(rate(caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\",code=~\"401|403\"}[5m])) or vector(0)",
+      "warn": 1,
+      "alarm": 5,
+      "fresh": [
+        "up{$gateway}",
+        "caddy_http_request_duration_seconds_count{$gateway,handler=\"reverse_proxy\"}"
+      ],
+      "guards": [
+        "min(up{$gateway}) == 1"
+      ],
+      "summary": "HTTP authentication/authorization failures",
+      "description": "Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
+      "notify_nodata": false
+    },
+    {
+      "id": "host_cpu",
+      "query": "max(1-avg by (instance) (rate(node_cpu_seconds_total{$node,mode=\"idle\"}[5m])))",
+      "warn": 0.8,
+      "alarm": 0.95,
+      "fresh": [
+        "up{$node}",
+        "node_cpu_seconds_total{$node,mode=\"idle\"}"
+      ],
+      "guards": [
+        "min(up{$node}) == 1"
+      ],
+      "summary": "Host CPU utilization",
+      "description": "Busy fraction across monitored host CPUs; sustained 80%/95% defaults need workload tuning.",
+      "notify_nodata": false,
+      "scope": {
+        "node": "all"
+      }
+    },
+    {
+      "id": "host_memory",
+      "query": "max(1-node_memory_MemAvailable_bytes{$node}/node_memory_MemTotal_bytes{$node})",
+      "warn": 0.85,
+      "alarm": 0.95,
+      "fresh": [
+        "up{$node}",
+        "node_memory_MemAvailable_bytes{$node}",
+        "node_memory_MemTotal_bytes{$node}"
+      ],
+      "guards": [
+        "min(up{$node}) == 1"
+      ],
+      "summary": "Host available memory",
+      "description": "Fraction unavailable according to Linux MemAvailable, which includes reclaimable memory.",
+      "notify_nodata": false,
+      "scope": {
+        "node": "all"
+      }
+    },
+    {
+      "id": "disk_space",
+      "query": "max(1-node_filesystem_avail_bytes{$node,fstype!~\"tmpfs|overlay|squashfs|proc|sysfs\",mountpoint!~\"/run.*|/var/lib/(docker|containers).*\"}/node_filesystem_size_bytes{$node,fstype!~\"tmpfs|overlay|squashfs|proc|sysfs\",mountpoint!~\"/run.*|/var/lib/(docker|containers).*\"})",
+      "warn": 0.8,
+      "alarm": 0.9,
+      "fresh": [
+        "up{$node}",
+        "node_filesystem_avail_bytes{$node}",
+        "node_filesystem_size_bytes{$node}"
+      ],
+      "guards": [
+        "min(up{$node}) == 1"
+      ],
+      "summary": "Host filesystem space",
+      "description": "Worst included writable filesystem: WARN below 20% available, ALARM below 10%. Adjust selectors to include the real store mount.",
+      "notify_nodata": false,
+      "scope": {
+        "node": "all"
+      }
+    },
+    {
+      "id": "disk_inodes",
+      "query": "max(1-node_filesystem_files_free{$node,fstype!~\"tmpfs|overlay|squashfs\"}/node_filesystem_files{$node,fstype!~\"tmpfs|overlay|squashfs\"})",
+      "warn": 0.8,
+      "alarm": 0.9,
+      "fresh": [
+        "up{$node}",
+        "node_filesystem_files_free{$node}",
+        "node_filesystem_files{$node}"
+      ],
+      "guards": [
+        "min(up{$node}) == 1"
+      ],
+      "summary": "Host filesystem inodes",
+      "description": "Worst included filesystem inode utilization; byte space alone does not detect inode exhaustion.",
+      "notify_nodata": false,
+      "scope": {
+        "node": "all"
+      }
+    },
+    {
+      "id": "network_errors",
+      "query": "sum(rate(node_network_receive_errs_total{$node,device!=\"lo\"}[5m])) + sum(rate(node_network_transmit_errs_total{$node,device!=\"lo\"}[5m]))",
+      "warn": 1,
+      "alarm": 10,
+      "fresh": [
+        "up{$node}",
+        "node_network_receive_errs_total{$node}",
+        "node_network_transmit_errs_total{$node}"
+      ],
+      "guards": [
+        "min(up{$node}) == 1"
+      ],
+      "summary": "Host network errors",
+      "description": "Receive plus transmit errors per second, excluding loopback. Diagnose link/driver issues before tuning.",
+      "notify_nodata": false,
+      "scope": {
+        "node": "all"
+      }
+    },
+    {
+      "id": "network_drops",
+      "query": "sum(rate(node_network_receive_drop_total{$node,device!=\"lo\"}[5m])) + sum(rate(node_network_transmit_drop_total{$node,device!=\"lo\"}[5m]))",
+      "warn": 10,
+      "alarm": 100,
+      "fresh": [
+        "up{$node}",
+        "node_network_receive_drop_total{$node}",
+        "node_network_transmit_drop_total{$node}"
+      ],
+      "guards": [
+        "min(up{$node}) == 1"
+      ],
+      "summary": "Host network packet drops",
+      "description": "Receive plus transmit drops per second. Absolute defaults must be calibrated for traffic volume.",
+      "notify_nodata": false,
+      "scope": {
+        "node": "all"
+      }
+    },
+    {
+      "id": "major_page_faults",
+      "query": "sum(rate(node_vmstat_pgmajfault{$node}[5m]))",
+      "warn": 10,
+      "alarm": 100,
+      "fresh": [
+        "up{$node}",
+        "node_vmstat_pgmajfault{$node}"
+      ],
+      "guards": [
+        "min(up{$node}) == 1"
+      ],
+      "summary": "Host major page faults",
+      "description": "Major page faults per second; inspect memory pressure and disk latency together.",
+      "notify_nodata": false,
+      "scope": {
+        "node": "all"
+      }
+    },
+    {
+      "id": "oom_kills",
+      "query": "sum(increase(node_vmstat_oom_kill{$node}[5m]))",
+      "warn": 0.5,
+      "alarm": 1,
+      "fresh": [
+        "up{$node}",
+        "node_vmstat_oom_kill{$node}"
+      ],
+      "guards": [
+        "min(up{$node}) == 1"
+      ],
+      "summary": "Host OOM kills",
+      "description": "Any OOM kill in five minutes alarms; data is kernel-wide, not process attribution.",
+      "notify_nodata": false,
+      "scope": {
+        "node": "all"
+      }
+    },
+    {
+      "id": "pod_cpu_cores",
+      "query": "max(glamdb:pod_cpu_usage_cores:rate5m{$pod})",
+      "warn": 1.6,
+      "alarm": 1.9,
+      "fresh": [
+        "glamdb_cgroup_cpu_usage_seconds_total{$pod}",
+        "glamdb_resource_sample_timestamp_seconds{$pod}"
+      ],
+      "guards": [
+        "time()-min(glamdb_resource_sample_timestamp_seconds{$pod}) < 90",
+        "time()-max(glamdb_resource_sample_timestamp_seconds{$pod}) >= -5",
+        "min(glamdb_cgroup_collector_success{$pod,collector=\"cpu\"}) == 1"
+      ],
+      "summary": "Pod CPU consumption",
+      "description": "CPU cores against an example 2-core budget. Set thresholds to the actual pod quota.",
+      "notify_nodata": false,
+      "scope": {
+        "namespace": "default",
+        "pod": "glamdb"
+      }
+    },
+    {
+      "id": "pod_cpu_throttle",
+      "query": "max(glamdb:pod_cpu_throttled_seconds:rate5m{$pod})",
+      "warn": 0.1,
+      "alarm": 0.5,
+      "fresh": [
+        "glamdb_cgroup_cpu_throttled_seconds_total{$pod}",
+        "glamdb_resource_sample_timestamp_seconds{$pod}"
+      ],
+      "guards": [
+        "time()-min(glamdb_resource_sample_timestamp_seconds{$pod}) < 90",
+        "time()-max(glamdb_resource_sample_timestamp_seconds{$pod}) >= -5",
+        "min(glamdb_cgroup_collector_success{$pod,collector=\"cpu\"}) == 1"
+      ],
+      "summary": "Pod CPU throttling",
+      "description": "Throttled seconds per second; this is not a percent of quota.",
+      "notify_nodata": false,
+      "scope": {
+        "namespace": "default",
+        "pod": "glamdb"
+      }
+    },
+    {
+      "id": "pod_memory",
+      "query": "max(glamdb:pod_memory_usage_bytes{$pod})",
+      "warn": 858993459,
+      "alarm": 1020054732,
+      "fresh": [
+        "glamdb_cgroup_memory_usage_bytes{$pod}",
+        "glamdb_resource_sample_timestamp_seconds{$pod}"
+      ],
+      "guards": [
+        "time()-min(glamdb_resource_sample_timestamp_seconds{$pod}) < 90",
+        "time()-max(glamdb_resource_sample_timestamp_seconds{$pod}) >= -5",
+        "min(glamdb_cgroup_collector_success{$pod,collector=\"memory\"}) == 1"
+      ],
+      "summary": "Pod total memory",
+      "description": "Absolute bytes against an example 1 GiB budget: 80%/95%. Set to actual memory.max.",
+      "notify_nodata": false,
+      "scope": {
+        "namespace": "default",
+        "pod": "glamdb"
+      }
+    },
+    {
+      "id": "pod_anonymous_memory",
+      "query": "max(glamdb:pod_memory_anon_bytes{$pod})",
+      "warn": 751619276,
+      "alarm": 966367641,
+      "fresh": [
+        "glamdb_cgroup_memory_anon_bytes{$pod}",
+        "glamdb_resource_sample_timestamp_seconds{$pod}"
+      ],
+      "guards": [
+        "time()-min(glamdb_resource_sample_timestamp_seconds{$pod}) < 90",
+        "time()-max(glamdb_resource_sample_timestamp_seconds{$pod}) >= -5",
+        "min(glamdb_cgroup_collector_success{$pod,collector=\"memory\"}) == 1"
+      ],
+      "summary": "Pod anonymous memory",
+      "description": "Absolute anonymous bytes against an example 1 GiB budget: 70%/90%. Anonymous memory is distinct from reclaimable file cache.",
+      "notify_nodata": false,
+      "scope": {
+        "namespace": "default",
+        "pod": "glamdb"
+      }
+    },
+    {
+      "id": "admission_backlog",
+      "query": "max(glamdb_admission_pending_calls{$native})",
+      "warn": 4,
+      "alarm": 16,
+      "fresh": [
+        "glamdb_metrics_snapshot_timestamp_seconds{$native}",
+        "glamdb_admission_pending_calls{$native}"
+      ],
+      "guards": [
+        "time()-min(glamdb_metrics_snapshot_timestamp_seconds{$native}) < 90",
+        "time()-max(glamdb_metrics_snapshot_timestamp_seconds{$native}) >= -5"
+      ],
+      "summary": "Engine admission backlog",
+      "description": "Pending synchronous admission calls, not an asynchronous durable job queue.",
+      "notify_nodata": false
+    },
+    {
+      "id": "admission_bytes",
+      "query": "max(glamdb_admission_owned_input_bytes{$native})",
+      "warn": 67108864,
+      "alarm": 268435456,
+      "fresh": [
+        "glamdb_metrics_snapshot_timestamp_seconds{$native}",
+        "glamdb_admission_owned_input_bytes{$native}"
+      ],
+      "guards": [
+        "time()-min(glamdb_metrics_snapshot_timestamp_seconds{$native}) < 90",
+        "time()-max(glamdb_metrics_snapshot_timestamp_seconds{$native}) >= -5"
+      ],
+      "summary": "Engine owned input bytes",
+      "description": "Input bytes retained by admitted/pending calls. Example 64/256 MiB thresholds need workload tuning.",
+      "notify_nodata": false
+    },
+    {
+      "id": "commit_unknown",
+      "query": "sum(increase(glamdb_operations_total{$native,outcome=\"commit_unknown\"}[5m]))",
+      "warn": 0.5,
+      "alarm": 1,
+      "fresh": [
+        "glamdb_metrics_snapshot_timestamp_seconds{$native}",
+        "glamdb_operations_total{$native}"
+      ],
+      "guards": [
+        "time()-min(glamdb_metrics_snapshot_timestamp_seconds{$native}) < 90",
+        "time()-max(glamdb_metrics_snapshot_timestamp_seconds{$native}) >= -5"
+      ],
+      "summary": "Engine uncertain commits",
+      "description": "A commit_unknown outcome requires authoritative recovery; never retry as a new operation blindly.",
+      "notify_nodata": false
+    },
+    {
+      "id": "engine_errors",
+      "query": "sum(rate(glamdb_operation_errors_total{$native}[5m]))",
+      "warn": 0.1,
+      "alarm": 1,
+      "fresh": [
+        "glamdb_metrics_snapshot_timestamp_seconds{$native}",
+        "glamdb_operation_errors_total{$native}"
+      ],
+      "guards": [
+        "time()-min(glamdb_metrics_snapshot_timestamp_seconds{$native}) < 90",
+        "time()-max(glamdb_metrics_snapshot_timestamp_seconds{$native}) >= -5"
+      ],
+      "summary": "Engine operation errors",
+      "description": "Native observed errors per second; absent instrumentation remains NODATA.",
+      "notify_nodata": false
+    },
+    {
+      "id": "log_drops",
+      "query": "sum(rate(loki_write_dropped_entries_total{$alloy}[5m]))",
+      "warn": 0.1,
+      "alarm": 1,
+      "fresh": [
+        "up{$alloy}",
+        "loki_write_dropped_entries_total{$alloy}"
+      ],
+      "guards": [
+        "min(up{$alloy}) == 1"
+      ],
+      "summary": "Log forwarding drops",
+      "description": "Dropped Loki write entries per second. Missing Alloy counters mean NODATA, never zero.",
+      "notify_nodata": false
+    },
+    {
+      "id": "admin_anomalies",
+      "query": "sum(rate(glamdb_admin_anomalies_total{$native}[5m]))",
+      "warn": 0.1,
+      "alarm": 1,
+      "fresh": [
+        "glamdb_admin_anomalies_total{$native}"
+      ],
+      "guards": [],
+      "summary": "Administrative anomalies",
+      "description": "Reserved native counter; no administrator audit instrumentation currently supplies this metric. NODATA is expected and muted. Never infer privileged actions from anonymous HTTP status codes.",
+      "notify_nodata": false
+    },
+    {
+      "id": "alertmanager_availability",
+      "query": "1-min(up{$manager})",
+      "warn": 0.5,
+      "alarm": 1,
+      "fresh": [
+        "up{$manager}"
+      ],
+      "guards": [],
+      "scope": {
+        "service": "alerting"
+      },
+      "summary": "alertmanager availability",
+      "description": "A pipeline component cannot deliver a notification about its own complete failure. Watch this state from an independent observer.",
+      "notify_nodata": true
+    },
+    {
+      "id": "transport_availability",
+      "query": "1-min(up{$transport})",
+      "warn": 0.5,
+      "alarm": 1,
+      "fresh": [
+        "up{$transport}"
+      ],
+      "guards": [],
+      "scope": {
+        "service": "alerting"
+      },
+      "summary": "transport availability",
+      "description": "A pipeline component cannot deliver a notification about its own complete failure. Watch this state from an independent observer.",
+      "notify_nodata": true
+    },
+    {
+      "id": "transport_queue",
+      "query": "max(glamdb_alert_transport_pending{$transport}/glamdb_alert_transport_capacity{$transport})",
+      "warn": 0.5,
+      "alarm": 0.8,
+      "fresh": [
+        "glamdb_alert_transport_pending{$transport}",
+        "glamdb_alert_transport_capacity{$transport}"
+      ],
+      "guards": [
+        "min(up{$transport}) == 1"
+      ],
+      "scope": {
+        "service": "alerting"
+      },
+      "summary": "Telegram durable outbox occupancy",
+      "description": "WARN at 50%, ALARM at 80% of the bounded outbox. Full queue returns 503 so Alertmanager retries.",
+      "notify_nodata": false
+    },
+    {
+      "id": "transport_delivery_failures",
+      "query": "sum(increase(glamdb_alert_transport_events_total{$transport,outcome=~\"rejected|exhausted|expired\"}[5m])) or vector(0)",
+      "warn": 0.5,
+      "alarm": 1,
+      "fresh": [
+        "glamdb_alert_transport_pending{$transport}"
+      ],
+      "guards": [
+        "min(up{$transport}) == 1"
+      ],
+      "scope": {
+        "service": "alerting"
+      },
+      "summary": "Telegram permanent delivery failures",
+      "description": "Rejected, exhausted, or expired deliveries in five minutes; inspect credentials, Telegram membership, network and outbox metrics. Counters may be absent before their first event.",
+      "notify_nodata": false
+    },
+    {
+      "id": "loki_wal_disk_usage",
+      "query": "max(loki_ingester_wal_disk_usage_percent{$loki})",
+      "warn": 0.8,
+      "alarm": 0.9,
+      "fresh": [
+        "up{$loki}",
+        "loki_ingester_wal_disk_usage_percent{$loki}"
+      ],
+      "guards": [
+        "min(up{$loki}) == 1"
+      ],
+      "summary": "Loki WAL filesystem utilization",
+      "description": "Despite its percent suffix, this metric is a 0..1 fraction. Production Loki WAL guard defaults to 90%; do not raise it merely to silence this check.",
+      "scope": {
+        "service": "logging"
+      },
+      "notify_nodata": false
+    },
+    {
+      "id": "loki_wal_disk_full",
+      "query": "sum(increase(loki_ingester_wal_disk_full_failures_total{$loki}[5m]))",
+      "warn": 0.5,
+      "alarm": 1,
+      "fresh": [
+        "up{$loki}",
+        "loki_ingester_wal_disk_full_failures_total{$loki}"
+      ],
+      "guards": [
+        "min(up{$loki}) == 1"
+      ],
+      "summary": "Loki WAL disk-full guard",
+      "description": "Any WAL disk-full guard event in five minutes alarms. This counter measures guard events, not every rejected log write.",
+      "scope": {
+        "service": "logging"
+      },
+      "notify_nodata": false
+    }
+  ]
+}
