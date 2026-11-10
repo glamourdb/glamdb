@@ -1,3 +1,5 @@
+add_subdirectory(telemetry)
+
 add_library(glamdb_io STATIC
     io/local_fs.cpp
     io/sha256.cpp

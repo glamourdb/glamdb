@@ -198,6 +198,8 @@ Preserve these boundaries when adding or changing engine behavior:
 | `core/api/`, `core/catalog/`, `core/engine/` | Canonical input, catalog, coordinator, and internal storage-backend seam. |
 | `core/backend/` | Production StorageBackend over `glamdb_storage`, built with `GLAMDB_BUILD_STORAGE`. |
 | `core/scan/` | Predicate evaluation, snapshot planning and Parquet scan cursor. |
+| `core/telemetry/` | Independent bounded structured operational logger; private typed events, rotating files and process counters. |
+| `deploy/logging/`, `tools/logging/` | Pinned Loki/Alloy/private Grafana deployment, control-plane adapter and real ingestion/redaction checks. |
 | `core/io/` | Independent local filesystem, attempts, receipts, durable files and copying (`glamdb_io`). |
 | `core/storage/` | FileIO, Parquet writer, Iceberg staging, publication/recovery and capacity checks (`glamdb_storage`). |
 | `apps/cli/`, `apps/client/` | Standalone `glamdb-cli`: network database management and HTTP/HTTPS requests, without engine dependencies. |
@@ -351,6 +353,16 @@ and tests stay enabled; formatting requires no build. Tidy uses two concurrent p
 (`GLAMDB_TIDY_JOBS` overrides this), with grouped diagnostics and per-file timings. See
 [docs/development/BUILDING.md](docs/development/BUILDING.md) for installation,
 tool path overrides, and build details.
+
+Operational logs are independent of store publication. The CLI emits typed JSON to
+stderr, or private rotated files with `GLAMDB_LOG_DIRECTORY` outside the warehouse.
+Errors/lifecycle bypass success sampling but may be dropped under bounded overload;
+watch actual process counters and collector drops. Never add payload/header/query
+text or user-controlled identifiers to the log schema. Read
+[LOGGING.md](docs/development/LOGGING.md) for retention, quotas, authenticated search
+and exact setup/check commands. Run `python3 -m unittest discover -s tests/logging -v`
+or the `glamdb.logging` CTest. The IO-only build includes the logger without storage
+dependencies; tests cover saturation, blocked stderr, rotation and secret projection.
 
 For dependency work, read [third_party/README.md](third_party/README.md).
 Verify checked-out revisions without building them:

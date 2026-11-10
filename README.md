@@ -181,3 +181,7 @@ capabilities. It reports read availability separately from write readiness;
 - [Agent guide](AGENTS.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
+
+Operational logging emits bounded structured events independently of store writes.
+See [the logging guide](docs/development/LOGGING.md) for private rotating files,
+Loki/Alloy collection, Grafana search, retention/quota setup and overload tests.

@@ -1,13 +1,18 @@
+#include "core/telemetry/structured_log.h"
 #include "storage/engine.h"
 
 #include "apps/transport/codec.h"
 
 #include <CLI/CLI.hpp>
 
+#include <chrono>
+#include <cstdlib>
+#include <string_view>
+
 #include <iostream>
 #include <string>
 
-int main(int argc, char** argv)
+int RunCommand(int argc, char** argv)
 try {
     CLI::App app{"GlamDB offline store administration"};
     app.require_subcommand(1);
@@ -117,6 +122,40 @@ try {
 } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;
+} catch (...) {
+    return 100;
+}
+
+int main(int argc, char** argv)
+try {
+    using namespace NGlamDB::NTelemetry;
+    TLogOptions options;
+    if (const auto* directory = std::getenv("GLAMDB_LOG_DIRECTORY")) {
+        options.Directory = directory;
+    }
+    auto opened = TStructuredLogger::Open(options);
+    if (!opened) {
+        std::cerr << "Operational logging unavailable\n";
+        return RunCommand(argc, argv);
+    }
+    auto& logger = **opened;
+    const auto requestID = logger.NewRequestID();
+    const auto operation = argc > 1 && std::string_view(argv[1]) == "create-store" ? ELogOperation::CreateStore
+        : argc > 1 && std::string_view(argv[1]) == "inspect-store"                 ? ELogOperation::InspectStore
+                                                                                   : ELogOperation::Other;
+    logger.TryLog({.Event = ELogEvent::RuntimeStarted});
+    const auto started = std::chrono::steady_clock::now();
+    const auto result = RunCommand(argc, argv);
+    const auto duration =
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - started).count();
+    logger.TryLog({.Event = ELogEvent::RequestCompleted,
+        .Operation = operation,
+        .Outcome = result == 0 ? ELogOutcome::Ok : ELogOutcome::Error,
+        .RequestID = requestID,
+        .DurationUs = static_cast<std::uint64_t>(duration),
+        .StatusCode = static_cast<std::uint32_t>(result)});
+    logger.TryLog({.Event = ELogEvent::RuntimeStopped});
+    return result;
 } catch (...) {
     return 100;
 }
