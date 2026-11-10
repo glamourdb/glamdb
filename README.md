@@ -261,6 +261,8 @@ ingestion, backpressure and fresh-process recovery while preserving history caps
 
 For four-state rules and native Telegram setup, see [the alerting guide](ALERTING.md).
 
+For metrics, Grafana dashboards and deployment steps, see [the monitoring guide](docs/development/MONITORING.md).
+
 ### Client and UI tests
 
 The workbench development environment requires Python 3.13, Node.js 22+, and
