@@ -8,6 +8,10 @@ transports against synthetic process-local state, not a durable C++ database.
 Base: `glamourdb/glamdb` commit
 `e0dfdc9ab6004f45a2dd53bfb47786cb3c0d2d45`. Fork: `nnrpi/glamdb`, branch
 `feat/pink-workbench-and-role4-verification`, upstream target `main`.
+Published for review as [PR #4](https://github.com/glamourdb/glamdb/pull/4);
+no merge performed. HTTPS OAuth lacked workflow scope; the existing SSH
+credential successfully published the complete branch including CI. Only this
+repository's push URL was set to SSH; global Git configuration was unchanged.
 
 Environment: Darwin25.3.0/arm64, Python3.13.5, AppleClang21.0.0,
 CMake4.4.4, Ninja1.13.2, Node26.5.0/npm11.17.0, LLVM format/tidy18.1.8,

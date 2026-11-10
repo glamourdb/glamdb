@@ -168,7 +168,7 @@ Examples are shipped in this checkout so another team can replace the adapter.
 - [x] Update AGENTS/README/architecture/roadmap/build/status for implemented tools.
 - [x] Save assumptions/questions, exact commands, evidence and screenshots paths.
 - [x] Fresh whole-branch review, fix actionable issues and rerun affected tests.
-- [ ] Commit/push only to nnrpi fork branch; PR to glamourdb/glamdb:main with
+- [x] Commit/push only to nnrpi fork branch; PR to glamourdb/glamdb:main with
       explicit mock boundary, validation and remaining integration gates. Do not merge.
 
 ## Completion boundary
@@ -179,3 +179,6 @@ close G1–G4 or production N. Source-served CSS/ES modules need no frontend bui
 The workbench keeps tokens and navigation state only in tab memory.
 Detailed commands/results are in WORKBENCH_VALIDATION.md; owner context and
 remaining integration duties are in OWNER_HANDOFF_RU.md.
+
+Published for review: https://github.com/glamourdb/glamdb/pull/4. The branch
+remains in the nnrpi fork; no merge or upstream branch was performed.

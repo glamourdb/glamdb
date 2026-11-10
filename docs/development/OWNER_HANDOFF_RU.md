@@ -56,6 +56,9 @@ UI работает на http://127.0.0.1:8765; токен задаётся в G
   канонического хеша исходного запроса и негативные тесты.
 - В закреплённых внешних пакетах остаются предупреждения Starlette TestClient
   о httpx и Node 26 о deprecated API. Тесты проходят; предупреждения не скрыты.
+- HTTPS push через OAuth был отклонён из-за отсутствия scope workflow.
+  Существующий SSH-доступ сработал, весь CI-файл опубликован. Для origin
+  этого репозитория настроен SSH push; глобальная конфигурация Git не менялась.
 
 ## Что ещё требует настоящего ядра
 
@@ -74,6 +77,8 @@ qualified Linux/ext4 power-тесты на отдельном устройств
 
 Подробные результаты — [WORKBENCH_VALIDATION.md](WORKBENCH_VALIDATION.md),
 вопросы без ожидания ответа — [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md).
+Изменения отправлены в форк и в [PR #4](https://github.com/glamourdb/glamdb/pull/4)
+официального репозитория, ветка main. Слияние не выполнялось.
 Для новой сессии Codex начните с `AGENTS.md`, этого файла, WORKBENCH_PLAN,
 HTTP_MOCK_CONTRACT и README нужного Python-пакета. Состояние ядра описано
 в docs/ARCHITECTURE.md и docs/ROADMAP.md; не повышайте статус квалификации
