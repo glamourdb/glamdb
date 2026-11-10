@@ -20,7 +20,7 @@ class NativeLoggingTest(unittest.TestCase):
         cls.binary = str(ROOT / "artifacts/logging-probe")
         (ROOT / "artifacts").mkdir(exist_ok=True)
         subprocess.run([
-            os.environ.get("CXX", "clang++"), "-std=c++23", "-O2", "-pthread",
+            os.environ.get("CXX", "c++"), "-std=c++23", "-O2", "-pthread",
             "-Wall", "-Wextra", "-Werror", "-I", str(ROOT),
             str(ROOT / "tests/logging/logging_probe.cpp"),
             str(ROOT / "core/telemetry/structured_log.cpp"), "-o", cls.binary,
