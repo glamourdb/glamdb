@@ -73,6 +73,9 @@
       "release": "https://github.com/yannh/kubeconform/releases/tag/v0.8.0",
       "darwin-arm64": {
         "sha256": "f84f4dfbebf4a6b0b230385fa065a39ea35e02608c2b50d025dcf64775a69d67"
+      },
+      "linux-amd64": {
+        "sha256": "9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883"
       }
     }
   }
