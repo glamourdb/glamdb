@@ -90,7 +90,7 @@ glamdb/
 | `fixtures/` | Shared deterministic test inputs and expected outputs. |
 | `apps/mock_server/` | Disposable in-memory adapter with real HTTP/Arrow and runtime config. |
 | `tools/verification/` | Literal canonical vectors, SQL 3VL oracle and receipt/fault-evidence tools. |
-| `deploy/alerting/`, `tools/alerting/` | Configurable four-state rules, notification delivery, captured gateway replay and transition tests; see [ALERTING.md](../ALERTING.md). |
+| `deploy/alerting/`, `tools/alerting/` | Configurable four-state rules, native Alertmanager Telegram delivery, independent observer, captured outer-edge replay and transition tests; see [ALERTING.md](../ALERTING.md). |
 | `probes/` | Standalone installed-dependency consumer and libc++ sanitizer compatibility reproducer. |
 | `benchmarks/` | Performance and capacity measurements. |
 | `sdk/python/` | Independently installable network SDK, unit tests and quickstart. |

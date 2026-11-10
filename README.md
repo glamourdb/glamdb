@@ -259,7 +259,7 @@ client builds, and embedding the installed library.
 The [native capacity campaign](docs/development/CAPACITY_CAMPAIGN.md) measures
 ingestion, backpressure and fresh-process recovery while preserving history caps.
 
-For four-state alerts and Telegram setup, see [the alerting guide](ALERTING.md).
+For four-state rules and native Telegram setup, see [the alerting guide](ALERTING.md).
 
 ### Client and UI tests
 

@@ -105,7 +105,7 @@
           "values": "1+0x30"
         },
         {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=\"200\"}",
+          "series": "glamdb_gateway_http_requests_total{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",route=\"metadata\",method=\"GET\",status_class=\"2xx\"}",
           "values": "100+0x30"
         },
         {
@@ -121,7 +121,11 @@
           "values": "NaN+0x30"
         },
         {
-          "series": "caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=\"200\",le=\"+Inf\"}",
+          "series": "glamdb_gateway_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",route=\"metadata\",le=\"+Inf\"}",
+          "values": "100+0x30"
+        },
+        {
+          "series": "glamdb_gateway_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",route=\"metadata\"}",
           "values": "100+0x30"
         }
       ],
@@ -157,7 +161,7 @@
           "values": "1+0x30"
         },
         {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=\"200\"}",
+          "series": "glamdb_gateway_http_requests_total{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",route=\"metadata\",method=\"GET\",status_class=\"2xx\"}",
           "values": "100+0x8 _x30"
         },
         {
@@ -248,7 +252,7 @@
           "values": "1+0x40"
         },
         {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=\"200\"}",
+          "series": "glamdb_gateway_http_requests_total{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",route=\"metadata\",method=\"GET\",status_class=\"2xx\"}",
           "values": "100+0x40"
         },
         {
@@ -292,7 +296,7 @@
           "values": "1+0x30"
         },
         {
-          "series": "caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=\"200\"}",
+          "series": "glamdb_gateway_http_requests_total{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",route=\"metadata\",method=\"GET\",status_class=\"2xx\"}",
           "values": "100+0x30"
         },
         {
@@ -396,16 +400,16 @@
       ]
     },
     {
-      "name": "old native textfile snapshot remains NODATA despite current scrape timestamp",
+      "name": "stale native measurement stays NODATA despite a fresh private endpoint scrape",
       "interval": "15s",
       "input_series": [
         {
-          "series": "glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}",
-          "values": "0+0x30"
+          "series": "up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"}",
+          "values": "1+0x30"
         },
         {
           "series": "glamdb_admission_pending_calls{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}",
-          "values": "100+0x30"
+          "values": "100+0x8 _x30"
         }
       ],
       "promql_expr_test": [
@@ -422,7 +426,7 @@
       ]
     },
     {
-      "name": "Loki WAL uses fraction units and failed resource collector never becomes healthy",
+      "name": "Loki WAL uses fractions and stale container observations never become healthy",
       "interval": "15s",
       "input_series": [
         {
@@ -434,20 +438,12 @@
           "values": "0.93+0x30"
         },
         {
-          "series": "glamdb_cgroup_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"}",
+          "series": "container_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container=\"core\"}",
           "values": "1000000000+0x30"
         },
         {
-          "series": "glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"}",
-          "values": "0+15x30"
-        },
-        {
-          "series": "glamdb_cgroup_collector_success{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",collector=\"memory\"}",
+          "series": "container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container=\"core\"}",
           "values": "0+0x30"
-        },
-        {
-          "series": "glamdb:pod_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"}",
-          "values": "1000000000+0x30"
         }
       ],
       "promql_expr_test": [

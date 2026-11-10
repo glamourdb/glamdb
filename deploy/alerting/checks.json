@@ -6,13 +6,15 @@
   "selectors": {
     "gateway": "job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"",
     "http": "cluster=\"local\",service=\"glamdb\"",
-    "node": "job=\"node\",cluster=\"local\"",
-    "pod": "cluster=\"local\",namespace=\"default\",pod=\"glamdb\"",
+    "node": "job=~\"node|node-exporter\",cluster=\"local\"",
+    "pod": "cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"",
     "native": "cluster=\"local\",service=\"glamdb\",service_instance=\"core\"",
     "alloy": "job=\"alloy\",cluster=\"local\"",
-    "transport": "job=\"glamdb-alert-transport\",cluster=\"local\"",
     "manager": "job=\"alertmanager\",cluster=\"local\"",
-    "loki": "job=\"loki\",cluster=\"local\""
+    "loki": "job=\"loki\",cluster=\"local\"",
+    "prometheus": "job=\"prometheus\",cluster=\"local\"",
+    "coretarget": "job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"",
+    "edge": "job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\""
   },
   "max_age_seconds": 90,
   "evaluation_interval": "15s",
@@ -33,7 +35,7 @@
         "up{$gateway}"
       ],
       "guards": [],
-      "summary": "Gateway scrape availability",
+      "summary": "Gateway application scrape availability",
       "description": "ALARM means a configured gateway target fails scraping; NODATA means target data is missing. This is not an end-to-end readiness probe.",
       "notify_nodata": true
     },
@@ -44,29 +46,29 @@
       "alarm": 0.05,
       "fresh": [
         "up{$gateway}",
-        "caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\"}"
+        "glamdb_gateway_http_requests_total{$gateway}"
       ],
       "guards": [
         "min(up{$gateway}) == 1"
       ],
-      "summary": "Gateway HTTP 5xx ratio",
-      "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+      "summary": "Gateway application HTTP 5xx ratio",
+      "description": "Requests reaching the GlamDB gateway application, after the edge/OIDC proxy. Five-minute ratio with at least 100 requests; fresh idle counters yield OK. Inspect the separate outer-edge checks for requests rejected before the application.",
       "notify_nodata": true
     },
     {
       "id": "http_upstream_ratio",
-      "query": "((sum(glamdb:http_upstream_failures:rate5m{$http}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{$http}), 0.000001)) * (sum(glamdb:http_requests:rate5m{$http}) * 300 >= bool 100)",
+      "query": "((sum(rate(caddy_http_request_duration_seconds_count{$edge,handler=\"subroute\",server=\"workbench\",code=~\"502|504\"}[5m])) or vector(0)) / clamp_min(sum(rate(caddy_http_request_duration_seconds_count{$edge,handler=\"subroute\",server=\"workbench\"}[5m])), 0.000001)) * (sum(rate(caddy_http_request_duration_seconds_count{$edge,handler=\"subroute\",server=\"workbench\"}[5m])) * 300 >= bool 100)",
       "warn": 0.01,
       "alarm": 0.05,
       "fresh": [
-        "up{$gateway}",
-        "caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\"}"
+        "up{$edge}",
+        "caddy_http_request_duration_seconds_count{$edge,handler=\"subroute\",server=\"workbench\"}"
       ],
       "guards": [
-        "min(up{$gateway}) == 1"
+        "min(up{$edge}) == 1"
       ],
-      "summary": "Gateway HTTP 502/504 proxy ratio",
-      "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+      "summary": "Outer-edge HTTP 502/504 proxy ratio",
+      "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
       "notify_nodata": true
     },
     {
@@ -76,47 +78,47 @@
       "alarm": 2,
       "fresh": [
         "up{$gateway}",
-        "caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\"}",
-        "caddy_http_request_duration_seconds_bucket{$gateway,handler=\"subroute\",server=\"workbench\"}"
+        "glamdb_gateway_http_request_duration_seconds_count{$gateway}",
+        "glamdb_gateway_http_request_duration_seconds_bucket{$gateway}"
       ],
       "guards": [
         "min(up{$gateway}) == 1",
         "sum(glamdb:http_requests:rate5m{$http}) * 300 >= 100"
       ],
-      "summary": "Gateway HTTP p95 latency",
-      "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
+      "summary": "Gateway application HTTP p95 latency",
+      "description": "Gateway application HTTP duration in seconds, after the edge/OIDC proxy. Five-minute p95; no observed requests or missing histogram is NODATA. WARN 0.5s and ALARM 2s are configurable starting points.",
       "notify_nodata": false
     },
     {
       "id": "http_overload_ratio",
-      "query": "((sum(rate(caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\",code=~\"429|503\"}[5m])) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{$http}), 0.000001)) * (sum(glamdb:http_requests:rate5m{$http}) * 300 >= bool 100)",
+      "query": "((sum(rate(caddy_http_request_duration_seconds_count{$edge,handler=\"subroute\",server=\"workbench\",code=~\"429|503\"}[5m])) or vector(0)) / clamp_min(sum(rate(caddy_http_request_duration_seconds_count{$edge,handler=\"subroute\",server=\"workbench\"}[5m])), 0.000001)) * (sum(rate(caddy_http_request_duration_seconds_count{$edge,handler=\"subroute\",server=\"workbench\"}[5m])) * 300 >= bool 100)",
       "warn": 0.01,
       "alarm": 0.05,
       "fresh": [
-        "up{$gateway}",
-        "caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\"}"
+        "up{$edge}",
+        "caddy_http_request_duration_seconds_count{$edge,handler=\"subroute\",server=\"workbench\"}"
       ],
       "guards": [
-        "min(up{$gateway}) == 1"
+        "min(up{$edge}) == 1"
       ],
-      "summary": "Gateway HTTP overload ratio",
-      "description": "All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
+      "summary": "Outer-edge HTTP overload ratio",
+      "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
       "notify_nodata": false
     },
     {
       "id": "http_auth_failures",
-      "query": "sum(rate(caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\",code=~\"401|403\"}[5m])) or vector(0)",
+      "query": "sum(rate(caddy_http_request_duration_seconds_count{$edge,handler=\"subroute\",server=\"workbench\",code=~\"401|403\"}[5m])) or vector(0)",
       "warn": 1,
       "alarm": 5,
       "fresh": [
-        "up{$gateway}",
-        "caddy_http_request_duration_seconds_count{$gateway,handler=\"subroute\",server=\"workbench\"}"
+        "up{$edge}",
+        "caddy_http_request_duration_seconds_count{$edge,handler=\"subroute\",server=\"workbench\"}"
       ],
       "guards": [
-        "min(up{$gateway}) == 1"
+        "min(up{$edge}) == 1"
       ],
-      "summary": "Gateway HTTP authentication/authorization failures",
-      "description": "All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
+      "summary": "Outer-edge HTTP authentication/authorization failures",
+      "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
       "notify_nodata": false
     },
     {
@@ -278,17 +280,16 @@
     },
     {
       "id": "pod_cpu_cores",
-      "query": "max(glamdb:pod_cpu_usage_cores:rate5m{$pod})",
+      "query": "sum(rate(container_cpu_usage_seconds_total{$pod}[5m]))",
       "warn": 1.6,
       "alarm": 1.9,
       "fresh": [
-        "glamdb_cgroup_cpu_usage_seconds_total{$pod}",
-        "glamdb_resource_sample_timestamp_seconds{$pod}"
+        "container_cpu_usage_seconds_total{$pod}",
+        "container_last_seen{$pod}"
       ],
       "guards": [
-        "time()-min(glamdb_resource_sample_timestamp_seconds{$pod}) < 90",
-        "time()-max(glamdb_resource_sample_timestamp_seconds{$pod}) >= -5",
-        "min(glamdb_cgroup_collector_success{$pod,collector=\"cpu\"}) == 1"
+        "time()-min(container_last_seen{$pod}) < 90",
+        "time()-max(container_last_seen{$pod}) >= -5"
       ],
       "summary": "Pod CPU consumption",
       "description": "CPU cores against an example 2-core budget. Set thresholds to the actual pod quota.",
@@ -300,17 +301,16 @@
     },
     {
       "id": "pod_cpu_throttle",
-      "query": "max(glamdb:pod_cpu_throttled_seconds:rate5m{$pod})",
+      "query": "sum(rate(container_cpu_cfs_throttled_seconds_total{$pod}[5m]))",
       "warn": 0.1,
       "alarm": 0.5,
       "fresh": [
-        "glamdb_cgroup_cpu_throttled_seconds_total{$pod}",
-        "glamdb_resource_sample_timestamp_seconds{$pod}"
+        "container_cpu_cfs_throttled_seconds_total{$pod}",
+        "container_last_seen{$pod}"
       ],
       "guards": [
-        "time()-min(glamdb_resource_sample_timestamp_seconds{$pod}) < 90",
-        "time()-max(glamdb_resource_sample_timestamp_seconds{$pod}) >= -5",
-        "min(glamdb_cgroup_collector_success{$pod,collector=\"cpu\"}) == 1"
+        "time()-min(container_last_seen{$pod}) < 90",
+        "time()-max(container_last_seen{$pod}) >= -5"
       ],
       "summary": "Pod CPU throttling",
       "description": "Throttled seconds per second; this is not a percent of quota.",
@@ -322,17 +322,16 @@
     },
     {
       "id": "pod_memory",
-      "query": "max(glamdb:pod_memory_usage_bytes{$pod})",
+      "query": "sum(container_memory_usage_bytes{$pod})",
       "warn": 858993459,
       "alarm": 1020054732,
       "fresh": [
-        "glamdb_cgroup_memory_usage_bytes{$pod}",
-        "glamdb_resource_sample_timestamp_seconds{$pod}"
+        "container_memory_usage_bytes{$pod}",
+        "container_last_seen{$pod}"
       ],
       "guards": [
-        "time()-min(glamdb_resource_sample_timestamp_seconds{$pod}) < 90",
-        "time()-max(glamdb_resource_sample_timestamp_seconds{$pod}) >= -5",
-        "min(glamdb_cgroup_collector_success{$pod,collector=\"memory\"}) == 1"
+        "time()-min(container_last_seen{$pod}) < 90",
+        "time()-max(container_last_seen{$pod}) >= -5"
       ],
       "summary": "Pod total memory",
       "description": "Absolute bytes against an example 1 GiB budget: 80%/95%. Set to actual memory.max.",
@@ -344,20 +343,19 @@
     },
     {
       "id": "pod_anonymous_memory",
-      "query": "max(glamdb:pod_memory_anon_bytes{$pod})",
+      "query": "vector(0/0)",
       "warn": 751619276,
       "alarm": 966367641,
       "fresh": [
-        "glamdb_cgroup_memory_anon_bytes{$pod}",
-        "glamdb_resource_sample_timestamp_seconds{$pod}"
+        "container_memory_usage_bytes{$pod}",
+        "container_last_seen{$pod}"
       ],
       "guards": [
-        "time()-min(glamdb_resource_sample_timestamp_seconds{$pod}) < 90",
-        "time()-max(glamdb_resource_sample_timestamp_seconds{$pod}) >= -5",
-        "min(glamdb_cgroup_collector_success{$pod,collector=\"memory\"}) == 1"
+        "time()-min(container_last_seen{$pod}) < 90",
+        "time()-max(container_last_seen{$pod}) >= -5"
       ],
       "summary": "Pod anonymous memory",
-      "description": "Absolute anonymous bytes against an example 1 GiB budget: 70%/90%. Anonymous memory is distinct from reclaimable file cache.",
+      "description": "Exact anonymous memory has no standard cAdvisor/kubelet metric in this configuration. Always NODATA; RSS or working-set bytes are not substituted. Use a separately validated source before enabling this check.",
       "notify_nodata": false,
       "scope": {
         "namespace": "default",
@@ -370,12 +368,11 @@
       "warn": 4,
       "alarm": 16,
       "fresh": [
-        "glamdb_metrics_snapshot_timestamp_seconds{$native}",
-        "glamdb_admission_pending_calls{$native}"
+        "glamdb_admission_pending_calls{$native}",
+        "up{$coretarget}"
       ],
       "guards": [
-        "time()-min(glamdb_metrics_snapshot_timestamp_seconds{$native}) < 90",
-        "time()-max(glamdb_metrics_snapshot_timestamp_seconds{$native}) >= -5"
+        "min(up{$coretarget}) == 1"
       ],
       "summary": "Engine admission backlog",
       "description": "Pending synchronous admission calls, not an asynchronous durable job queue.",
@@ -387,12 +384,11 @@
       "warn": 67108864,
       "alarm": 268435456,
       "fresh": [
-        "glamdb_metrics_snapshot_timestamp_seconds{$native}",
-        "glamdb_admission_owned_input_bytes{$native}"
+        "glamdb_admission_owned_input_bytes{$native}",
+        "up{$coretarget}"
       ],
       "guards": [
-        "time()-min(glamdb_metrics_snapshot_timestamp_seconds{$native}) < 90",
-        "time()-max(glamdb_metrics_snapshot_timestamp_seconds{$native}) >= -5"
+        "min(up{$coretarget}) == 1"
       ],
       "summary": "Engine owned input bytes",
       "description": "Input bytes retained by admitted/pending calls. Example 64/256 MiB thresholds need workload tuning.",
@@ -404,12 +400,11 @@
       "warn": 0.5,
       "alarm": 1,
       "fresh": [
-        "glamdb_metrics_snapshot_timestamp_seconds{$native}",
-        "glamdb_operations_total{$native}"
+        "glamdb_operations_total{$native}",
+        "up{$coretarget}"
       ],
       "guards": [
-        "time()-min(glamdb_metrics_snapshot_timestamp_seconds{$native}) < 90",
-        "time()-max(glamdb_metrics_snapshot_timestamp_seconds{$native}) >= -5"
+        "min(up{$coretarget}) == 1"
       ],
       "summary": "Engine uncertain commits",
       "description": "A commit_unknown outcome requires authoritative recovery; never retry as a new operation blindly.",
@@ -421,12 +416,11 @@
       "warn": 0.1,
       "alarm": 1,
       "fresh": [
-        "glamdb_metrics_snapshot_timestamp_seconds{$native}",
-        "glamdb_operation_errors_total{$native}"
+        "glamdb_operation_errors_total{$native}",
+        "up{$coretarget}"
       ],
       "guards": [
-        "time()-min(glamdb_metrics_snapshot_timestamp_seconds{$native}) < 90",
-        "time()-max(glamdb_metrics_snapshot_timestamp_seconds{$native}) >= -5"
+        "min(up{$coretarget}) == 1"
       ],
       "summary": "Engine operation errors",
       "description": "Native observed errors per second; absent instrumentation remains NODATA.",
@@ -478,59 +472,6 @@
       "notify_nodata": true
     },
     {
-      "id": "transport_availability",
-      "query": "1-min(up{$transport})",
-      "warn": 0.5,
-      "alarm": 1,
-      "fresh": [
-        "up{$transport}"
-      ],
-      "guards": [],
-      "scope": {
-        "service": "alerting"
-      },
-      "summary": "transport availability",
-      "description": "A pipeline component cannot deliver a notification about its own complete failure. Watch this state from an independent observer.",
-      "notify_nodata": true
-    },
-    {
-      "id": "transport_queue",
-      "query": "max(glamdb_alert_transport_pending{$transport}/glamdb_alert_transport_capacity{$transport})",
-      "warn": 0.5,
-      "alarm": 0.8,
-      "fresh": [
-        "glamdb_alert_transport_pending{$transport}",
-        "glamdb_alert_transport_capacity{$transport}"
-      ],
-      "guards": [
-        "min(up{$transport}) == 1"
-      ],
-      "scope": {
-        "service": "alerting"
-      },
-      "summary": "Telegram durable outbox occupancy",
-      "description": "WARN at 50%, ALARM at 80% of the bounded outbox. Full queue returns 503 so Alertmanager retries.",
-      "notify_nodata": false
-    },
-    {
-      "id": "transport_delivery_failures",
-      "query": "sum(increase(glamdb_alert_transport_events_total{$transport,outcome=~\"rejected|exhausted|expired\"}[5m])) or vector(0)",
-      "warn": 0.5,
-      "alarm": 1,
-      "fresh": [
-        "glamdb_alert_transport_pending{$transport}"
-      ],
-      "guards": [
-        "min(up{$transport}) == 1"
-      ],
-      "scope": {
-        "service": "alerting"
-      },
-      "summary": "Telegram permanent delivery failures",
-      "description": "Rejected, exhausted, or expired deliveries in five minutes; inspect credentials, Telegram membership, network and outbox metrics. Counters may be absent before their first event.",
-      "notify_nodata": false
-    },
-    {
       "id": "loki_wal_disk_usage",
       "query": "max(loki_ingester_wal_disk_usage_percent{$loki})",
       "warn": 0.8,
@@ -567,6 +508,60 @@
         "service": "logging"
       },
       "notify_nodata": false
+    },
+    {
+      "id": "alertmanager_delivery_failures",
+      "query": "sum(increase(alertmanager_notification_requests_failed_total{$manager,integration=\"telegram\"}[5m]))",
+      "warn": 0.5,
+      "alarm": 1,
+      "fresh": [
+        "up{$manager}",
+        "alertmanager_notification_requests_failed_total{$manager,integration=\"telegram\"}"
+      ],
+      "guards": [
+        "min(up{$manager}) == 1"
+      ],
+      "scope": {
+        "service": "alerting"
+      },
+      "summary": "Alertmanager Telegram request failures",
+      "description": "Failed native Telegram attempts in five minutes, including retried requests. Inspect alertmanager_notifications_failed_total for final notification failures; acceptance by Telegram does not imply a human read the message.",
+      "notify_nodata": true
+    },
+    {
+      "id": "prometheus_availability",
+      "query": "1-min(up{$prometheus})",
+      "warn": 0.5,
+      "alarm": 1,
+      "fresh": [
+        "up{$prometheus}"
+      ],
+      "guards": [],
+      "scope": {
+        "service": "monitoring"
+      },
+      "summary": "Prometheus scrape availability",
+      "description": "This local rule cannot report the death of its own evaluator. Deploy the separate observer on another host and notification path.",
+      "notify_nodata": true
+    },
+    {
+      "id": "prometheus_rule_failures",
+      "query": "sum(increase(prometheus_rule_evaluation_failures_total{$prometheus}[5m]))",
+      "warn": 0.5,
+      "alarm": 1,
+      "fresh": [
+        "up{$prometheus}",
+        "prometheus_rule_evaluation_failures_total{$prometheus}"
+      ],
+      "guards": [
+        "min(up{$prometheus}) == 1"
+      ],
+      "scope": {
+        "service": "monitoring"
+      },
+      "summary": "Prometheus rule evaluation errors",
+      "description": "Failed evaluations are an evaluator fault, not a healthy measurement or a reason to synthesize OK. Inspect /rules and the independent observer.",
+      "notify_nodata": true
     }
   ]
 }

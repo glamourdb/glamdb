@@ -34,7 +34,7 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "Gateway scrape availability",
+            "summary": "Gateway application scrape availability",
             "description": "ALARM means a configured gateway target fails scraping; NODATA means target data is missing. This is not an end-to-end readiness probe.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
@@ -52,7 +52,7 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "Gateway scrape availability",
+            "summary": "Gateway application scrape availability",
             "description": "ALARM means a configured gateway target fails scraping; NODATA means target data is missing. This is not an end-to-end readiness probe.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
@@ -70,7 +70,7 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "Gateway scrape availability",
+            "summary": "Gateway application scrape availability",
             "description": "ALARM means a configured gateway target fails scraping; NODATA means target data is missing. This is not an end-to-end readiness probe.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
@@ -88,7 +88,7 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "Gateway scrape availability",
+            "summary": "Gateway application scrape availability",
             "description": "ALARM means a configured gateway target fails scraping; NODATA means target data is missing. This is not an end-to-end readiness probe.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
@@ -96,7 +96,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(((sum(glamdb:http_errors:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) > -Inf) and (max(((sum(glamdb:http_errors:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1))",
+          "expr": "((max(((sum(glamdb:http_errors:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) > -Inf) and (max(((sum(glamdb:http_errors:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(glamdb_gateway_http_requests_total{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(glamdb_gateway_http_requests_total{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -124,8 +124,8 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "Gateway HTTP 5xx ratio",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Gateway application HTTP 5xx ratio",
+            "description": "Requests reaching the GlamDB gateway application, after the edge/OIDC proxy. Five-minute ratio with at least 100 requests; fresh idle counters yield OK. Inspect the separate outer-edge checks for requests rejected before the application.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -142,8 +142,8 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "Gateway HTTP 5xx ratio",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Gateway application HTTP 5xx ratio",
+            "description": "Requests reaching the GlamDB gateway application, after the edge/OIDC proxy. Five-minute ratio with at least 100 requests; fresh idle counters yield OK. Inspect the separate outer-edge checks for requests rejected before the application.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -160,8 +160,8 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "Gateway HTTP 5xx ratio",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Gateway application HTTP 5xx ratio",
+            "description": "Requests reaching the GlamDB gateway application, after the edge/OIDC proxy. Five-minute ratio with at least 100 requests; fresh idle counters yield OK. Inspect the separate outer-edge checks for requests rejected before the application.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -178,15 +178,15 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "Gateway HTTP 5xx ratio",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Gateway application HTTP 5xx ratio",
+            "description": "Requests reaching the GlamDB gateway application, after the edge/OIDC proxy. Five-minute ratio with at least 100 requests; fresh idle counters yield OK. Inspect the separate outer-edge checks for requests rejected before the application.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(((sum(glamdb:http_upstream_failures:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) > -Inf) and (max(((sum(glamdb:http_upstream_failures:rate5m{cluster=\"local\",service=\"glamdb\"}) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1))",
+          "expr": "((max(((sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"502|504\"}[5m])) or vector(0)) / clamp_min(sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"}[5m])), 0.000001)) * (sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"}[5m])) * 300 >= bool 100)) > -Inf) and (max(((sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"502|504\"}[5m])) or vector(0)) / clamp_min(sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"}[5m])), 0.000001)) * (sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"}[5m])) * 300 >= bool 100)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (min(up{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -214,8 +214,8 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "Gateway HTTP 502/504 proxy ratio",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Outer-edge HTTP 502/504 proxy ratio",
+            "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -232,8 +232,8 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "Gateway HTTP 502/504 proxy ratio",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Outer-edge HTTP 502/504 proxy ratio",
+            "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -250,8 +250,8 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "Gateway HTTP 502/504 proxy ratio",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Outer-edge HTTP 502/504 proxy ratio",
+            "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -268,15 +268,15 @@
             "notify_nodata": "true"
           },
           "annotations": {
-            "summary": "Gateway HTTP 502/504 proxy ratio",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
+            "summary": "Outer-edge HTTP 502/504 proxy ratio",
+            "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). Five-minute ratio; paging requires at least 100 requests in the window. Fresh idle counters yield OK. Proxy errors are observed HTTP statuses, not native storage errors.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(max(glamdb:http_request_duration_seconds:p95{cluster=\"local\",service=\"glamdb\"})) > -Inf) and (max(max(glamdb:http_request_duration_seconds:p95{cluster=\"local\",service=\"glamdb\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1) and on() (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= 100))",
+          "expr": "((max(max(glamdb:http_request_duration_seconds:p95{cluster=\"local\",service=\"glamdb\"})) > -Inf) and (max(max(glamdb:http_request_duration_seconds:p95{cluster=\"local\",service=\"glamdb\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(glamdb_gateway_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(glamdb_gateway_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(glamdb_gateway_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(glamdb_gateway_http_request_duration_seconds_bucket{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1) and on() (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= 100))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -304,8 +304,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "Gateway HTTP p95 latency",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
+            "summary": "Gateway application HTTP p95 latency",
+            "description": "Gateway application HTTP duration in seconds, after the edge/OIDC proxy. Five-minute p95; no observed requests or missing histogram is NODATA. WARN 0.5s and ALARM 2s are configurable starting points.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -322,8 +322,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "Gateway HTTP p95 latency",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
+            "summary": "Gateway application HTTP p95 latency",
+            "description": "Gateway application HTTP duration in seconds, after the edge/OIDC proxy. Five-minute p95; no observed requests or missing histogram is NODATA. WARN 0.5s and ALARM 2s are configurable starting points.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -340,8 +340,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "Gateway HTTP p95 latency",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
+            "summary": "Gateway application HTTP p95 latency",
+            "description": "Gateway application HTTP duration in seconds, after the edge/OIDC proxy. Five-minute p95; no observed requests or missing histogram is NODATA. WARN 0.5s and ALARM 2s are configurable starting points.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -358,15 +358,15 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "Gateway HTTP p95 latency",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Five-minute p95 seconds. No observed requests or a missing histogram yields NODATA. WARN 0.5s, ALARM 2s are starting points.",
+            "summary": "Gateway application HTTP p95 latency",
+            "description": "Gateway application HTTP duration in seconds, after the edge/OIDC proxy. Five-minute p95; no observed requests or missing histogram is NODATA. WARN 0.5s and ALARM 2s are configurable starting points.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(((sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"429|503\"}[5m])) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) > -Inf) and (max(((sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"429|503\"}[5m])) or vector(0)) / clamp_min(sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}), 0.000001)) * (sum(glamdb:http_requests:rate5m{cluster=\"local\",service=\"glamdb\"}) * 300 >= bool 100)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1))",
+          "expr": "((max(((sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"429|503\"}[5m])) or vector(0)) / clamp_min(sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"}[5m])), 0.000001)) * (sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"}[5m])) * 300 >= bool 100)) > -Inf) and (max(((sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"429|503\"}[5m])) or vector(0)) / clamp_min(sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"}[5m])), 0.000001)) * (sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"}[5m])) * 300 >= bool 100)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (min(up{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -394,8 +394,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "Gateway HTTP overload ratio",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
+            "summary": "Outer-edge HTTP overload ratio",
+            "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -412,8 +412,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "Gateway HTTP overload ratio",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
+            "summary": "Outer-edge HTTP overload ratio",
+            "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -430,8 +430,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "Gateway HTTP overload ratio",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
+            "summary": "Outer-edge HTTP overload ratio",
+            "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -448,15 +448,15 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "Gateway HTTP overload ratio",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
+            "summary": "Outer-edge HTTP overload ratio",
+            "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). 429/503 responses over five minutes, with at least 100 total requests.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"401|403\"}[5m])) or vector(0)) > -Inf) and (max(sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"401|403\"}[5m])) or vector(0)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"}) == 1))",
+          "expr": "((max(sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"401|403\"}[5m])) or vector(0)) > -Inf) and (max(sum(rate(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\",code=~\"401|403\"}[5m])) or vector(0)) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) >= -5) and (time() - min(timestamp(caddy_http_request_duration_seconds_count{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\",handler=\"subroute\",server=\"workbench\"})) < 90) and on() (min(up{job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -484,8 +484,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "Gateway HTTP authentication/authorization failures",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
+            "summary": "Outer-edge HTTP authentication/authorization failures",
+            "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -502,8 +502,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "Gateway HTTP authentication/authorization failures",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
+            "summary": "Outer-edge HTTP authentication/authorization failures",
+            "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -520,8 +520,8 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "Gateway HTTP authentication/authorization failures",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
+            "summary": "Outer-edge HTTP authentication/authorization failures",
+            "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -538,15 +538,15 @@
             "notify_nodata": "false"
           },
           "annotations": {
-            "summary": "Gateway HTTP authentication/authorization failures",
-            "description": "All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
+            "summary": "Outer-edge HTTP authentication/authorization failures",
+            "description": "Caddy outer edge, including OAuth2 Proxy rejections before the application. All workbench gateway requests (UI, authentication, helpers and API). Aggregate 401/403 requests per second. This detects an anomaly; it does not identify attacks or distinguish expected denied access.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(max(1-avg by (instance) (rate(node_cpu_seconds_total{job=\"node\",cluster=\"local\",mode=\"idle\"}[5m])))) > -Inf) and (max(max(1-avg by (instance) (rate(node_cpu_seconds_total{job=\"node\",cluster=\"local\",mode=\"idle\"}[5m])))) < +Inf)) and on() ((time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_cpu_seconds_total{job=\"node\",cluster=\"local\",mode=\"idle\"})) >= -5) and (time() - min(timestamp(node_cpu_seconds_total{job=\"node\",cluster=\"local\",mode=\"idle\"})) < 90) and on() (min(up{job=\"node\",cluster=\"local\"}) == 1))",
+          "expr": "((max(max(1-avg by (instance) (rate(node_cpu_seconds_total{job=~\"node|node-exporter\",cluster=\"local\",mode=\"idle\"}[5m])))) > -Inf) and (max(max(1-avg by (instance) (rate(node_cpu_seconds_total{job=~\"node|node-exporter\",cluster=\"local\",mode=\"idle\"}[5m])))) < +Inf)) and on() ((time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_cpu_seconds_total{job=~\"node|node-exporter\",cluster=\"local\",mode=\"idle\"})) >= -5) and (time() - min(timestamp(node_cpu_seconds_total{job=~\"node|node-exporter\",cluster=\"local\",mode=\"idle\"})) < 90) and on() (min(up{job=~\"node|node-exporter\",cluster=\"local\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -642,7 +642,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(max(1-node_memory_MemAvailable_bytes{job=\"node\",cluster=\"local\"}/node_memory_MemTotal_bytes{job=\"node\",cluster=\"local\"})) > -Inf) and (max(max(1-node_memory_MemAvailable_bytes{job=\"node\",cluster=\"local\"}/node_memory_MemTotal_bytes{job=\"node\",cluster=\"local\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_memory_MemAvailable_bytes{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_memory_MemAvailable_bytes{job=\"node\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_memory_MemTotal_bytes{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_memory_MemTotal_bytes{job=\"node\",cluster=\"local\"})) < 90) and on() (min(up{job=\"node\",cluster=\"local\"}) == 1))",
+          "expr": "((max(max(1-node_memory_MemAvailable_bytes{job=~\"node|node-exporter\",cluster=\"local\"}/node_memory_MemTotal_bytes{job=~\"node|node-exporter\",cluster=\"local\"})) > -Inf) and (max(max(1-node_memory_MemAvailable_bytes{job=~\"node|node-exporter\",cluster=\"local\"}/node_memory_MemTotal_bytes{job=~\"node|node-exporter\",cluster=\"local\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_memory_MemAvailable_bytes{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_memory_MemAvailable_bytes{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_memory_MemTotal_bytes{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_memory_MemTotal_bytes{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (min(up{job=~\"node|node-exporter\",cluster=\"local\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -738,7 +738,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(max(1-node_filesystem_avail_bytes{job=\"node\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs|proc|sysfs\",mountpoint!~\"/run.*|/var/lib/(docker|containers).*\"}/node_filesystem_size_bytes{job=\"node\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs|proc|sysfs\",mountpoint!~\"/run.*|/var/lib/(docker|containers).*\"})) > -Inf) and (max(max(1-node_filesystem_avail_bytes{job=\"node\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs|proc|sysfs\",mountpoint!~\"/run.*|/var/lib/(docker|containers).*\"}/node_filesystem_size_bytes{job=\"node\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs|proc|sysfs\",mountpoint!~\"/run.*|/var/lib/(docker|containers).*\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_filesystem_avail_bytes{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_filesystem_avail_bytes{job=\"node\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_filesystem_size_bytes{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_filesystem_size_bytes{job=\"node\",cluster=\"local\"})) < 90) and on() (min(up{job=\"node\",cluster=\"local\"}) == 1))",
+          "expr": "((max(max(1-node_filesystem_avail_bytes{job=~\"node|node-exporter\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs|proc|sysfs\",mountpoint!~\"/run.*|/var/lib/(docker|containers).*\"}/node_filesystem_size_bytes{job=~\"node|node-exporter\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs|proc|sysfs\",mountpoint!~\"/run.*|/var/lib/(docker|containers).*\"})) > -Inf) and (max(max(1-node_filesystem_avail_bytes{job=~\"node|node-exporter\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs|proc|sysfs\",mountpoint!~\"/run.*|/var/lib/(docker|containers).*\"}/node_filesystem_size_bytes{job=~\"node|node-exporter\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs|proc|sysfs\",mountpoint!~\"/run.*|/var/lib/(docker|containers).*\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_filesystem_avail_bytes{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_filesystem_avail_bytes{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_filesystem_size_bytes{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_filesystem_size_bytes{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (min(up{job=~\"node|node-exporter\",cluster=\"local\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -834,7 +834,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(max(1-node_filesystem_files_free{job=\"node\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs\"}/node_filesystem_files{job=\"node\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs\"})) > -Inf) and (max(max(1-node_filesystem_files_free{job=\"node\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs\"}/node_filesystem_files{job=\"node\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_filesystem_files_free{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_filesystem_files_free{job=\"node\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_filesystem_files{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_filesystem_files{job=\"node\",cluster=\"local\"})) < 90) and on() (min(up{job=\"node\",cluster=\"local\"}) == 1))",
+          "expr": "((max(max(1-node_filesystem_files_free{job=~\"node|node-exporter\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs\"}/node_filesystem_files{job=~\"node|node-exporter\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs\"})) > -Inf) and (max(max(1-node_filesystem_files_free{job=~\"node|node-exporter\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs\"}/node_filesystem_files{job=~\"node|node-exporter\",cluster=\"local\",fstype!~\"tmpfs|overlay|squashfs\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_filesystem_files_free{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_filesystem_files_free{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_filesystem_files{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_filesystem_files{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (min(up{job=~\"node|node-exporter\",cluster=\"local\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -930,7 +930,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(sum(rate(node_network_receive_errs_total{job=\"node\",cluster=\"local\",device!=\"lo\"}[5m])) + sum(rate(node_network_transmit_errs_total{job=\"node\",cluster=\"local\",device!=\"lo\"}[5m]))) > -Inf) and (max(sum(rate(node_network_receive_errs_total{job=\"node\",cluster=\"local\",device!=\"lo\"}[5m])) + sum(rate(node_network_transmit_errs_total{job=\"node\",cluster=\"local\",device!=\"lo\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_network_receive_errs_total{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_network_receive_errs_total{job=\"node\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_network_transmit_errs_total{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_network_transmit_errs_total{job=\"node\",cluster=\"local\"})) < 90) and on() (min(up{job=\"node\",cluster=\"local\"}) == 1))",
+          "expr": "((max(sum(rate(node_network_receive_errs_total{job=~\"node|node-exporter\",cluster=\"local\",device!=\"lo\"}[5m])) + sum(rate(node_network_transmit_errs_total{job=~\"node|node-exporter\",cluster=\"local\",device!=\"lo\"}[5m]))) > -Inf) and (max(sum(rate(node_network_receive_errs_total{job=~\"node|node-exporter\",cluster=\"local\",device!=\"lo\"}[5m])) + sum(rate(node_network_transmit_errs_total{job=~\"node|node-exporter\",cluster=\"local\",device!=\"lo\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_network_receive_errs_total{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_network_receive_errs_total{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_network_transmit_errs_total{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_network_transmit_errs_total{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (min(up{job=~\"node|node-exporter\",cluster=\"local\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -1026,7 +1026,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(sum(rate(node_network_receive_drop_total{job=\"node\",cluster=\"local\",device!=\"lo\"}[5m])) + sum(rate(node_network_transmit_drop_total{job=\"node\",cluster=\"local\",device!=\"lo\"}[5m]))) > -Inf) and (max(sum(rate(node_network_receive_drop_total{job=\"node\",cluster=\"local\",device!=\"lo\"}[5m])) + sum(rate(node_network_transmit_drop_total{job=\"node\",cluster=\"local\",device!=\"lo\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_network_receive_drop_total{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_network_receive_drop_total{job=\"node\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_network_transmit_drop_total{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_network_transmit_drop_total{job=\"node\",cluster=\"local\"})) < 90) and on() (min(up{job=\"node\",cluster=\"local\"}) == 1))",
+          "expr": "((max(sum(rate(node_network_receive_drop_total{job=~\"node|node-exporter\",cluster=\"local\",device!=\"lo\"}[5m])) + sum(rate(node_network_transmit_drop_total{job=~\"node|node-exporter\",cluster=\"local\",device!=\"lo\"}[5m]))) > -Inf) and (max(sum(rate(node_network_receive_drop_total{job=~\"node|node-exporter\",cluster=\"local\",device!=\"lo\"}[5m])) + sum(rate(node_network_transmit_drop_total{job=~\"node|node-exporter\",cluster=\"local\",device!=\"lo\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_network_receive_drop_total{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_network_receive_drop_total{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_network_transmit_drop_total{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_network_transmit_drop_total{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (min(up{job=~\"node|node-exporter\",cluster=\"local\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -1122,7 +1122,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(sum(rate(node_vmstat_pgmajfault{job=\"node\",cluster=\"local\"}[5m]))) > -Inf) and (max(sum(rate(node_vmstat_pgmajfault{job=\"node\",cluster=\"local\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_vmstat_pgmajfault{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_vmstat_pgmajfault{job=\"node\",cluster=\"local\"})) < 90) and on() (min(up{job=\"node\",cluster=\"local\"}) == 1))",
+          "expr": "((max(sum(rate(node_vmstat_pgmajfault{job=~\"node|node-exporter\",cluster=\"local\"}[5m]))) > -Inf) and (max(sum(rate(node_vmstat_pgmajfault{job=~\"node|node-exporter\",cluster=\"local\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_vmstat_pgmajfault{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_vmstat_pgmajfault{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (min(up{job=~\"node|node-exporter\",cluster=\"local\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -1218,7 +1218,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(sum(increase(node_vmstat_oom_kill{job=\"node\",cluster=\"local\"}[5m]))) > -Inf) and (max(sum(increase(node_vmstat_oom_kill{job=\"node\",cluster=\"local\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=\"node\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_vmstat_oom_kill{job=\"node\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_vmstat_oom_kill{job=\"node\",cluster=\"local\"})) < 90) and on() (min(up{job=\"node\",cluster=\"local\"}) == 1))",
+          "expr": "((max(sum(increase(node_vmstat_oom_kill{job=~\"node|node-exporter\",cluster=\"local\"}[5m]))) > -Inf) and (max(sum(increase(node_vmstat_oom_kill{job=~\"node|node-exporter\",cluster=\"local\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(node_vmstat_oom_kill{job=~\"node|node-exporter\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(node_vmstat_oom_kill{job=~\"node|node-exporter\",cluster=\"local\"})) < 90) and on() (min(up{job=~\"node|node-exporter\",cluster=\"local\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -1314,7 +1314,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(max(glamdb:pod_cpu_usage_cores:rate5m{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) > -Inf) and (max(max(glamdb:pod_cpu_usage_cores:rate5m{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) < +Inf)) and on() ((time() - min(timestamp(glamdb_cgroup_cpu_usage_seconds_total{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) >= -5) and (time() - min(timestamp(glamdb_cgroup_cpu_usage_seconds_total{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) < 90) and on() (time() - min(timestamp(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) >= -5) and (time() - min(timestamp(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) < 90) and on() (time()-min(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"}) < 90) and on() (time()-max(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"}) >= -5) and on() (min(glamdb_cgroup_collector_success{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",collector=\"cpu\"}) == 1))",
+          "expr": "((max(sum(rate(container_cpu_usage_seconds_total{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"}[5m]))) > -Inf) and (max(sum(rate(container_cpu_usage_seconds_total{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(container_cpu_usage_seconds_total{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) >= -5) and (time() - min(timestamp(container_cpu_usage_seconds_total{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) < 90) and on() (time() - min(timestamp(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) >= -5) and (time() - min(timestamp(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) < 90) and on() (time()-min(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"}) < 90) and on() (time()-max(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"}) >= -5))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -1416,7 +1416,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(max(glamdb:pod_cpu_throttled_seconds:rate5m{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) > -Inf) and (max(max(glamdb:pod_cpu_throttled_seconds:rate5m{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) < +Inf)) and on() ((time() - min(timestamp(glamdb_cgroup_cpu_throttled_seconds_total{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) >= -5) and (time() - min(timestamp(glamdb_cgroup_cpu_throttled_seconds_total{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) < 90) and on() (time() - min(timestamp(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) >= -5) and (time() - min(timestamp(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) < 90) and on() (time()-min(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"}) < 90) and on() (time()-max(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"}) >= -5) and on() (min(glamdb_cgroup_collector_success{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",collector=\"cpu\"}) == 1))",
+          "expr": "((max(sum(rate(container_cpu_cfs_throttled_seconds_total{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"}[5m]))) > -Inf) and (max(sum(rate(container_cpu_cfs_throttled_seconds_total{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(container_cpu_cfs_throttled_seconds_total{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) >= -5) and (time() - min(timestamp(container_cpu_cfs_throttled_seconds_total{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) < 90) and on() (time() - min(timestamp(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) >= -5) and (time() - min(timestamp(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) < 90) and on() (time()-min(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"}) < 90) and on() (time()-max(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"}) >= -5))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -1518,7 +1518,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(max(glamdb:pod_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) > -Inf) and (max(max(glamdb:pod_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) < +Inf)) and on() ((time() - min(timestamp(glamdb_cgroup_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) >= -5) and (time() - min(timestamp(glamdb_cgroup_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) < 90) and on() (time() - min(timestamp(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) >= -5) and (time() - min(timestamp(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) < 90) and on() (time()-min(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"}) < 90) and on() (time()-max(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"}) >= -5) and on() (min(glamdb_cgroup_collector_success{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",collector=\"memory\"}) == 1))",
+          "expr": "((max(sum(container_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) > -Inf) and (max(sum(container_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) < +Inf)) and on() ((time() - min(timestamp(container_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) >= -5) and (time() - min(timestamp(container_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) < 90) and on() (time() - min(timestamp(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) >= -5) and (time() - min(timestamp(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) < 90) and on() (time()-min(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"}) < 90) and on() (time()-max(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"}) >= -5))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -1620,7 +1620,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(max(glamdb:pod_memory_anon_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) > -Inf) and (max(max(glamdb:pod_memory_anon_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) < +Inf)) and on() ((time() - min(timestamp(glamdb_cgroup_memory_anon_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) >= -5) and (time() - min(timestamp(glamdb_cgroup_memory_anon_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) < 90) and on() (time() - min(timestamp(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) >= -5) and (time() - min(timestamp(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"})) < 90) and on() (time()-min(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"}) < 90) and on() (time()-max(glamdb_resource_sample_timestamp_seconds{cluster=\"local\",namespace=\"default\",pod=\"glamdb\"}) >= -5) and on() (min(glamdb_cgroup_collector_success{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",collector=\"memory\"}) == 1))",
+          "expr": "((max(vector(0/0)) > -Inf) and (max(vector(0/0)) < +Inf)) and on() ((time() - min(timestamp(container_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) >= -5) and (time() - min(timestamp(container_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) < 90) and on() (time() - min(timestamp(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) >= -5) and (time() - min(timestamp(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"})) < 90) and on() (time()-min(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"}) < 90) and on() (time()-max(container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container!=\"\",container!=\"POD\"}) >= -5))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -1655,7 +1655,7 @@
           },
           "annotations": {
             "summary": "Pod anonymous memory",
-            "description": "Absolute anonymous bytes against an example 1 GiB budget: 70%/90%. Anonymous memory is distinct from reclaimable file cache.",
+            "description": "Exact anonymous memory has no standard cAdvisor/kubelet metric in this configuration. Always NODATA; RSS or working-set bytes are not substituted. Use a separately validated source before enabling this check.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -1675,7 +1675,7 @@
           },
           "annotations": {
             "summary": "Pod anonymous memory",
-            "description": "Absolute anonymous bytes against an example 1 GiB budget: 70%/90%. Anonymous memory is distinct from reclaimable file cache.",
+            "description": "Exact anonymous memory has no standard cAdvisor/kubelet metric in this configuration. Always NODATA; RSS or working-set bytes are not substituted. Use a separately validated source before enabling this check.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -1695,7 +1695,7 @@
           },
           "annotations": {
             "summary": "Pod anonymous memory",
-            "description": "Absolute anonymous bytes against an example 1 GiB budget: 70%/90%. Anonymous memory is distinct from reclaimable file cache.",
+            "description": "Exact anonymous memory has no standard cAdvisor/kubelet metric in this configuration. Always NODATA; RSS or working-set bytes are not substituted. Use a separately validated source before enabling this check.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
@@ -1715,14 +1715,14 @@
           },
           "annotations": {
             "summary": "Pod anonymous memory",
-            "description": "Absolute anonymous bytes against an example 1 GiB budget: 70%/90%. Anonymous memory is distinct from reclaimable file cache.",
+            "description": "Exact anonymous memory has no standard cAdvisor/kubelet metric in this configuration. Always NODATA; RSS or working-set bytes are not substituted. Use a separately validated source before enabling this check.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(max(glamdb_admission_pending_calls{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) > -Inf) and (max(max(glamdb_admission_pending_calls{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < +Inf)) and on() ((time() - min(timestamp(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) >= -5) and (time() - min(timestamp(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < 90) and on() (time() - min(timestamp(glamdb_admission_pending_calls{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) >= -5) and (time() - min(timestamp(glamdb_admission_pending_calls{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < 90) and on() (time()-min(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}) < 90) and on() (time()-max(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}) >= -5))",
+          "expr": "((max(max(glamdb_admission_pending_calls{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) > -Inf) and (max(max(glamdb_admission_pending_calls{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < +Inf)) and on() ((time() - min(timestamp(glamdb_admission_pending_calls{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) >= -5) and (time() - min(timestamp(glamdb_admission_pending_calls{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < 90) and on() (time() - min(timestamp(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (min(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -1812,7 +1812,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(max(glamdb_admission_owned_input_bytes{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) > -Inf) and (max(max(glamdb_admission_owned_input_bytes{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < +Inf)) and on() ((time() - min(timestamp(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) >= -5) and (time() - min(timestamp(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < 90) and on() (time() - min(timestamp(glamdb_admission_owned_input_bytes{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) >= -5) and (time() - min(timestamp(glamdb_admission_owned_input_bytes{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < 90) and on() (time()-min(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}) < 90) and on() (time()-max(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}) >= -5))",
+          "expr": "((max(max(glamdb_admission_owned_input_bytes{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) > -Inf) and (max(max(glamdb_admission_owned_input_bytes{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < +Inf)) and on() ((time() - min(timestamp(glamdb_admission_owned_input_bytes{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) >= -5) and (time() - min(timestamp(glamdb_admission_owned_input_bytes{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < 90) and on() (time() - min(timestamp(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (min(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -1902,7 +1902,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(sum(increase(glamdb_operations_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\",outcome=\"commit_unknown\"}[5m]))) > -Inf) and (max(sum(increase(glamdb_operations_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\",outcome=\"commit_unknown\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) >= -5) and (time() - min(timestamp(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < 90) and on() (time() - min(timestamp(glamdb_operations_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) >= -5) and (time() - min(timestamp(glamdb_operations_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < 90) and on() (time()-min(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}) < 90) and on() (time()-max(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}) >= -5))",
+          "expr": "((max(sum(increase(glamdb_operations_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\",outcome=\"commit_unknown\"}[5m]))) > -Inf) and (max(sum(increase(glamdb_operations_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\",outcome=\"commit_unknown\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(glamdb_operations_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) >= -5) and (time() - min(timestamp(glamdb_operations_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < 90) and on() (time() - min(timestamp(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (min(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -1992,7 +1992,7 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(sum(rate(glamdb_operation_errors_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}[5m]))) > -Inf) and (max(sum(rate(glamdb_operation_errors_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) >= -5) and (time() - min(timestamp(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < 90) and on() (time() - min(timestamp(glamdb_operation_errors_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) >= -5) and (time() - min(timestamp(glamdb_operation_errors_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < 90) and on() (time()-min(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}) < 90) and on() (time()-max(glamdb_metrics_snapshot_timestamp_seconds{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}) >= -5))",
+          "expr": "((max(sum(rate(glamdb_operation_errors_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}[5m]))) > -Inf) and (max(sum(rate(glamdb_operation_errors_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(glamdb_operation_errors_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) >= -5) and (time() - min(timestamp(glamdb_operation_errors_total{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < 90) and on() (time() - min(timestamp(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (min(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"}) == 1))",
           "labels": {
             "cluster": "local",
             "service": "glamdb",
@@ -2352,276 +2352,6 @@
         },
         {
           "record": "glamdb_alert_value",
-          "expr": "((max(1-min(up{job=\"glamdb-alert-transport\",cluster=\"local\"})) > -Inf) and (max(1-min(up{job=\"glamdb-alert-transport\",cluster=\"local\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-alert-transport\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-alert-transport\",cluster=\"local\"})) < 90))",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_availability"
-          }
-        },
-        {
-          "record": "glamdb_alert_state",
-          "expr": "((glamdb_alert_value{check=\"transport_availability\",cluster=\"local\",service=\"alerting\"} >= bool 0.5) + (glamdb_alert_value{check=\"transport_availability\",cluster=\"local\",service=\"alerting\"} >= bool 1)) or on() vector(3)",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_availability"
-          }
-        },
-        {
-          "alert": "GlamDBCheckState",
-          "expr": "glamdb_alert_state{check=\"transport_availability\",cluster=\"local\",service=\"alerting\"} == 0",
-          "for": "2m",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_availability",
-            "state": "OK",
-            "notify_nodata": "true"
-          },
-          "annotations": {
-            "summary": "transport availability",
-            "description": "A pipeline component cannot deliver a notification about its own complete failure. Watch this state from an independent observer.",
-            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
-            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
-          }
-        },
-        {
-          "alert": "GlamDBCheckState",
-          "expr": "glamdb_alert_state{check=\"transport_availability\",cluster=\"local\",service=\"alerting\"} == 1",
-          "for": "2m",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_availability",
-            "state": "WARN",
-            "notify_nodata": "true"
-          },
-          "annotations": {
-            "summary": "transport availability",
-            "description": "A pipeline component cannot deliver a notification about its own complete failure. Watch this state from an independent observer.",
-            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
-            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
-          }
-        },
-        {
-          "alert": "GlamDBCheckState",
-          "expr": "glamdb_alert_state{check=\"transport_availability\",cluster=\"local\",service=\"alerting\"} == 2",
-          "for": "1m",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_availability",
-            "state": "ALARM",
-            "notify_nodata": "true"
-          },
-          "annotations": {
-            "summary": "transport availability",
-            "description": "A pipeline component cannot deliver a notification about its own complete failure. Watch this state from an independent observer.",
-            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
-            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
-          }
-        },
-        {
-          "alert": "GlamDBCheckState",
-          "expr": "glamdb_alert_state{check=\"transport_availability\",cluster=\"local\",service=\"alerting\"} == 3",
-          "for": "2m",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_availability",
-            "state": "NODATA",
-            "notify_nodata": "true"
-          },
-          "annotations": {
-            "summary": "transport availability",
-            "description": "A pipeline component cannot deliver a notification about its own complete failure. Watch this state from an independent observer.",
-            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
-            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
-          }
-        },
-        {
-          "record": "glamdb_alert_value",
-          "expr": "((max(max(glamdb_alert_transport_pending{job=\"glamdb-alert-transport\",cluster=\"local\"}/glamdb_alert_transport_capacity{job=\"glamdb-alert-transport\",cluster=\"local\"})) > -Inf) and (max(max(glamdb_alert_transport_pending{job=\"glamdb-alert-transport\",cluster=\"local\"}/glamdb_alert_transport_capacity{job=\"glamdb-alert-transport\",cluster=\"local\"})) < +Inf)) and on() ((time() - min(timestamp(glamdb_alert_transport_pending{job=\"glamdb-alert-transport\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(glamdb_alert_transport_pending{job=\"glamdb-alert-transport\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(glamdb_alert_transport_capacity{job=\"glamdb-alert-transport\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(glamdb_alert_transport_capacity{job=\"glamdb-alert-transport\",cluster=\"local\"})) < 90) and on() (min(up{job=\"glamdb-alert-transport\",cluster=\"local\"}) == 1))",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_queue"
-          }
-        },
-        {
-          "record": "glamdb_alert_state",
-          "expr": "((glamdb_alert_value{check=\"transport_queue\",cluster=\"local\",service=\"alerting\"} >= bool 0.5) + (glamdb_alert_value{check=\"transport_queue\",cluster=\"local\",service=\"alerting\"} >= bool 0.8)) or on() vector(3)",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_queue"
-          }
-        },
-        {
-          "alert": "GlamDBCheckState",
-          "expr": "glamdb_alert_state{check=\"transport_queue\",cluster=\"local\",service=\"alerting\"} == 0",
-          "for": "2m",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_queue",
-            "state": "OK",
-            "notify_nodata": "false"
-          },
-          "annotations": {
-            "summary": "Telegram durable outbox occupancy",
-            "description": "WARN at 50%, ALARM at 80% of the bounded outbox. Full queue returns 503 so Alertmanager retries.",
-            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
-            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
-          }
-        },
-        {
-          "alert": "GlamDBCheckState",
-          "expr": "glamdb_alert_state{check=\"transport_queue\",cluster=\"local\",service=\"alerting\"} == 1",
-          "for": "2m",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_queue",
-            "state": "WARN",
-            "notify_nodata": "false"
-          },
-          "annotations": {
-            "summary": "Telegram durable outbox occupancy",
-            "description": "WARN at 50%, ALARM at 80% of the bounded outbox. Full queue returns 503 so Alertmanager retries.",
-            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
-            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
-          }
-        },
-        {
-          "alert": "GlamDBCheckState",
-          "expr": "glamdb_alert_state{check=\"transport_queue\",cluster=\"local\",service=\"alerting\"} == 2",
-          "for": "1m",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_queue",
-            "state": "ALARM",
-            "notify_nodata": "false"
-          },
-          "annotations": {
-            "summary": "Telegram durable outbox occupancy",
-            "description": "WARN at 50%, ALARM at 80% of the bounded outbox. Full queue returns 503 so Alertmanager retries.",
-            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
-            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
-          }
-        },
-        {
-          "alert": "GlamDBCheckState",
-          "expr": "glamdb_alert_state{check=\"transport_queue\",cluster=\"local\",service=\"alerting\"} == 3",
-          "for": "2m",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_queue",
-            "state": "NODATA",
-            "notify_nodata": "false"
-          },
-          "annotations": {
-            "summary": "Telegram durable outbox occupancy",
-            "description": "WARN at 50%, ALARM at 80% of the bounded outbox. Full queue returns 503 so Alertmanager retries.",
-            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
-            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
-          }
-        },
-        {
-          "record": "glamdb_alert_value",
-          "expr": "((max(sum(increase(glamdb_alert_transport_events_total{job=\"glamdb-alert-transport\",cluster=\"local\",outcome=~\"rejected|exhausted|expired\"}[5m])) or vector(0)) > -Inf) and (max(sum(increase(glamdb_alert_transport_events_total{job=\"glamdb-alert-transport\",cluster=\"local\",outcome=~\"rejected|exhausted|expired\"}[5m])) or vector(0)) < +Inf)) and on() ((time() - min(timestamp(glamdb_alert_transport_pending{job=\"glamdb-alert-transport\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(glamdb_alert_transport_pending{job=\"glamdb-alert-transport\",cluster=\"local\"})) < 90) and on() (min(up{job=\"glamdb-alert-transport\",cluster=\"local\"}) == 1))",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_delivery_failures"
-          }
-        },
-        {
-          "record": "glamdb_alert_state",
-          "expr": "((glamdb_alert_value{check=\"transport_delivery_failures\",cluster=\"local\",service=\"alerting\"} >= bool 0.5) + (glamdb_alert_value{check=\"transport_delivery_failures\",cluster=\"local\",service=\"alerting\"} >= bool 1)) or on() vector(3)",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_delivery_failures"
-          }
-        },
-        {
-          "alert": "GlamDBCheckState",
-          "expr": "glamdb_alert_state{check=\"transport_delivery_failures\",cluster=\"local\",service=\"alerting\"} == 0",
-          "for": "2m",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_delivery_failures",
-            "state": "OK",
-            "notify_nodata": "false"
-          },
-          "annotations": {
-            "summary": "Telegram permanent delivery failures",
-            "description": "Rejected, exhausted, or expired deliveries in five minutes; inspect credentials, Telegram membership, network and outbox metrics. Counters may be absent before their first event.",
-            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
-            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
-          }
-        },
-        {
-          "alert": "GlamDBCheckState",
-          "expr": "glamdb_alert_state{check=\"transport_delivery_failures\",cluster=\"local\",service=\"alerting\"} == 1",
-          "for": "2m",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_delivery_failures",
-            "state": "WARN",
-            "notify_nodata": "false"
-          },
-          "annotations": {
-            "summary": "Telegram permanent delivery failures",
-            "description": "Rejected, exhausted, or expired deliveries in five minutes; inspect credentials, Telegram membership, network and outbox metrics. Counters may be absent before their first event.",
-            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
-            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
-          }
-        },
-        {
-          "alert": "GlamDBCheckState",
-          "expr": "glamdb_alert_state{check=\"transport_delivery_failures\",cluster=\"local\",service=\"alerting\"} == 2",
-          "for": "1m",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_delivery_failures",
-            "state": "ALARM",
-            "notify_nodata": "false"
-          },
-          "annotations": {
-            "summary": "Telegram permanent delivery failures",
-            "description": "Rejected, exhausted, or expired deliveries in five minutes; inspect credentials, Telegram membership, network and outbox metrics. Counters may be absent before their first event.",
-            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
-            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
-          }
-        },
-        {
-          "alert": "GlamDBCheckState",
-          "expr": "glamdb_alert_state{check=\"transport_delivery_failures\",cluster=\"local\",service=\"alerting\"} == 3",
-          "for": "2m",
-          "labels": {
-            "cluster": "local",
-            "service": "alerting",
-            "check": "transport_delivery_failures",
-            "state": "NODATA",
-            "notify_nodata": "false"
-          },
-          "annotations": {
-            "summary": "Telegram permanent delivery failures",
-            "description": "Rejected, exhausted, or expired deliveries in five minutes; inspect credentials, Telegram membership, network and outbox metrics. Counters may be absent before their first event.",
-            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
-            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
-          }
-        },
-        {
-          "record": "glamdb_alert_value",
           "expr": "((max(max(loki_ingester_wal_disk_usage_percent{job=\"loki\",cluster=\"local\"})) > -Inf) and (max(max(loki_ingester_wal_disk_usage_percent{job=\"loki\",cluster=\"local\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=\"loki\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=\"loki\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(loki_ingester_wal_disk_usage_percent{job=\"loki\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(loki_ingester_wal_disk_usage_percent{job=\"loki\",cluster=\"local\"})) < 90) and on() (min(up{job=\"loki\",cluster=\"local\"}) == 1))",
           "labels": {
             "cluster": "local",
@@ -2796,6 +2526,276 @@
           "annotations": {
             "summary": "Loki WAL disk-full guard",
             "description": "Any WAL disk-full guard event in five minutes alarms. This counter measures guard events, not every rejected log write.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "record": "glamdb_alert_value",
+          "expr": "((max(sum(increase(alertmanager_notification_requests_failed_total{job=\"alertmanager\",cluster=\"local\",integration=\"telegram\"}[5m]))) > -Inf) and (max(sum(increase(alertmanager_notification_requests_failed_total{job=\"alertmanager\",cluster=\"local\",integration=\"telegram\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(up{job=\"alertmanager\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=\"alertmanager\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(alertmanager_notification_requests_failed_total{job=\"alertmanager\",cluster=\"local\",integration=\"telegram\"})) >= -5) and (time() - min(timestamp(alertmanager_notification_requests_failed_total{job=\"alertmanager\",cluster=\"local\",integration=\"telegram\"})) < 90) and on() (min(up{job=\"alertmanager\",cluster=\"local\"}) == 1))",
+          "labels": {
+            "cluster": "local",
+            "service": "alerting",
+            "check": "alertmanager_delivery_failures"
+          }
+        },
+        {
+          "record": "glamdb_alert_state",
+          "expr": "((glamdb_alert_value{check=\"alertmanager_delivery_failures\",cluster=\"local\",service=\"alerting\"} >= bool 0.5) + (glamdb_alert_value{check=\"alertmanager_delivery_failures\",cluster=\"local\",service=\"alerting\"} >= bool 1)) or on() vector(3)",
+          "labels": {
+            "cluster": "local",
+            "service": "alerting",
+            "check": "alertmanager_delivery_failures"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"alertmanager_delivery_failures\",cluster=\"local\",service=\"alerting\"} == 0",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "alerting",
+            "check": "alertmanager_delivery_failures",
+            "state": "OK",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Alertmanager Telegram request failures",
+            "description": "Failed native Telegram attempts in five minutes, including retried requests. Inspect alertmanager_notifications_failed_total for final notification failures; acceptance by Telegram does not imply a human read the message.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"alertmanager_delivery_failures\",cluster=\"local\",service=\"alerting\"} == 1",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "alerting",
+            "check": "alertmanager_delivery_failures",
+            "state": "WARN",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Alertmanager Telegram request failures",
+            "description": "Failed native Telegram attempts in five minutes, including retried requests. Inspect alertmanager_notifications_failed_total for final notification failures; acceptance by Telegram does not imply a human read the message.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"alertmanager_delivery_failures\",cluster=\"local\",service=\"alerting\"} == 2",
+          "for": "1m",
+          "labels": {
+            "cluster": "local",
+            "service": "alerting",
+            "check": "alertmanager_delivery_failures",
+            "state": "ALARM",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Alertmanager Telegram request failures",
+            "description": "Failed native Telegram attempts in five minutes, including retried requests. Inspect alertmanager_notifications_failed_total for final notification failures; acceptance by Telegram does not imply a human read the message.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"alertmanager_delivery_failures\",cluster=\"local\",service=\"alerting\"} == 3",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "alerting",
+            "check": "alertmanager_delivery_failures",
+            "state": "NODATA",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Alertmanager Telegram request failures",
+            "description": "Failed native Telegram attempts in five minutes, including retried requests. Inspect alertmanager_notifications_failed_total for final notification failures; acceptance by Telegram does not imply a human read the message.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "record": "glamdb_alert_value",
+          "expr": "((max(1-min(up{job=\"prometheus\",cluster=\"local\"})) > -Inf) and (max(1-min(up{job=\"prometheus\",cluster=\"local\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=\"prometheus\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=\"prometheus\",cluster=\"local\"})) < 90))",
+          "labels": {
+            "cluster": "local",
+            "service": "monitoring",
+            "check": "prometheus_availability"
+          }
+        },
+        {
+          "record": "glamdb_alert_state",
+          "expr": "((glamdb_alert_value{check=\"prometheus_availability\",cluster=\"local\",service=\"monitoring\"} >= bool 0.5) + (glamdb_alert_value{check=\"prometheus_availability\",cluster=\"local\",service=\"monitoring\"} >= bool 1)) or on() vector(3)",
+          "labels": {
+            "cluster": "local",
+            "service": "monitoring",
+            "check": "prometheus_availability"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"prometheus_availability\",cluster=\"local\",service=\"monitoring\"} == 0",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "monitoring",
+            "check": "prometheus_availability",
+            "state": "OK",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Prometheus scrape availability",
+            "description": "This local rule cannot report the death of its own evaluator. Deploy the separate observer on another host and notification path.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"prometheus_availability\",cluster=\"local\",service=\"monitoring\"} == 1",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "monitoring",
+            "check": "prometheus_availability",
+            "state": "WARN",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Prometheus scrape availability",
+            "description": "This local rule cannot report the death of its own evaluator. Deploy the separate observer on another host and notification path.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"prometheus_availability\",cluster=\"local\",service=\"monitoring\"} == 2",
+          "for": "1m",
+          "labels": {
+            "cluster": "local",
+            "service": "monitoring",
+            "check": "prometheus_availability",
+            "state": "ALARM",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Prometheus scrape availability",
+            "description": "This local rule cannot report the death of its own evaluator. Deploy the separate observer on another host and notification path.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"prometheus_availability\",cluster=\"local\",service=\"monitoring\"} == 3",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "monitoring",
+            "check": "prometheus_availability",
+            "state": "NODATA",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Prometheus scrape availability",
+            "description": "This local rule cannot report the death of its own evaluator. Deploy the separate observer on another host and notification path.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "record": "glamdb_alert_value",
+          "expr": "((max(sum(increase(prometheus_rule_evaluation_failures_total{job=\"prometheus\",cluster=\"local\"}[5m]))) > -Inf) and (max(sum(increase(prometheus_rule_evaluation_failures_total{job=\"prometheus\",cluster=\"local\"}[5m]))) < +Inf)) and on() ((time() - min(timestamp(up{job=\"prometheus\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(up{job=\"prometheus\",cluster=\"local\"})) < 90) and on() (time() - min(timestamp(prometheus_rule_evaluation_failures_total{job=\"prometheus\",cluster=\"local\"})) >= -5) and (time() - min(timestamp(prometheus_rule_evaluation_failures_total{job=\"prometheus\",cluster=\"local\"})) < 90) and on() (min(up{job=\"prometheus\",cluster=\"local\"}) == 1))",
+          "labels": {
+            "cluster": "local",
+            "service": "monitoring",
+            "check": "prometheus_rule_failures"
+          }
+        },
+        {
+          "record": "glamdb_alert_state",
+          "expr": "((glamdb_alert_value{check=\"prometheus_rule_failures\",cluster=\"local\",service=\"monitoring\"} >= bool 0.5) + (glamdb_alert_value{check=\"prometheus_rule_failures\",cluster=\"local\",service=\"monitoring\"} >= bool 1)) or on() vector(3)",
+          "labels": {
+            "cluster": "local",
+            "service": "monitoring",
+            "check": "prometheus_rule_failures"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"prometheus_rule_failures\",cluster=\"local\",service=\"monitoring\"} == 0",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "monitoring",
+            "check": "prometheus_rule_failures",
+            "state": "OK",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Prometheus rule evaluation errors",
+            "description": "Failed evaluations are an evaluator fault, not a healthy measurement or a reason to synthesize OK. Inspect /rules and the independent observer.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"prometheus_rule_failures\",cluster=\"local\",service=\"monitoring\"} == 1",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "monitoring",
+            "check": "prometheus_rule_failures",
+            "state": "WARN",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Prometheus rule evaluation errors",
+            "description": "Failed evaluations are an evaluator fault, not a healthy measurement or a reason to synthesize OK. Inspect /rules and the independent observer.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"prometheus_rule_failures\",cluster=\"local\",service=\"monitoring\"} == 2",
+          "for": "1m",
+          "labels": {
+            "cluster": "local",
+            "service": "monitoring",
+            "check": "prometheus_rule_failures",
+            "state": "ALARM",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Prometheus rule evaluation errors",
+            "description": "Failed evaluations are an evaluator fault, not a healthy measurement or a reason to synthesize OK. Inspect /rules and the independent observer.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"prometheus_rule_failures\",cluster=\"local\",service=\"monitoring\"} == 3",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "monitoring",
+            "check": "prometheus_rule_failures",
+            "state": "NODATA",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Prometheus rule evaluation errors",
+            "description": "Failed evaluations are an evaluator fault, not a healthy measurement or a reason to synthesize OK. Inspect /rules and the independent observer.",
             "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
             "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
           }

@@ -1,10 +1,12 @@
-"""Behavioral tests for state generation and the durable Telegram transport."""
+"""Behavioral tests for the finite four-state rule configuration."""
 
 import importlib.util
 import json
 from pathlib import Path
-import tempfile
 import unittest
+import subprocess
+import sys
+import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,131 +42,36 @@ class RulesTest(unittest.TestCase):
             generate.rules(config)
 
 
-class OutboxTest(unittest.TestCase):
-    def setUp(self):
-        self.assertTrue(Path(__file__).with_name("transport.py").exists())
-        self.transport = module("transport")
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.path = Path(self.tmp.name) / "outbox.sqlite"
-        self.now = 1000.0
-        self.box = self.transport.Outbox(self.path, capacity=2, clock=lambda: self.now)
-        self.addCleanup(self.box.close)
 
-    def event(self, state="ALARM", start="2026-01-01T00:00:00Z", check="cpu"):
-        return {"status": "firing", "startsAt": start,
-                "labels": {"check": check, "cluster": "local", "service": "glamdb",
-                           "state": state}, "annotations": {"summary": "CPU high"}}
+class ConfigurationTest(unittest.TestCase):
+    def test_setup_creates_only_native_receiver_secrets_and_requires_explicit_rotation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "secrets"
+            command = [sys.executable, str(ROOT / "tools/alerting/configure.py"), "--secrets-dir", str(root)]
+            result = subprocess.run(command, input="12345:LOCAL_FAKE_TOKEN\n-10012345\n", text=True,
+                                    capture_output=True, check=True)
+            self.assertEqual({p.name for p in root.iterdir()}, {"telegram_bot_token", "telegram_chat_id"})
+            self.assertEqual(root.stat().st_mode & 0o777, 0o700)
+            self.assertEqual((root / "telegram_bot_token").stat().st_mode & 0o777, 0o444)
+            self.assertEqual((root / "telegram_chat_id").read_text().strip(), "-10012345")
+            self.assertNotIn("LOCAL_FAKE_TOKEN", result.stdout + result.stderr)
+            refused = subprocess.run(command, text=True, capture_output=True)
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn("--rotate", refused.stderr)
+            subprocess.run(command + ["--rotate"], input="54321:NEW_LOCAL_FAKE_TOKEN\n-10054321\n",
+                           text=True, capture_output=True, check=True)
+            self.assertEqual((root / "telegram_chat_id").read_text().strip(), "-10054321")
 
-    def test_resolved_alert_cannot_create_ok(self):
-        event = self.event("OK")
-        event["status"] = "resolved"
-        self.box.accept([event])
-        self.assertEqual(self.box.pending(), [])
-
-    def test_coalesces_state_and_ignores_late_old_event(self):
-        self.box.accept([self.event("ALARM")])
-        self.box.accept([self.event("NODATA", "2026-01-01T00:01:00Z")])
-        self.box.accept([self.event("ALARM")])
-        self.assertEqual([x["state"] for x in self.box.pending()], ["NODATA"])
-
-    def test_dedup_survives_restart(self):
-        self.box.accept([self.event()])
-        self.box.complete(self.box.pending()[0])
-        self.box.close()
-        self.box = self.transport.Outbox(self.path, capacity=2, clock=lambda: self.now)
-        self.addCleanup(self.box.close)
-        self.box.accept([self.event()])
-        self.assertEqual(self.box.pending(), [])
-
-    def test_retry_deadline_survives_restart(self):
-        self.box.accept([self.event()])
-        self.box.retry(self.box.pending()[0], retry_after=20)
-        self.box.close()
-        self.box = self.transport.Outbox(self.path, capacity=2, clock=lambda: self.now)
-        self.addCleanup(self.box.close)
-        self.assertEqual(self.box.pending(), [])
-        self.now += 22
-        self.assertEqual(self.box.pending()[0]["attempts"], 1)
-
-    def test_chat_backoff_survives_restart(self):
-        self.box.accept([self.event()])
-        self.box.defer_chat(20)
-        self.box.close()
-        self.box = self.transport.Outbox(self.path, capacity=2, clock=lambda: self.now)
-        self.addCleanup(self.box.close)
-        self.assertEqual(self.box.pending(), [])
-        self.now += 21
-        self.assertEqual(len(self.box.pending()), 1)
-
-    def test_identical_alarm_reminder_can_repeat_after_four_hours(self):
-        self.box.accept([self.event()])
-        self.box.complete(self.box.pending()[0])
-        self.now += 14401
-        self.box.accept([self.event()])
-        self.assertEqual(len(self.box.pending()), 1)
-
-    def test_expiry_and_retry_exhaustion_are_observable(self):
-        self.box.accept([self.event("OK")])
-        self.now += 301
-        self.assertEqual(self.box.pending(), [])
-        self.assertIn('outcome="expired"} 1', self.box.metrics())
-        self.box.accept([self.event(check="other")])
-        self.box.retry(self.box.pending()[0], max_attempts=1)
-        self.assertEqual(self.box.pending(), [])
-        self.assertIn('outcome="exhausted"} 1', self.box.metrics())
-
-    def test_full_queue_rejects_whole_batch(self):
-        self.box.accept([self.event(check="a"), self.event(check="b")])
-        with self.assertRaises(self.transport.QueueFull):
-            self.box.accept([self.event("WARN", check="a"), self.event(check="c")])
-        self.assertEqual([x["state"] for x in self.box.pending()], ["ALARM", "ALARM"])
-
-    def test_retry_is_bounded_and_persistent(self):
-        self.box.accept([self.event()])
-        event = self.box.pending()[0]
-        self.box.retry(event, retry_after=17)
-        self.assertEqual(self.box.pending(), [])
-        self.now += 18
-        event = self.box.pending()[0]
-        self.assertEqual(event["attempts"], 1)
-        self.box.retry(event, retry_after=5000)
-        self.now += 3601
-        self.assertEqual(self.box.pending(), [])
-        self.now += 1401
-        self.assertEqual(len(self.box.pending()), 1)
-
-    def test_missing_or_stale_state_never_validates_recovery(self):
-        transport = self.transport
-        labels = self.event("OK")["labels"]
-        for result in ([], [{"metric": {}, "value": [1000, "3"]}],
-                       [{"metric": {}, "value": [0, "0"]}],
-                       [{"metric": {}, "value": [1000, "NaN"]}]):
-            with self.subTest(result=result):
-                self.assertFalse(transport.valid_recovery(result, labels, now=1000, max_age=90))
-        self.assertTrue(transport.valid_recovery(
-            [{"metric": labels, "value": [1000, "0"]}], labels, now=1000, max_age=90))
-
-    def test_label_mismatch_cannot_validate_recovery(self):
-        labels = self.event("OK")["labels"]
-        self.assertFalse(self.transport.valid_recovery(
-            [{"metric": {**labels, "service": "other"}, "value": [1000, "0"]}],
-            labels, now=1000, max_age=90))
-
-    def test_untrusted_payload_cannot_choose_chat_or_inject_markup(self):
-        event = self.event()
-        event["labels"]["chat_id"] = "999"
-        event["annotations"]["summary"] = "<b>unsafe</b>\nforged"
-        self.box.accept([event])
-        row = self.box.pending()[0]
-        self.assertNotIn("chat_id", row["labels"])
-        self.assertNotIn("<b>", self.transport.message(row))
-
-    def test_identity_history_is_bounded(self):
-        for i in range(50):
-            self.box.accept([self.event(check=str(i))])
-            self.box.complete(self.box.pending()[0])
-        self.assertLessEqual(self.box.history_size(), 4)
+    def test_external_observer_is_a_separate_deployment_with_independent_notification_path(self):
+        path = ROOT / "deploy/alerting/external-observer/prometheus.yml"
+        self.assertTrue(path.is_file(), "a Prometheus on the failed host cannot report its own loss")
+        config = path.read_text()
+        self.assertIn("independent-alertmanager.example.invalid", config)
+        self.assertIn("glamdb-host.example.invalid:9090", config)
+        self.assertIn("glamdb-host.example.invalid:9093", config)
+        rules = ROOT / "deploy/alerting/external-observer/rules.yml"
+        self.assertTrue(rules.is_file())
+        self.assertIn("absent(up", rules.read_text())
 
 
 if __name__ == "__main__":

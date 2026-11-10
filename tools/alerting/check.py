@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run reproducible rule, transport, and complete loopback stack checks."""
+"""Run reproducible rules and native Alertmanager Telegram loopback checks."""
 
 import argparse
 import os
@@ -28,8 +28,10 @@ def main():
         [sys.executable, "tools/alerting/generate.py", "--check"],
         [args.promtool, "check", "rules", "deploy/alerting/generated/states.yml"],
         [args.promtool, "test", "rules", "deploy/alerting/tests/states.test.yml"],
+        [args.promtool, "check", "config", "deploy/alerting/external-observer/prometheus.yml"],
+        [args.promtool, "test", "rules", "deploy/alerting/tests/observer.test.yml"],
         [args.amtool, "check-config", "deploy/alerting/alertmanager.yml"],
-        [sys.executable, "-m", "unittest", "discover", "-s", "tools/alerting", "-p", "test_*.py"],
+        [sys.executable, "-m", "unittest", "discover", "-s", "tools/alerting", "-p", "test_*.py", "-v"],
     ]
     for command in commands:
         subprocess.run(command, cwd=ROOT, env=env, check=True)
