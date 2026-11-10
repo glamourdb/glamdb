@@ -14,7 +14,8 @@
     "loki": "job=\"loki\",cluster=\"local\"",
     "prometheus": "job=\"prometheus\",cluster=\"local\"",
     "coretarget": "job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"",
-    "edge": "job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\""
+    "edge": "job=\"glamdb-edge\",cluster=\"local\",service=\"glamdb\"",
+    "cadvisor": "job=~\"cadvisor|kubelet\",cluster=\"local\""
   },
   "max_age_seconds": 90,
   "evaluation_interval": "15s",
@@ -285,11 +286,10 @@
       "alarm": 1.9,
       "fresh": [
         "container_cpu_usage_seconds_total{$pod}",
-        "container_last_seen{$pod}"
+        "up{$cadvisor}"
       ],
       "guards": [
-        "time()-min(container_last_seen{$pod}) < 90",
-        "time()-max(container_last_seen{$pod}) >= -5"
+        "min(up{$cadvisor}) == 1"
       ],
       "summary": "Pod CPU consumption",
       "description": "CPU cores against an example 2-core budget. Set thresholds to the actual pod quota.",
@@ -306,11 +306,10 @@
       "alarm": 0.5,
       "fresh": [
         "container_cpu_cfs_throttled_seconds_total{$pod}",
-        "container_last_seen{$pod}"
+        "up{$cadvisor}"
       ],
       "guards": [
-        "time()-min(container_last_seen{$pod}) < 90",
-        "time()-max(container_last_seen{$pod}) >= -5"
+        "min(up{$cadvisor}) == 1"
       ],
       "summary": "Pod CPU throttling",
       "description": "Throttled seconds per second; this is not a percent of quota.",
@@ -327,11 +326,10 @@
       "alarm": 1020054732,
       "fresh": [
         "container_memory_usage_bytes{$pod}",
-        "container_last_seen{$pod}"
+        "up{$cadvisor}"
       ],
       "guards": [
-        "time()-min(container_last_seen{$pod}) < 90",
-        "time()-max(container_last_seen{$pod}) >= -5"
+        "min(up{$cadvisor}) == 1"
       ],
       "summary": "Pod total memory",
       "description": "Absolute bytes against an example 1 GiB budget: 80%/95%. Set to actual memory.max.",
@@ -348,11 +346,10 @@
       "alarm": 966367641,
       "fresh": [
         "container_memory_usage_bytes{$pod}",
-        "container_last_seen{$pod}"
+        "up{$cadvisor}"
       ],
       "guards": [
-        "time()-min(container_last_seen{$pod}) < 90",
-        "time()-max(container_last_seen{$pod}) >= -5"
+        "min(up{$cadvisor}) == 1"
       ],
       "summary": "Pod anonymous memory",
       "description": "Exact anonymous memory has no standard cAdvisor/kubelet metric in this configuration. Always NODATA; RSS or working-set bytes are not substituted. Use a separately validated source before enabling this check.",

@@ -426,7 +426,7 @@
       ]
     },
     {
-      "name": "Loki WAL uses fractions and stale container observations never become healthy",
+      "name": "fresh container statistics do not depend on the scrape-time last_seen metric",
       "interval": "15s",
       "input_series": [
         {
@@ -439,11 +439,11 @@
         },
         {
           "series": "container_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container=\"core\"}",
-          "values": "1000000000+0x30"
+          "values": "1000000+0x8 _x30"
         },
         {
-          "series": "container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container=\"core\"}",
-          "values": "0+0x30"
+          "series": "up{job=\"cadvisor\",cluster=\"local\"}",
+          "values": "1+0x30"
         }
       ],
       "promql_expr_test": [
@@ -464,6 +464,56 @@
             {
               "labels": "{}",
               "value": 3
+            }
+          ]
+        },
+        {
+          "expr": "max(glamdb_alert_state{check=\"pod_memory\"})",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a fresh cAdvisor scrape clock cannot make removed container statistics current",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "up{job=\"cadvisor\",cluster=\"local\"}",
+          "values": "1+0x30"
+        },
+        {
+          "series": "container_memory_usage_bytes{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container=\"core\"}",
+          "values": "1000000+0x8 _x30"
+        },
+        {
+          "series": "container_last_seen{cluster=\"local\",namespace=\"default\",pod=\"glamdb\",container=\"core\"}",
+          "values": "0+15x30"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "max(glamdb_alert_state{check=\"pod_memory\"})",
+          "eval_time": "4m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{check=\"pod_memory\",state=\"OK\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "4m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
             }
           ]
         }
