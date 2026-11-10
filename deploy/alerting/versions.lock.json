@@ -11,6 +11,7 @@
     "source": "https://hub.docker.com/_/python"
   },
   "prometheus": {
+    "image": "prom/prometheus:v3.13.5@sha256:aafa9d694e6a883c02db516d9f6e5b84e14195f49a2a6456a4cca815edda72b9",
     "tested_versions": ["3.13.5", "3.16.0"],
     "source": "https://prometheus.io/download/"
   }
