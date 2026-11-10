@@ -168,6 +168,24 @@ def test_scan_json_decodes_exact_values_and_explain_shares_fixed_request():
     assert sent[0][1] == sent[1][1] == {"projection": ["key", "n"], "predicate": {"op": "ge", "field": "n", "value": "9007199254740993"}, "snapshot_id": "5", "limit": 1}
 
 
+@pytest.mark.parametrize("extra", [0, 1], ids=["exact-limit", "one-byte-over"])
+def test_scan_json_applies_canonical_decoded_row_limit(extra):
+    schema = Schema([Field("a", "string"), Field("b", "string")] + [
+        Field(f"n{index}", "int64") for index in range(62)])
+    # 1048576 + 1048008 + 2 * 5 + 62 * 9 = 2097152 decoded bytes.
+    row = {"a": "x" * 1048576, "b": "y" * (1048008 + extra)} | {
+        f"n{index}": "9223372036854775807" for index in range(62)}
+    response = {"schema": schema.to_dict(), "snapshot_id": "5", "rows": [row],
+                "profile": {"synthetic": True}, "identity": {"current_snapshot_id": "5"}}
+    with client_with(lambda request: reply(response)) as client:
+        if extra:
+            with pytest.raises(ProtocolError, match="invalid scan JSON response"):
+                client.scan_json(CID)
+        else:
+            expected = row | {f"n{index}": 9223372036854775807 for index in range(62)}
+            assert client.scan_json(CID).rows == [expected]
+
+
 @pytest.mark.parametrize("status,error_type", [(401, AuthenticationError), (403, AuthenticationError), (503, HTTPError)])
 def test_http_errors_preserve_full_detail_separate_from_write_outcomes(status, error_type):
     with client_with(lambda request: reply({"error": {"code": "NO", "message": "reason", "retry_hint": "OperatorAction", "trace": {"id": "x"}}}, status)) as client:

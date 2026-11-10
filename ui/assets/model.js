@@ -6,15 +6,52 @@ const TIMESTAMP =
 
 export const selectionKey = (collectionId, snapshotId) =>
     JSON.stringify([collectionId, snapshotId]);
+export function resetConnection(state) {
+    return {
+        base: state.base,
+        theme: state.theme,
+        themePreview: state.themePreview,
+        api: null,
+        token: '',
+        capabilities: null,
+        collections: [],
+        collectionId: null,
+        snapshotId: null,
+        resolvedSnapshot: null,
+        collection: null,
+        schema: null,
+        stats: null,
+        snapshots: [],
+        files: [],
+        rows: [],
+        result: null,
+        plan: null,
+        selectedFile: null,
+        lastQuery: null,
+        epoch: (state.epoch ?? 0) + 1,
+        tab: 'overview',
+        clauses: [],
+        join: 'and',
+        negate: false,
+        projection: [],
+        limit: 1000,
+        page: 0,
+        operations: [],
+        mutation: null,
+        creation: null,
+    };
+}
 export function selectView(state, collectionId, snapshotId = null) {
     return {
         ...state,
         collectionId,
         snapshotId,
+        resolvedSnapshot: null,
         rows: [],
         result: null,
         plan: null,
         selectedFile: null,
+        lastQuery: null,
         page: 0,
         epoch: (state.epoch ?? 0) + 1,
     };

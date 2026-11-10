@@ -8,6 +8,7 @@ import {
     displayValue,
     prepareMutation,
     escapeHTML,
+    resetConnection,
 } from '../../assets/model.js';
 
 const fields = [
@@ -39,6 +40,82 @@ test('changing collection clears previous snapshot and query, preserving connect
 test('snapshot identity does not collapse initial and latest selectors', () => {
     assert.notEqual(selectionKey('a', null), selectionKey('a', 'initial'));
     assert.notEqual(selectionKey('a', '12'), selectionKey('b', '12'));
+});
+test('changing connection clears private data, selected view and query drafts', () => {
+    const theme = { brand: { name: 'GlamDB' } };
+    const previous = {
+        api: {},
+        token: 'private-token',
+        base: 'https://old.example',
+        capabilities: {},
+        collections: [{}],
+        collectionId: 'private-collection',
+        snapshotId: 'old-snapshot',
+        resolvedSnapshot: 'old-snapshot',
+        collection: {},
+        schema: {},
+        stats: {},
+        snapshots: [{}],
+        files: [{}],
+        rows: [{ key: 'private-row' }],
+        result: { rows: [{ key: 'private-row' }] },
+        plan: {},
+        selectedFile: 'private-file',
+        lastQuery: { snapshot_id: 'old-snapshot' },
+        tab: 'data',
+        clauses: [{}],
+        join: 'or',
+        negate: true,
+        projection: ['private-column'],
+        limit: 1,
+        page: 4,
+        operations: [{}],
+        mutation: {},
+        creation: {},
+        epoch: 9,
+        theme,
+        themePreview: true,
+    };
+    const cleared = resetConnection(previous);
+    for (const key of [
+        'api',
+        'capabilities',
+        'collectionId',
+        'snapshotId',
+        'resolvedSnapshot',
+        'collection',
+        'schema',
+        'stats',
+        'result',
+        'plan',
+        'selectedFile',
+        'lastQuery',
+        'mutation',
+        'creation',
+    ])
+        assert.equal(cleared[key], null, key);
+    for (const key of [
+        'collections',
+        'snapshots',
+        'files',
+        'rows',
+        'clauses',
+        'projection',
+        'operations',
+    ])
+        assert.deepEqual(cleared[key], [], key);
+    assert.equal(cleared.token, '');
+    assert.equal(cleared.tab, 'overview');
+    assert.equal(cleared.limit, 1000);
+    assert.equal(cleared.join, 'and');
+    assert.equal(cleared.negate, false);
+    assert.equal(cleared.page, 0);
+    assert.equal(cleared.epoch, 10);
+    assert.equal(cleared.theme, theme);
+    assert.equal(cleared.themePreview, true);
+    assert.equal(cleared.base, previous.base);
+    assert.equal(previous.rows[0].key, 'private-row');
+    assert.notEqual(resetConnection(cleared).rows, cleared.rows);
 });
 test('predicate builder preserves int64 precision and nested boolean choices', () => {
     assert.deepEqual(

@@ -4,6 +4,7 @@ import {
     escapeHTML as e,
     displayValue,
     selectView,
+    resetConnection,
     buildPredicate,
     wireRows,
     prepareMutation,
@@ -23,35 +24,14 @@ const nav = [
     ['operations', 'activity'],
     ['style', 'palette'],
 ];
-const state = {
-    api: null,
-    token: '',
+let state = resetConnection({
     base: location.origin,
-    collections: [],
-    collectionId: null,
-    snapshotId: null,
-    collection: null,
-    schema: null,
-    stats: null,
-    snapshots: [],
-    files: [],
-    rows: [],
-    result: null,
-    epoch: 0,
-    tab: 'overview',
-    clauses: [],
-    join: 'and',
-    negate: false,
-    projection: [],
-    limit: 1000,
-    page: 0,
-    operations: [],
-    mutation: null,
-    creation: null,
+    epoch: -1,
     theme: null,
     themePreview: false,
-};
-let viewController = null,
+});
+let connectionController = null,
+    viewController = null,
     queryController = null,
     queryGeneration = 0,
     toastTimer = null,
@@ -82,6 +62,20 @@ function toast(message) {
 }
 function report(error) {
     if (error.name !== 'AbortError') toast(error.message ?? 'Something went wrong');
+}
+function resetSession() {
+    connectionController?.abort();
+    viewController?.abort();
+    queryController?.abort();
+    connectionController = viewController = queryController = null;
+    queryGeneration++;
+    state = resetConnection(state);
+    creationFields = [];
+    $('#modal').close();
+    $('#modal').replaceChildren();
+    clearTimeout(toastTimer);
+    $('#toast').classList.remove('visible');
+    $('#toast').replaceChildren();
 }
 function setBusy(button, busy) {
     if (button) {
@@ -403,12 +397,12 @@ function styleView() {
         )}</div><div class="button-row" style="margin-top:24px"><button class="button" data-action="reset-theme">Reset preview</button><button class="button primary" data-action="download-theme">${icon('download')}Download theme.json</button></div></div></section><div class="notice" style="margin-top:20px">Permanent changes: edit <code>ui/config/theme.json</code> (or your server's --theme-file). This page reloads valid changes automatically. Preview changes above are local to this tab until reset. No core rebuild, frontend build or server restart is required.</div>`;
 }
 
-async function allPages(path, signal) {
+async function allPages(path, signal, api = state.api) {
     const items = [];
     let cursor = null;
     for (let pages = 0; pages < 100; pages++) {
         const separator = path.includes('?') ? '&' : '?';
-        const page = await state.api.json(
+        const page = await api.json(
             `${path}${separator}page_size=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
             { signal },
         );
@@ -430,19 +424,23 @@ async function refreshSelection() {
     viewController?.abort();
     viewController = new AbortController();
     const signal = viewController.signal,
+        api = state.api,
         epoch = state.epoch,
         id = state.collectionId;
-    const info = await state.api.json(`/v0/collections/${encodeURIComponent(id)}`, { signal });
+    const current = () =>
+        !signal.aborted && api === state.api && epoch === state.epoch && id === state.collectionId;
+    const info = await api.json(`/v0/collections/${encodeURIComponent(id)}`, { signal });
+    if (!current()) return;
     const selected =
         state.snapshotId === null ? (info.current_snapshot_id ?? 'initial') : state.snapshotId;
     const suffix = `?snapshot_id=${encodeURIComponent(selected)}`;
     const [schema, stats, snapshots, filesResult] = await Promise.all([
-        state.api.json(`/v0/collections/${encodeURIComponent(id)}/schema`, { signal }),
-        state.api.json(`/v0/collections/${encodeURIComponent(id)}/stats${suffix}`, { signal }),
-        allPages(`/v0/collections/${encodeURIComponent(id)}/snapshots`, signal),
-        allPages(`/v0/collections/${encodeURIComponent(id)}/files${suffix}`, signal),
+        api.json(`/v0/collections/${encodeURIComponent(id)}/schema`, { signal }),
+        api.json(`/v0/collections/${encodeURIComponent(id)}/stats${suffix}`, { signal }),
+        allPages(`/v0/collections/${encodeURIComponent(id)}/snapshots`, signal, api),
+        allPages(`/v0/collections/${encodeURIComponent(id)}/files${suffix}`, signal, api),
     ]);
-    if (epoch !== state.epoch || id !== state.collectionId) return;
+    if (!current()) return;
     state.collection = info;
     state.resolvedSnapshot = selected;
     state.schema = schema.schema ?? schema;
@@ -483,15 +481,17 @@ async function selectCollection(id, snapshot = null) {
     await refreshSelection();
 }
 async function refreshWorkspace() {
-    state.collections = await allPages('/v0/collections');
-    if (!state.collectionId && state.collections.length)
-        state.collectionId = state.collections[0].collection_id;
-    if (
-        state.collectionId &&
-        !state.collections.some((c) => c.collection_id === state.collectionId)
-    )
-        state.collectionId = null;
-    await refreshSelection();
+    const api = state.api,
+        epoch = state.epoch,
+        signal = connectionController?.signal;
+    const collections = await allPages('/v0/collections', signal, api);
+    if (api !== state.api || epoch !== state.epoch || signal?.aborted) return;
+    state.collections = collections;
+    const id = collections.some((c) => c.collection_id === state.collectionId)
+        ? state.collectionId
+        : (collections[0]?.collection_id ?? null);
+    if (id !== state.collectionId) await selectCollection(id);
+    else await refreshSelection();
 }
 async function runQuery() {
     const body = readQuery(),
@@ -637,6 +637,7 @@ async function createForm(form) {
                 draft.body,
             );
         } catch (error) {
+            if (state.api !== api) return;
             if ([400, 401, 403, 409, 413, 415, 422, 429].includes(error.status)) {
                 state.creation = null;
                 throw error;
@@ -659,7 +660,9 @@ async function createForm(form) {
         }
         if (state.api !== api) return;
         if (state.creation === draft) state.creation = null;
-        state.collections = await allPages('/v0/collections');
+        const collections = await allPages('/v0/collections', connectionController?.signal, api);
+        if (state.api !== api) return;
+        state.collections = collections;
         if (form.isConnected && epoch === state.epoch) {
             $('#modal').close();
             state.tab = 'data';
@@ -805,25 +808,61 @@ async function resolveOperation(id) {
     const operation = state.operations.find((item) => item.operationId === id) ?? state.mutation;
     if (!operation) throw new Error('No pending operation in this session');
     const api = state.api;
-    const received = await api.json(
-        `/v0/collections/${encodeURIComponent(operation.collectionId)}/operations/${encodeURIComponent(id)}`,
-        { allowOutcome: true },
-    );
-    if (state.api !== api) return;
-    const payload = saveOutcome(operation, received);
-    showAppendOutcome(operation, payload);
-    if (state.tab === 'operations') renderView();
-    toast(`Operation ${payload.outcome ?? payload.state ?? 'unresolved'}`);
+    try {
+        const received = await api.json(
+            `/v0/collections/${encodeURIComponent(operation.collectionId)}/operations/${encodeURIComponent(id)}`,
+            { allowOutcome: true, signal: connectionController?.signal },
+        );
+        if (state.api !== api) return;
+        const payload = saveOutcome(operation, received);
+        showAppendOutcome(operation, payload);
+        if (state.tab === 'operations') renderView();
+        toast(`Operation ${payload.outcome ?? payload.state ?? 'unresolved'}`);
+    } catch (error) {
+        if (state.api === api) throw error;
+    }
+}
+async function exportArrow() {
+    const api = state.api,
+        epoch = state.epoch,
+        name = `${currentCollection()?.name ?? 'glamdb'}.arrows`;
+    try {
+        const bytes = await api.arrow(`${collectionPath()}/scan`, state.lastQuery, {
+            signal: viewController?.signal,
+        });
+        if (api !== state.api || epoch !== state.epoch) return;
+        download(name, bytes, 'application/vnd.apache.arrow.stream');
+        toast('Complete Arrow stream downloaded.');
+    } catch (error) {
+        if (api === state.api && epoch === state.epoch) throw error;
+    }
 }
 async function inspectFile(id) {
-    const selector = state.resolvedSnapshot ?? 'initial';
-    const data = await state.api.json(
-        `${collectionPath()}/files/${encodeURIComponent(id)}?snapshot_id=${encodeURIComponent(selector)}`,
-    );
-    showModal(
-        'A closer look.',
-        `<p class="muted small">${data.synthetic ? 'Synthetic mock descriptor · no physical file exists.' : 'Metadata for the selected immutable file.'}</p><pre class="json-block">${json(data)}</pre>`,
-    );
+    const api = state.api,
+        epoch = state.epoch,
+        collectionId = state.collectionId,
+        selector = state.resolvedSnapshot ?? 'initial',
+        controller = viewController;
+    const current = () =>
+        api === state.api &&
+        epoch === state.epoch &&
+        collectionId === state.collectionId &&
+        selector === (state.resolvedSnapshot ?? 'initial') &&
+        controller === viewController &&
+        !controller?.signal.aborted;
+    try {
+        const data = await api.json(
+            `/v0/collections/${encodeURIComponent(collectionId)}/files/${encodeURIComponent(id)}?snapshot_id=${encodeURIComponent(selector)}`,
+            { signal: controller?.signal },
+        );
+        if (!current()) return;
+        showModal(
+            'A closer look.',
+            `<p class="muted small">${data.synthetic ? 'Synthetic mock descriptor · no physical file exists.' : 'Metadata for the selected immutable file.'}</p><pre class="json-block">${json(data)}</pre>`,
+        );
+    } catch (error) {
+        if (current()) throw error;
+    }
 }
 function navigate(tab) {
     if (state.tab === 'data') {
@@ -842,21 +881,31 @@ document.addEventListener('submit', async (event) => {
     if (!['connect-form', 'query-form', 'create-form', 'append-form'].includes(event.target.id))
         return;
     event.preventDefault();
-    const form = event.target;
+    const form = event.target,
+        api = state.api;
     try {
         if (form.id === 'connect-form') {
             const button = form.querySelector('button');
             setBusy(button, true);
+            resetSession();
+            const controller = new AbortController();
+            connectionController = controller;
             try {
                 state.base = form.elements.base.value;
                 state.token = form.elements.token.value;
-                state.api = new WorkbenchAPI(state.base, state.token);
-                state.capabilities = await state.api.json('/v0/capabilities');
+                const api = new WorkbenchAPI(state.base, state.token);
+                state.api = api;
+                const capabilities = await api.json('/v0/capabilities', {
+                    signal: controller.signal,
+                });
+                if (state.api !== api || controller.signal.aborted) return;
+                state.capabilities = capabilities;
                 await refreshWorkspace();
             } catch (error) {
+                if (connectionController !== controller) return;
+                resetSession();
+                login();
                 $('#login-error').textContent = error.message;
-                state.token = '';
-                state.api = null;
             } finally {
                 setBusy(button, false);
             }
@@ -864,13 +913,14 @@ document.addEventListener('submit', async (event) => {
         else if (form.id === 'append-form') await appendForm(form);
         else if (form.id === 'create-form') await createForm(form);
     } catch (error) {
-        report(error);
+        if (state.api === api) report(error);
     }
 });
 document.addEventListener('click', async (event) => {
     const target = event.target.closest('[data-action]');
     if (!target || target.disabled) return;
-    const action = target.dataset.action;
+    const action = target.dataset.action,
+        api = state.api;
     try {
         if (action === 'nav') navigate(target.dataset.tab);
         else if (action === 'menu') $('#sidebar').classList.toggle('open');
@@ -879,21 +929,11 @@ document.addEventListener('click', async (event) => {
                 location.reload();
                 return;
             }
-            viewController?.abort();
-            queryController?.abort();
-            queryGeneration++;
-            state.epoch++;
-            state.token = '';
-            state.api = null;
-            state.collections = [];
-            state.collectionId = null;
-            state.operations = [];
-            state.mutation = null;
-            state.creation = null;
+            resetSession();
             login();
         } else if (action === 'refresh') {
             await refreshWorkspace();
-            toast('Workspace refreshed.');
+            if (state.api === api) toast('Workspace refreshed.');
         } else if (action === 'select-collection') await selectCollection(target.dataset.id);
         else if (action === 'create') openCreate();
         else if (action === 'close-modal') $('#modal').close();
@@ -943,15 +983,8 @@ document.addEventListener('click', async (event) => {
                 ),
                 'application/json',
             );
-        } else if (action === 'export-arrow') {
-            const bytes = await state.api.arrow(`${collectionPath()}/scan`, state.lastQuery);
-            download(
-                `${currentCollection()?.name ?? 'glamdb'}.arrows`,
-                bytes,
-                'application/vnd.apache.arrow.stream',
-            );
-            toast('Complete Arrow stream downloaded.');
-        } else if (action === 'file') await inspectFile(target.dataset.id);
+        } else if (action === 'export-arrow') await exportArrow();
+        else if (action === 'file') await inspectFile(target.dataset.id);
         else if (action === 'resolve-operation') await resolveOperation(target.dataset.id);
         else if (action === 'resolve-pending')
             await resolveOperation($('#append-form').dataset.operationId);
@@ -968,11 +1001,12 @@ document.addEventListener('click', async (event) => {
                 `<div class="metadata-list"><p>Browse collections, append typed rows, filter your data and explore immutable snapshots.</p><div class="notice">${publicDemo ? 'This public demo runs in your browser. Your rows stay in this tab; Reset demo or reload restores the samples. JSON export is available here. Connect to a server separately for the network SDK and Arrow IPC.' : 'This workspace uses a disposable mock backend because the real C++ engine is not implemented yet. HTTP and Arrow transport are real; mock results do not qualify storage durability.'}</div><p class="small muted">Theme: edit <code>ui/config/theme.json</code>. Changes reload automatically. No token is saved in browser storage.</p></div>`,
             );
     } catch (error) {
-        report(error);
+        if (state.api === api) report(error);
     }
 });
 document.addEventListener('change', async (event) => {
-    const target = event.target;
+    const target = event.target,
+        api = state.api;
     try {
         if (target.id === 'snapshot-selector')
             await selectCollection(
@@ -992,7 +1026,7 @@ document.addEventListener('change', async (event) => {
             applyTheme(state.theme);
         }
     } catch (error) {
-        report(error);
+        if (state.api === api) report(error);
     }
 });
 $('#modal').addEventListener('click', (event) => {
@@ -1019,6 +1053,7 @@ async function bootstrap() {
 }
 window.addEventListener('pagehide', () => {
     clearInterval(configTimer);
+    connectionController?.abort();
     viewController?.abort();
     queryController?.abort();
     state.token = '';

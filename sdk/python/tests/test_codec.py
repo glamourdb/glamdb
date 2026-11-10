@@ -100,3 +100,33 @@ def test_schema_assigns_and_preserves_stable_ids():
 def test_timestamp_output_wire_requires_canonical_six_digit_utc_text(value):
     with pytest.raises(ValidationError):
         decode_rows(Schema([Field("t", "timestamp_us_utc", False)]), [{"t": value}])
+
+
+@pytest.mark.parametrize("kind,value,wire,decoded,second_bytes", [
+    ("int64", 9223372036854775807, "9223372036854775807", 9223372036854775807, 1048008),
+    ("int64", -9223372036854775808, "-9223372036854775808", -9223372036854775808, 1048008),
+    ("int64", 0, "0", 0, 1048008),
+    ("float64", 1.5, 1.5, 1.5, 1048008),
+    ("timestamp_us_utc", 253402300799999999, "9999-12-31T23:59:59.999999Z",
+     datetime(9999, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc), 1048008),
+    ("bool", True, True, True, 1048442),
+    ("bool", False, False, False, 1048442),
+    ("int64", None, None, None, 1048504),
+])
+@pytest.mark.parametrize("from_wire", [False, True], ids=["input", "wire"])
+@pytest.mark.parametrize("extra", [0, 1], ids=["exact-limit", "one-byte-over"])
+def test_row_limit_counts_canonical_decoded_values(kind, value, wire, decoded, second_bytes,
+                                                  from_wire, extra):
+    # Two string presence/length markers plus 62 scalar encodings make exactly
+    # 2 MiB before extra. Each scalar costs 9 bytes, bool 2, or NULL 1.
+    schema = Schema([Field("a", "string"), Field("b", "string")] + [
+        Field(f"v{index}", kind, value is None) for index in range(62)])
+    strings = {"a": "x" * 1048576, "b": "é" * (second_bytes // 2) + "x" * extra}
+    row = strings | {f"v{index}": wire if from_wire else value for index in range(62)}
+    convert = decode_rows if from_wire else encode_rows
+    if extra:
+        with pytest.raises(ValidationError, match="2 MiB"):
+            convert(schema, [row])
+    else:
+        expected = strings | {f"v{index}": decoded if from_wire else wire for index in range(62)}
+        assert convert(schema, [row]) == [expected]

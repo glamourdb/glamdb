@@ -1,5 +1,44 @@
 # Workbench validation record — 2026-11-10
 
+## Review corrections
+
+All five findings from [review 5843480730](https://github.com/glamourdb/glamdb/pull/4#pullrequestreview-5843480730)
+have focused regression coverage:
+
+- Disconnect/reconnect resets private connection/view/query state and uses a
+  new API identity. Old create responses cannot clear the next session's pending
+  identity or refresh its UI. A pending Arrow export is cancelled and discarded;
+  late operation errors cannot restore private text in notifications.
+- Fetch gzip/Brotli responses use a bound on actual decoded bytes; encoded
+  Content-Length is not compared to the decompressed body. Identity/truncated
+  response checks and append outcome handling remain covered.
+- ACK-ledger creation and every reopen require a successful parent-directory
+  fence before reading receipts or accepting writes. Four fresh-process tests
+  cover ordinary/interrupted initialization and successful/failed reopen fences;
+  failed opens leave the ledger bytes unchanged.
+- SDK row sizes use one canonical decoded-size helper, including presence and
+  string-length markers, fixed-size integers/timestamps, booleans and NULLs.
+  Exact 2 MiB and one-byte-over cases cover input, wire decode, append preparation
+  and scan JSON; existing literal canonical hash vectors are unchanged.
+- File details capture their connection, collection, resolved snapshot and view
+  epoch; obsolete reads are cancelled and late responses cannot open a dialog.
+
+After these source changes, `bash scripts/check-workbench.sh` exited **0**:
+**413 Python tests, 36 Node tests and 31 actual Chromium scenarios** passed.
+Python in-process coverage is **89%** (2386 statements, 262 missed). Both literal
+golden checks and the 204-cut simplified ordering model passed; UI format check
+passed. New regressions were observed failing before their fixes, including the
+original UI's foreign-snapshot reconnect error. Desktop screenshots were checked.
+Raw output: `artifacts/review-5843480730-check.log` (ignored).
+
+These results exercise client/verifier/mock behavior, including real local
+HTTP/HTTPS and browser transports. Native C++ sources, public headers, native
+tests, CMake and dependencies remain unchanged from main `b3fed8b`. Native
+Linux suites and physical power-loss qualification were **not rerun** here;
+the following earlier records retain their original scope and limitations.
+
+## Earlier integration and publication
+
 Rebase integration: source branch rebased onto main `b3fed8b` (PR #5 native
 catalog/coordinator/API). Six documentation conflicts were combined so both
 native implementation status/build guidance and client/public-demo instructions

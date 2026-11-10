@@ -50,7 +50,10 @@ export class WorkbenchAPI {
         return this.fetch(`${this.base}${path}`, options);
     }
     async readBytes(response) {
-        const declared = response.headers.get('Content-Length');
+        // Fetch decodes the body but keeps the encoded Content-Length header.
+        const encoding = response.headers.get('Content-Encoding')?.trim().toLowerCase();
+        const declared =
+            !encoding || encoding === 'identity' ? response.headers.get('Content-Length') : null;
         if (declared && Number(declared) > this.maxBytes) {
             await response.body?.cancel();
             throw new Error('Response is too large');
@@ -101,10 +104,11 @@ export class WorkbenchAPI {
             throw new APIError(response.status, payload);
         return payload;
     }
-    async arrow(path, body) {
+    async arrow(path, body, { signal } = {}) {
         const response = await this.request(path, {
             method: 'POST',
             body,
+            signal,
             headers: { Accept: 'application/vnd.apache.arrow.stream' },
         });
         if (!response.ok) throw new APIError(response.status, await response.json());

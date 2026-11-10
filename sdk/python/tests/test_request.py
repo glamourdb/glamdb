@@ -51,3 +51,19 @@ def test_all_types_against_independent_hand_written_golden_vector():
                                        operation_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", schema=schema)
     assert schema_fingerprint(schema).hex() == "24e0e6e92c6bf507bbdb0d552f86d237f3ddc945af2f6ae1f06edf4e22a75f3c"
     assert request.payload_hash == "72b0d7fbd4d8097a8a848de273fbf13cffa462d20be481e87d8c788f64feef1b"
+
+
+def test_append_accepts_exact_canonical_row_limit_and_rejects_one_byte_over():
+    schema = Schema([Field("a", "string"), Field("b", "string")] + [
+        Field(f"n{index}", "int64") for index in range(62)])
+    # 1048576 + 1048008 + 2 * 5 + 62 * 9 = 2097152 decoded bytes.
+    row = {"a": "x" * 1048576, "b": "y" * 1048008} | {
+        f"n{index}": 9223372036854775807 for index in range(62)}
+    with Client("http://127.0.0.1:1", "unused") as client:
+        request = client.prepare_append("00112233-4455-6677-8899-aabbccddeeff", [row],
+                                       operation_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", schema=schema)
+        expected = row | {f"n{index}": "9223372036854775807" for index in range(62)}
+        assert request.to_dict()["rows"] == [expected]
+        with pytest.raises(ValidationError, match="2 MiB"):
+            client.prepare_append("00112233-4455-6677-8899-aabbccddeeff", [row | {"b": row["b"] + "z"}],
+                                  operation_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", schema=schema)

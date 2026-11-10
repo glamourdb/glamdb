@@ -7,7 +7,7 @@ import struct
 from typing import Any, Iterable, Mapping
 from uuid import UUID
 
-from .codec import Schema, encode_rows, timestamp_us
+from .codec import Schema, _canonical_row_size, encode_rows, timestamp_us
 from .errors import ValidationError
 from .models import ANY
 
@@ -40,24 +40,13 @@ def schema_fingerprint(schema: Schema) -> bytes:
     return digest.digest()
 
 
-def _canonical_row_size(schema: Schema, row: Mapping[str, Any]) -> int:
-    size = 0
-    for field in schema.fields:
-        value = row[field.name]
-        size += 1
-        if value is not None:
-            size += (4 + len(value.encode("utf-8")) if field.type == "string"
-                     else 1 if field.type == "bool" else 8)
-    return size
-
-
 def canonical_payload_hash(collection_id: str, schema: Schema, rows: list[dict[str, Any]]) -> str:
     digest = hashlib.sha256()
     digest.update(b"COLUMNAR-APPEND\0" + struct.pack("<H", 1) + UUID(collection_id).bytes)
     digest.update(schema_fingerprint(schema) + struct.pack("<Q", len(rows)))
     size = 0
     for row in rows:
-        row_size = 0
+        row_size = _canonical_row_size(schema, row)
         for field in sorted(schema.fields, key=lambda value: value.field_id):
             value = row[field.name]
             if value is None:
@@ -74,7 +63,6 @@ def canonical_payload_hash(collection_id: str, schema: Schema, rows: list[dict[s
             else:
                 chunk = b"\1" + struct.pack("<d", value)
             digest.update(chunk)
-            row_size += len(chunk)
         if row_size > 2 * 1024**2:
             raise ValidationError("append row exceeds 2 MiB canonical decoded bytes")
         size += row_size

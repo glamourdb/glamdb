@@ -119,7 +119,7 @@ def _encode_record(record):
 class AckLedger:
     """One serialized controller writer, outside the volume that a harness cuts.
 
-    fsync is issued for every record and for initial ledger-directory creation.
+    fsync is issued for every record and for the parent on creation and reopen.
     Physical device independence/flush behavior still require external review.
     Interrupted/tampered ledgers are rejected, never silently truncated/repaired.
     """
@@ -141,7 +141,8 @@ class AckLedger:
                 stream.write(_encode_record(header))
                 stream.flush()
                 os.fsync(stream.fileno())
-            _sync_directory(self.path.parent)
+        # A visible ledger may come from creation interrupted before parent sync.
+        _sync_directory(self.path.parent)
         self.receipts = self._read()
 
     def _read(self):

@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 
 import pytest
 
@@ -34,6 +36,63 @@ def test_ledger_controller_is_separate_and_survives_reopen(verify, tmp_path):
         reopened.record(RECEIPT)
     with pytest.raises(ValueError):
         verify.AckLedger(path, test_volume=volume, evidence_kind="real-power")
+
+
+@pytest.mark.parametrize("first_fence_fails", [False, True])
+@pytest.mark.parametrize("reopen_fence_fails", [False, True])
+def test_ledger_reopen_requires_directory_fence(verify, tmp_path, monkeypatch, first_fence_fails, reopen_fence_fails):
+    from glamdb_verify import evidence
+
+    volume = tmp_path / "volume"
+    volume.mkdir()
+    path = tmp_path / "acks.jsonl"
+    if first_fence_fails:
+        def fail_directory_sync(parent):
+            raise OSError("injected initial directory sync failure")
+
+        with monkeypatch.context() as fault:
+            fault.setattr(evidence, "_sync_directory", fail_directory_sync)
+            with pytest.raises(OSError, match="initial directory sync failure"):
+                verify.AckLedger(path, test_volume=volume, evidence_kind="process-crash")
+    else:
+        verify.AckLedger(path, test_volume=volume, evidence_kind="process-crash")
+    content = path.read_bytes()
+    assert content == b'{"evidence_kind":"process-crash","ledger_version":1}\n'
+    reopened = subprocess.run(
+        [sys.executable, "-c", """
+import json
+import sys
+from glamdb_verify import evidence
+
+path, volume, fail = sys.argv[1:]
+sync_directory = evidence._sync_directory
+fences = []
+
+def sync_parent(parent):
+    if json.loads(fail):
+        raise OSError("injected reopen directory sync failure")
+    sync_directory(parent)
+    fences.append(str(parent))
+
+evidence._sync_directory = sync_parent
+try:
+    ledger = evidence.AckLedger(path, test_volume=volume, evidence_kind="process-crash")
+except OSError as exc:
+    print(json.dumps({"error": str(exc)}))
+else:
+    constructor_fences = list(fences)
+    ledger.record(json.loads(sys.stdin.read()))
+    print(json.dumps({"constructor_fences": constructor_fences, "receipts": ledger.receipts}))
+""", str(path), str(volume), json.dumps(reopen_fence_fails)],
+        input=json.dumps(RECEIPT), capture_output=True, text=True, timeout=30,
+    )
+    assert reopened.returncode == 0, reopened.stderr
+    result = json.loads(reopened.stdout)
+    if reopen_fence_fails:
+        assert result == {"error": "injected reopen directory sync failure"}
+        assert path.read_bytes() == content
+    else:
+        assert result == {"constructor_fences": [str(path.parent)], "receipts": [RECEIPT]}
 
 
 def test_ledger_never_writes_to_cut_volume_or_alias(verify, tmp_path):

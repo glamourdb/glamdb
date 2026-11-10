@@ -169,6 +169,18 @@ def encode_scalar(field: Field, value: Any) -> Any:
     raise ValidationError(f"unsupported field type: {field.type}")
 
 
+def _canonical_row_size(schema: Schema, row: Mapping[str, Any]) -> int:
+    """Count decoded canonical bytes independently of scalar wire formatting."""
+    size = 0
+    for field in schema.fields:
+        value = row[field.name]
+        size += 1
+        if value is not None:
+            size += (4 + len(_utf8(value)) if field.type == "string"
+                     else 1 if field.type == "bool" else 8)
+    return size
+
+
 def encode_rows(schema: Schema, rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
     result = []
     names = {f.name for f in schema.fields}
@@ -176,9 +188,9 @@ def encode_rows(schema: Schema, rows: Iterable[Mapping[str, Any]]) -> list[dict[
         if not isinstance(row, Mapping) or set(row) - names:
             raise ValidationError("row must be an object with only schema fields")
         encoded = {field.name: encode_scalar(field, row.get(field.name)) for field in schema.fields}
-        size = sum(len(_utf8(v)) if isinstance(v, str) else 8 for v in encoded.values())
+        size = _canonical_row_size(schema, encoded)
         if size > 2 * 1024 * 1024:
-            raise ValidationError("row exceeds 2 MiB value limit")
+            raise ValidationError("row exceeds 2 MiB canonical decoded bytes")
         result.append(encoded)
     return result
 

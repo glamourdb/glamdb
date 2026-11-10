@@ -64,7 +64,10 @@ decoded/body byte limits. This is append v0, without upsert, delete, compaction,
 jobs, S3, uniqueness or durable mock outcomes.
 
 Credentials stay in process/tab memory, never localStorage, sessionStorage or
-URLs. Disconnect clears them. Browser session operation history is also
+URLs. Disconnect clears credentials, metadata, results, snapshot selection,
+query drafts and operation history; only the server URL and theme preferences
+remain. Reads from the previous connection are cancelled or ignored, including
+file details and pending Arrow exports. Browser session operation history is also
 ephemeral: persist original IDs and payloads in the calling application when
 real recovery across restarts is required. The SDK requires caller-supplied IDs.
 The mock serves same-origin API/UI; direct access to another origin requires
@@ -113,6 +116,10 @@ On Linux use `playwright install --with-deps chromium`. The script runs Python
 unit and real localhost HTTP/HTTPS tests, golden CLI checks, the simplified
 ordering model, UI format/unit checks and real Chromium scenarios. HTTPS uses
 temporary test certificates; no host trust store is modified. The browser
+and Node API tests need localhost sockets; Node tests use real gzip/Brotli HTTP
+responses, decoded-byte limits, truncated bodies and cancelled Arrow requests.
+Browser regressions include reconnecting with a different token/collection and
+late file/create/export responses from the previous session. The browser
 server is a disposable child on port 8766, with a separate copied theme. Override
 it using `GLAMDB_E2E_PORT`. Open the HTML report with:
 

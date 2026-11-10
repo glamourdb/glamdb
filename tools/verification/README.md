@@ -122,8 +122,10 @@ future engine's persisted receipt bytes.
 
 `AckLedger(path, test_volume=..., evidence_kind=...)` creates a JSONL ledger on an
 existing controller directory outside the selected test-volume subtree. Each
-record has a sequence and SHA-256 and is flushed and fsynced; ledger creation also
-syncs its parent directory. Reopening checks every record, rejects duplicate
+record has a sequence and SHA-256 and is flushed and fsynced; ledger creation and
+every reopen sync the parent directory before accepting receipts or writes.
+A directory-sync error rejects the open, and a later attempt fences again even
+if the header already exists. Reopening checks every record, rejects duplicate
 operation identities, truncation/checksum damage, and evidence-label changes.
 There is one serialized controller writer. Record an operation's ACK once; log
 repeated retry/transport events in a separate trace. Symlink aliases into the cut
