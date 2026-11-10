@@ -6,6 +6,10 @@ supplies the missing core/HTTP dependencies. It does not write Parquet or an
 Iceberg/SQLite catalog. All mock data and operation outcomes vanish on restart.
 Real storage integration and qualification remain open.
 
+For token-free access by external visitors, use the separately packaged
+[public browser demo](PUBLIC_DEMO.md). That mode keeps data in each page and
+exports JSON. The instructions below start authenticated HTTP/Arrow mode.
+
 ## Start from a clean checkout
 
 Requirements: Python 3.13, Node 22+ with npm, and an OpenSSL CLI for HTTPS tests.
@@ -80,6 +84,11 @@ control/table heights, titles, main copy and navigation labels. Decoration has
 independent `bows`, `kisses`, `sparkles`, and `motion` switches. OS reduced-motion
 preferences override animation. Icons are local SVG, fonts are local/system;
 no analytics or third-party asset request is needed.
+
+`brand.wordmark` and `brand.mark` select the supplied local PNGs under
+`assets/brand/`; remote URLs/traversal are rejected. `sizing.logo_width`,
+`login_logo_width` and `logo_mark_size` control placement without image editing
+or a binary rebuild. Old themes without image paths retain text/icon fallbacks.
 
 CSS custom properties are generated from validated tokens. Colors are hex,
 dimensions use px/rem/em/% or zero, and font values are constrained text.

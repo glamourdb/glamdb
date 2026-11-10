@@ -14,6 +14,7 @@ _HEX = re.compile(r"#(?:[a-fA-F0-9]{3}|[a-fA-F0-9]{4}|[a-fA-F0-9]{6}|[a-fA-F0-9]
 _FONT = re.compile(r"[A-Za-z0-9 ,'\"._-]{1,256}\Z")
 _SIZE = re.compile(r"(?:0|(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,4})?(?:px|rem|em|%|vh|vw))\Z")
 _SECTIONS = {"version", "brand", "colors", "typography", "sizing", "decoration", "labels"}
+_BRAND_ASSET = re.compile(r"assets/brand/[A-Za-z0-9_-]+\.(?:png|svg|webp)\Z")
 
 
 def _plain_text(value):
@@ -49,6 +50,8 @@ def load_theme(path: Path) -> dict:
                 valid = isinstance(item, str) and _SIZE.fullmatch(item)
             elif section == "decoration":
                 valid = key in {"sparkles", "bows", "kisses", "motion"} and type(item) is bool
+            elif section == "brand" and key in {"wordmark", "mark"}:
+                valid = isinstance(item, str) and _BRAND_ASSET.fullmatch(item)
             else:
                 valid = _plain_text(item)
             if not valid:

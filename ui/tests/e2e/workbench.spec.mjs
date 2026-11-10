@@ -584,3 +584,16 @@ test('resolved append disables its old retry button before a new write', async (
     ).toHaveCount(0);
     expect(posts).toBe(1);
 });
+
+test('legacy brand config without image paths still opens a workspace', async ({ page }) => {
+    const config = JSON.parse(await readFile(path.join(root, 'ui/config/theme.json'), 'utf8'));
+    delete config.brand.mark;
+    delete config.brand.wordmark;
+    await page.route('**/workbench/config', (route) =>
+        route.fulfill({ contentType: 'application/json', body: JSON.stringify(config) }),
+    );
+    await login(page);
+    await expect(page.locator('.avatar')).toHaveText('G');
+    await nav(page, 'Data studio');
+    await expect(page.getByRole('button', { name: 'Run query', exact: true })).toBeVisible();
+});

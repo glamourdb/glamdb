@@ -22,10 +22,18 @@ export default defineConfig({
             ? { executablePath: process.env.GLAMDB_BROWSER_PATH }
             : {},
     },
-    webServer: {
-        command: '../.venv/bin/python tests/e2e/start-server.py',
-        url: `http://127.0.0.1:${port}/healthz`,
-        timeout: 30000,
-        reuseExistingServer: false,
-    },
+    webServer: [
+        {
+            command: '../.venv/bin/python tests/e2e/start-server.py',
+            url: `http://127.0.0.1:${port}/healthz`,
+            timeout: 30000,
+            reuseExistingServer: false,
+        },
+        {
+            command: '../.venv/bin/python tests/e2e/start-static.py',
+            url: `http://127.0.0.1:${process.env.GLAMDB_STATIC_PORT ?? '8768'}/glamdb/`,
+            timeout: 30000,
+            reuseExistingServer: false,
+        },
+    ],
 });

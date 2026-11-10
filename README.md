@@ -29,6 +29,13 @@ browser workbench. A separate **disposable in-memory mock** supplies missing
 engine/HTTP interfaces. Its HTTP/Arrow transport is real; its data files,
 snapshots and commits are synthetic and disappear on restart.
 
+The workbench also has a **public browser demo** requiring no token or Python
+server. Each page instance owns its sample data; visitors can create/append,
+filter, explore snapshots and export JSON. Reload resets only that visitor's
+demo. See [public demo and publishing](docs/development/PUBLIC_DEMO.md).
+The supplied wordmark/transparent mark are used in login, sidebar, avatar and
+favicon; artwork paths and sizes remain runtime theme settings.
+
 Launch the workbench (Python 3.13 and Node 22+):
 
 ```sh

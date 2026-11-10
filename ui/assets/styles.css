@@ -108,6 +108,21 @@ button svg {
     height: 38px;
     color: var(--color-accent);
 }
+.brand-wordmark {
+    display: block;
+    width: var(--size-logo-width, 196px);
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--size-radius-small);
+}
+.login-art .brand-wordmark {
+    width: var(--size-login-logo-width, 300px);
+}
+.brand-mark {
+    width: var(--size-logo-mark-size, 32px);
+    height: var(--size-logo-mark-size, 32px);
+    object-fit: contain;
+}
 .brand-name {
     font: italic bold 30px var(--font-display);
     letter-spacing: -1.2px;

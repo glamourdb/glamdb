@@ -2,6 +2,7 @@ const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 const FONT = /^[a-z0-9\s,'"-]{1,180}$/i;
 const DIMENSION = /^(?:0|\d+(?:\.\d+)?(?:px|rem|em|%))$/;
 const SECTIONS = ['version', 'brand', 'colors', 'typography', 'sizing', 'decoration', 'labels'];
+const BRAND_ASSET = /^assets\/brand\/[a-zA-Z0-9_-]+\.(?:png|svg|webp)$/;
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 function assert(condition, message) {
     if (!condition) throw new Error(message);
@@ -38,9 +39,20 @@ export function validateTheme(config) {
         typeof config.brand.name === 'string' && config.brand.name.length > 0,
         'Brand name is required',
     );
+    for (const key of ['wordmark', 'mark'])
+        if (config.brand[key] !== undefined)
+            assert(
+                typeof config.brand[key] === 'string' && BRAND_ASSET.test(config.brand[key]),
+                `Unsafe brand asset ${key}`,
+            );
     for (const color of ['background', 'ink', 'accent'])
         assert(HEX.test(config.colors[color] ?? ''), `Missing ${color}`);
     return config;
+}
+export function brandAsset(config, key) {
+    const path = config.brand[key];
+    assert(typeof path === 'string' && BRAND_ASSET.test(path), `Unsafe brand asset ${key}`);
+    return new URL(`../${path}`, import.meta.url).href;
 }
 export function themeVariables(config) {
     validateTheme(config);

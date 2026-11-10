@@ -1,5 +1,5 @@
 import { WorkbenchAPI } from './api.js';
-import { applyTheme, validateTheme } from './theme.js';
+import { applyTheme, validateTheme, brandAsset } from './theme.js';
 import {
     escapeHTML as e,
     displayValue,
@@ -10,8 +10,9 @@ import {
 } from './model.js';
 
 const $ = (selector) => document.querySelector(selector);
+const publicDemo = document.documentElement.dataset.publicDemo === 'true';
 const icon = (name, classes = '') =>
-    `<svg class="icon ${classes}" aria-hidden="true"><use href="/assets/icons.svg#${name}"></use></svg>`;
+    `<svg class="icon ${classes}" aria-hidden="true"><use href="${new URL('icons.svg', import.meta.url).href}#${name}"></use></svg>`;
 const nav = [
     ['overview', 'grid'],
     ['data', 'table'],
@@ -102,7 +103,10 @@ function countSnapshotRows(snapshot) {
 
 async function loadTheme(force = false) {
     try {
-        const response = await fetch('/workbench/config', { cache: 'no-store' });
+        const response = await fetch(
+            publicDemo ? new URL('../config/theme.json', import.meta.url) : '/workbench/config',
+            { cache: 'no-store' },
+        );
         if (!response.ok) throw new Error('Theme file is invalid; keeping the last valid theme.');
         const config = validateTheme(await response.json());
         const stamp = JSON.stringify(config);
@@ -128,8 +132,18 @@ function updateThemeText() {
     document.querySelectorAll('[data-brand]').forEach((node) => {
         node.textContent = state.theme.brand[node.dataset.brand] ?? '';
     });
+    document.querySelectorAll('[data-brand-logo]').forEach((node) => {
+        const key = node.dataset.brandLogo;
+        if (state.theme.brand[key]) {
+            node.src = brandAsset(state.theme, key);
+            if (key === 'wordmark') node.alt = state.theme.brand.name;
+        }
+    });
+    if (state.theme.brand.mark) $('#brand-favicon').href = brandAsset(state.theme, 'mark');
 }
 function brand() {
+    if (state.theme.brand.wordmark)
+        return `<div class="brand"><img class="brand-wordmark" data-brand-logo="wordmark" src="${e(brandAsset(state.theme, 'wordmark'))}" alt="${e(state.theme.brand.name)}"><span class="brand-name sr-only" data-brand="name">${e(state.theme.brand.name)}</span></div>`;
     return `<div class="brand">${icon('bow', 'decor-bow')}<span class="brand-name" data-brand="name">${e(state.theme.brand.name)}</span></div>`;
 }
 function login() {
@@ -155,8 +169,8 @@ function chrome() {
     <div class="collection-list">${state.collections.map((item) => `<button data-action="select-collection" data-id="${e(item.collection_id)}" class="${state.collectionId === item.collection_id ? 'selected' : ''}">${icon('table')}<span>${e(item.name)}</span></button>`).join('')}</div>
     <div class="sidebar-footer">${icon('kiss', 'decor-kiss')}<p data-label="footer">${e(labels('footer'))}</p></div></aside>
     <div class="workspace"><header class="topbar"><div class="breadcrumb"><button class="icon-button menu-toggle" data-action="menu" aria-label="Toggle navigation">${icon('menu')}</button><span>Workspace</span>${icon('chevron')}<strong>${e(currentCollection()?.name ?? 'Your collections')}</strong></div>
-    <div class="top-actions"><button class="text-button docs-button" data-action="about">Quick guide</button><button class="icon-button" data-action="refresh" aria-label="Refresh workspace">${icon('refresh')}</button><button class="text-button" data-action="disconnect">Disconnect</button><span class="avatar" aria-label="Workspace avatar">G</span></div></header>
-    <main id="main-content" class="main">${state.capabilities?.mock ? `<div class="mock-banner">${icon('sparkle')}<span data-label="mock_notice">${e(labels('mock_notice'))}</span></div>` : ''}<div id="view"></div>
+    <div class="top-actions"><button class="text-button docs-button" data-action="about">Quick guide</button><button class="icon-button" data-action="refresh" aria-label="Refresh workspace">${icon('refresh')}</button><button class="text-button" data-action="disconnect">${publicDemo ? 'Reset demo' : 'Disconnect'}</button><span class="avatar" aria-label="Workspace avatar">${state.theme.brand.mark ? `<img data-brand-logo="mark" class="brand-mark" src="${e(brandAsset(state.theme, 'mark'))}" alt="">` : 'G'}</span></div></header>
+    <main id="main-content" class="main">${state.capabilities?.mock ? `<div class="mock-banner">${icon('sparkle')}<span data-label="${publicDemo ? 'public_demo_notice' : 'mock_notice'}">${e(labels(publicDemo ? 'public_demo_notice' : 'mock_notice'))}</span></div>` : ''}<div id="view"></div>
     <footer class="page-footer"><span>GlamDB · <span data-brand="tagline">${e(state.theme.brand.tagline)}</span></span><span>Append mode · duplicate keys preserved ${icon('sparkle', 'decor-sparkle')}</span></footer></main></div></div>`;
     renderView();
 }
@@ -281,7 +295,7 @@ function dataView() {
 function resultTable() {
     const schema = state.result.schema?.fields ?? state.projection.map((name) => ({ name }));
     const page = state.rows.slice(state.page * 100, (state.page + 1) * 100);
-    return `<section class="panel results-panel"><div class="panel-header"><div><h2>Your results</h2><p>${number(state.rows.length)} rows · snapshot <code>${e(state.result.snapshot_id ?? 'initial empty')}</code></p></div><button class="button small" data-action="export-arrow">${icon('download')}Arrow</button></div><div class="table-wrap"><table aria-label="Query results"><thead><tr>${schema.map((f) => `<th>${e(f.name)}</th>`).join('')}</tr></thead><tbody>${page.map((row) => `<tr>${schema.map((f) => `<td title="${e(displayValue(row[f.name]))}">${row[f.name] === null ? '<span class="null">NULL</span>' : e(displayValue(row[f.name]))}</td>`).join('')}</tr>`).join('')}</tbody></table>${!page.length ? '<p class="result-empty">No rows match this query. The result schema is still available.</p>' : ''}</div><div class="table-footer"><span>${page.length ? state.page * 100 + 1 : 0}–${state.page * 100 + page.length} of ${number(state.rows.length)} · bounded preview</span><div class="button-row"><button class="button small" data-action="previous-page" ${state.page === 0 ? 'disabled' : ''}>Previous</button><button class="button small" data-action="next-page" ${(state.page + 1) * 100 >= state.rows.length ? 'disabled' : ''}>Next</button></div></div></section>`;
+    return `<section class="panel results-panel"><div class="panel-header"><div><h2>Your results</h2><p>${number(state.rows.length)} rows · snapshot <code>${e(state.result.snapshot_id ?? 'initial empty')}</code></p></div><button class="button small" data-action="${publicDemo ? 'export-json' : 'export-arrow'}">${icon('download')}${publicDemo ? 'JSON' : 'Arrow'}</button></div><div class="table-wrap"><table aria-label="Query results"><thead><tr>${schema.map((f) => `<th>${e(f.name)}</th>`).join('')}</tr></thead><tbody>${page.map((row) => `<tr>${schema.map((f) => `<td title="${e(displayValue(row[f.name]))}">${row[f.name] === null ? '<span class="null">NULL</span>' : e(displayValue(row[f.name]))}</td>`).join('')}</tr>`).join('')}</tbody></table>${!page.length ? '<p class="result-empty">No rows match this query. The result schema is still available.</p>' : ''}</div><div class="table-footer"><span>${page.length ? state.page * 100 + 1 : 0}–${state.page * 100 + page.length} of ${number(state.rows.length)} · bounded preview</span><div class="button-row"><button class="button small" data-action="previous-page" ${state.page === 0 ? 'disabled' : ''}>Previous</button><button class="button small" data-action="next-page" ${(state.page + 1) * 100 >= state.rows.length ? 'disabled' : ''}>Next</button></div></div></section>`;
 }
 
 function renderView() {
@@ -861,6 +875,10 @@ document.addEventListener('click', async (event) => {
         if (action === 'nav') navigate(target.dataset.tab);
         else if (action === 'menu') $('#sidebar').classList.toggle('open');
         else if (action === 'disconnect') {
+            if (publicDemo) {
+                location.reload();
+                return;
+            }
             viewController?.abort();
             queryController?.abort();
             queryGeneration++;
@@ -911,6 +929,20 @@ document.addEventListener('click', async (event) => {
         } else if (action === 'open-snapshot') {
             state.tab = 'data';
             await selectCollection(state.collectionId, target.dataset.id);
+        } else if (action === 'export-json') {
+            download(
+                `${currentCollection()?.name ?? 'glamdb'}.json`,
+                JSON.stringify(
+                    {
+                        schema: state.result.schema,
+                        snapshot_id: state.result.snapshot_id,
+                        rows: state.rows,
+                    },
+                    null,
+                    2,
+                ),
+                'application/json',
+            );
         } else if (action === 'export-arrow') {
             const bytes = await state.api.arrow(`${collectionPath()}/scan`, state.lastQuery);
             download(
@@ -933,7 +965,7 @@ document.addEventListener('click', async (event) => {
         } else if (action === 'about')
             showModal(
                 'A pretty powerful workbench.',
-                `<div class="metadata-list"><p>Browse collections, append typed rows, filter your data and explore immutable snapshots.</p><div class="notice">This workspace uses a disposable mock backend because the real C++ engine is not implemented yet. HTTP and Arrow transport are real; mock results do not qualify storage durability.</div><p class="small muted">Theme: edit <code>ui/config/theme.json</code>. Changes reload automatically. No token is saved in browser storage.</p></div>`,
+                `<div class="metadata-list"><p>Browse collections, append typed rows, filter your data and explore immutable snapshots.</p><div class="notice">${publicDemo ? 'This public demo runs in your browser. Your rows stay in this tab; Reset demo or reload restores the samples. JSON export is available here. Connect to a server separately for the network SDK and Arrow IPC.' : 'This workspace uses a disposable mock backend because the real C++ engine is not implemented yet. HTTP and Arrow transport are real; mock results do not qualify storage durability.'}</div><p class="small muted">Theme: edit <code>ui/config/theme.json</code>. Changes reload automatically. No token is saved in browser storage.</p></div>`,
             );
     } catch (error) {
         report(error);
@@ -969,7 +1001,16 @@ $('#modal').addEventListener('click', (event) => {
 async function bootstrap() {
     try {
         await loadTheme(true);
-        login();
+        if (publicDemo) {
+            const [{ BrowserDemoAPI }, response] = await Promise.all([
+                import('./demo.js'),
+                fetch(new URL('../config/demo-data.json', import.meta.url)),
+            ]);
+            if (!response.ok) throw new Error('Demo data is unavailable');
+            state.api = new BrowserDemoAPI(await response.json());
+            state.capabilities = await state.api.json('/v0/capabilities');
+            await refreshWorkspace();
+        } else login();
         configTimer = setInterval(() => loadTheme(), 2000);
     } catch (error) {
         $('#app').innerHTML =

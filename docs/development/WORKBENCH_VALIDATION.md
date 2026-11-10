@@ -1,5 +1,15 @@
 # Workbench validation record — 2026-11-10
 
+Public-demo/branding follow-up: both supplied PNGs are copied unchanged and
+SHA256 checked. New browser-only mode runs without a token, network API or
+browser storage, including under /glamdb/. New local validation has **374 Python
+tests, 26 Node unit tests and 23 Chromium scenarios**. Capacity rejection and
+legacy image-free theme regressions were observed RED before fixes, then GREEN.
+Desktop/mobile logo screenshots were inspected. See [PUBLIC_DEMO.md](PUBLIC_DEMO.md)
+for the separate UI-only semantics and publishing path. The original baseline
+record below remains evidence for its earlier scope; neither mode qualifies core
+storage durability.
+
 Scope: independent participant-four tools, Python network SDK, browser UI and a
 disposable mock for absent core/HTTP dependencies. **No G1–G4 or production N
 gate is declared complete.** The HTTP/HTTPS and Chromium tests below use real
