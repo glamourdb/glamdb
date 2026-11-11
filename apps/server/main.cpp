@@ -3,6 +3,8 @@
 #include "apps/server/server.h"
 #include "storage/resources.h"
 
+#include "core/telemetry/structured_log.h"
+
 #include <CLI/CLI.hpp>
 
 #include <iostream>
@@ -26,6 +28,7 @@ try {
     app.add_option("--listen", address, "HTTP listen address; use TLS proxy outside loopback");
     app.add_option("--port", port, "HTTP port; zero selects an available port");
     app.add_option("--metrics-listen-address", metricsAddress, "Private Prometheus IP:port; disabled by default");
+    app.add_option("--log-directory", logOptions.Directory, "Private bounded JSONL log directory; disabled by default");
     app.add_option("--ui-root", uiRoot, "Workbench directory (defaults to installed share/glamdb/ui)");
     app.add_option("--request-timeout-ms", timeoutMs, "Total header/body read timeout")->check(CLI::Range(100, 60000));
     app.add_option("--scan-live-limit", scanLimits.Live, "Global live scan cursor limit")->check(CLI::Range(1, 4096));

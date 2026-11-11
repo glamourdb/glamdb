@@ -12,6 +12,7 @@
 | reproc/reproc++ | 14.2.7 | `reproc/` submodule; CLI child-process lifecycle, MIT. |
 | SQLite | 3.54.1 | Official amalgamation archive. |
 | prometheus-cpp | 1.3.0 | `prometheus-cpp/` submodule; core metrics and application-owned pull exporter. |
+| Quill | 13.0.0 | `quill/` submodule; MIT, header-only bounded structured logging and JSONL rotation. |
 
 Exact commits, URLs, and SQLite checksums are recorded in [lock.json](lock.json).
 SQLite's archive was checked against the SHA3-256 published on its
@@ -41,6 +42,10 @@ prometheus-cpp installs core/pull with its pinned CivetWeb submodule; push, test
 compression and embedded TLS are disabled. Its core library is a private static
 engine dependency; its listener is owned only by a server application. Installed
 consumers find the same exact version through the exported CMake package.
+Normal native builds compile the structured logger against Quill's pinned
+headers. Those headers stay private to `glamdb_logging` and are not required by
+installed engine consumers. Quill is not part of the dependency superbuild;
+IO-only builds do not require it.
 The dependency build needs
 network access for SQLite and upstream transitive dependencies, plus the build
 prerequisites of Arrow and Iceberg, including zlib development files. Set

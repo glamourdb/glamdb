@@ -10,11 +10,24 @@ are separate from the earlier component gate.
 
 ## Native server integration
 
+The native server additionally passes eight focused real-server test methods
+after merging the current write-health fixes: existing readiness/durable counter
+and restart tests, zero-initialized HTTP families, real unauthorized/success
+request and status-only response counters, incomplete-upload cancellation,
+an 8 MiB response held in-flight by a slow client, and Quill schema-1 records
+from actual operations/lifecycle. The file-sink test verifies private input
+markers never reach records, logging admission metrics are real, and no records
+are rejected as unregistered producers. A separate seeded 8 MiB boundary checks
+Quill rotation retains at most four `glamdb*.jsonl` files, including the active
+file, within the per-file limit plus one bounded record. These tests use their
+own disposable directories; they do not touch a running service or existing data.
+
 On Darwin arm64 with AppleClang 21.0.0, Python 3.13.5, the cached pinned native
-dependencies and prometheus-cpp 1.3.0, all native targets build. LLVM 18.1.8
-formatting passes for 182 project source/header files. Five focused CTest
+dependencies, prometheus-cpp 1.3.0 and Quill 13.0.0, the server and focused native
+test targets build. LLVM 18.1.8 formatting passes for 188 project source/header
+files. The five CMake configuration tests pass. Five focused CTest
 entries pass: three outcome conformance cases, actual engine-health readiness,
-and `glamdb.native_metrics` (three Python test methods). The metrics tests use
+and `glamdb.native_metrics` (eight Python test methods). The metrics tests use
 only disposable stores on a filesystem with sufficient reserve:
 
 ```sh
@@ -41,6 +54,9 @@ issue; its canonical-path correction passes the focused rerun above. These
 results do not establish a passing Linux native suite or durability qualification.
 LLVM 18 clang-tidy cannot parse this host's libc++ 21 headers (unsupported
 `__builtin_clzg`/`__builtin_ctzg`); no clean tidy result is claimed.
+The source-only dependency check stops at the uninitialized Arrow source
+checkout; these native builds use the existing installed Arrow/Iceberg/SQLite
+prefix. The new Quill checkout is at its exact locked commit.
 
 ## Executed PASS
 

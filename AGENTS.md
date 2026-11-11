@@ -273,6 +273,12 @@ Exposer; omission disables the listener. `glamdb_server_ready` samples actual
 managed engine health, without database identifiers. Run `glamdb.native_metrics`
 for real storage/counter/readiness/restart coverage; `GLAMDB_TEST_TMPDIR` selects
 its disposable test parent when `/tmp` cannot meet the storage disk reserve.
+The listener includes bounded native HTTP request/status counters, duration and
+in-flight metrics through asynchronous response completion/cancellation.
+`--log-directory DIR` opts into the existing Quill 13 structured logger with
+8 MiB JSONL rotation and three backups; requests never log tokens, URLs or data.
+Normal native builds consume the pinned header-only `third_party/quill`; IO-only
+metrics builds retain no Quill dependency.
 
 Client/mock development uses Python 3.13 and Node 22+:
 
