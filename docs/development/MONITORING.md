@@ -90,9 +90,9 @@ not the surrounding macOS host. node_exporter's Linux collectors are not a
 macOS equivalent.
 
 1. Create the dedicated network once: `docker network create glamdb-observability`.
-2. Write a strong Grafana password to a mode-0600 file and set
-   `GLAMDB_GRAFANA_PASSWORD_FILE` to its absolute path. The Compose secret reads it;
-   no default shared password is shipped.
+2. Provision the Grafana bootstrap password as described below and set
+   `GLAMDB_GRAFANA_PASSWORD_FILE` to its absolute path. No default shared password
+   is shipped; a missing variable or unreadable file prevents startup.
 3. Set `GLAMDB_NODE_LISTEN` to a private host IP and port reachable from the
    Prometheus container. Restrict that address with the host firewall.
 4. Edit the explicit inventories under `deploy/monitoring/prometheus/targets/`.
@@ -109,6 +109,33 @@ macOS equivalent.
    Grafana uses bundled plugins; preinstallation/automatic unpinned plugin
    updates are disabled. Node Exporter / Nodes is the upstream dashboard with one documented job-label
    override; the API/coordinator/PVC supplement remains GlamDB-specific.
+
+Compose file-backed secrets retain their host ownership and mode; they are not
+automatically readable by Grafana's UID/GID **472:472**. On a rootful Linux host,
+prepare an operator-controlled strong password in a private source file, then
+install it without printing its contents:
+
+```sh
+sudo install -d -m 0700 -o root -g root /var/lib/glamdb-observability/private
+sudo install -m 0400 -o 472 -g 472 /operator-private/grafana-password \
+  /var/lib/glamdb-observability/private/grafana-password
+export GLAMDB_GRAFANA_PASSWORD_FILE=/var/lib/glamdb-observability/private/grafana-password
+```
+
+Replace the source pathname with the actual secret-manager export, not a public
+file. The root-owned parent prevents host users from traversing to the file;
+the daemon mounts only that file read-only, where Grafana can read it as UID472.
+Rootless/user-namespace runtimes require their actual mapped UID, separately
+verified; blindly applying the rootful owner is insufficient.
+
+The native [Grafana file provider](https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#file-provider)
+reads the mounted secret and fails if it cannot. Compose's `$$` preserves the
+literal provider expression. Avoid the image's `GF_SECURITY_ADMIN_PASSWORD__FILE`
+entrypoint expansion: with this pinned image an unreadable file logs a shell
+error but does not stop startup. This bootstrap setting initializes a **new**
+Grafana database; replacing it does not rotate an existing account. Use native
+Grafana account administration for an existing installation and recreate the
+container after atomically replacing a file-backed mount.
 
 cAdvisor needs host filesystem/cgroup/runtime visibility and privileged access;
 review those mounts against the actual container runtime. Its process/sched/TCP
