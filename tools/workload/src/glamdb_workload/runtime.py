@@ -13,7 +13,14 @@ from importlib.metadata import version
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from glamdb_sdk import AppendOutcome, Client, HTTPError, ProtocolError, TransportError
+from glamdb_sdk import (
+    AppendOutcome,
+    Client,
+    HTTPError,
+    OutcomeUnknownError,
+    ProtocolError,
+    TransportError,
+)
 
 from .ledger import Ledger, STATES
 
@@ -116,12 +123,16 @@ def append_once(client, log, request, *, deadline=None):
         elapsed = (time.perf_counter() - started) * 1000
         code = error_code(error)
         state = (
-            "conflict"
-            if code in {"OPERATION_CONFLICT", "IDEMPOTENCY_CONFLICT"}
+            "commit_unknown"
+            if isinstance(error, OutcomeUnknownError)
             else (
-                "transport_error"
-                if isinstance(error, TransportError)
-                else "protocol_error"
+                "conflict"
+                if code in {"OPERATION_CONFLICT", "IDEMPOTENCY_CONFLICT"}
+                else (
+                    "transport_error"
+                    if isinstance(error, TransportError)
+                    else "protocol_error"
+                )
             )
         )
         log.mark(request.operation_id, state, error_code=code)

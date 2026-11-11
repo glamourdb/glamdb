@@ -180,7 +180,7 @@ is local recovery evidence, not a server power-loss durability qualification.
 # Look up every pending UUID. No writes or reconciliation are performed.
 glamdb-cli bench resolve --url http://127.0.0.1:8080 --run run/write/
 
-# Explicitly allow resending only IDs whose authoritative lookup is NOT_FOUND.
+# Explicitly allow resending only IDs whose authoritative lookup is OPERATION_NOT_FOUND.
 # The exact original UUID and validated bytes are retained.
 glamdb-cli bench resolve --url http://127.0.0.1:8080 --run run/write/ --retry
 

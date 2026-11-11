@@ -118,7 +118,8 @@ def test_retry_requires_explicit_action_and_original_payload(tmp_path):
         calls.append(request)
         if request.method == "GET":
             return httpx.Response(
-                404, json={"error": {"code": "NOT_FOUND", "message": "not bound"}}
+                404,
+                json={"error": {"code": "OPERATION_NOT_FOUND", "message": "not bound"}},
             )
         assert request.content == req.body
         return httpx.Response(200, json=committed(req))
@@ -226,3 +227,27 @@ def test_lookup_cannot_confirm_a_different_payload_after_conflict(tmp_path, mism
             log.summary()["conflict" if mismatch == "hash" else "protocol_error"] == 1
         )
         assert calls == ["GET"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [b'{"error":{"code":"IO_ERROR","message":"unknown write"}}', b"invalid response"],
+)
+def test_sdk_unknown_write_errors_remain_commit_unknown(tmp_path, body):
+    from glamdb_workload.ledger import Ledger
+    from glamdb_workload.runtime import append_once
+
+    req = prepared()
+    with Ledger(tmp_path / "worker.sqlite") as log, Client(
+        "https://test.invalid",
+        "test-token",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                500, content=body, headers={"Content-Type": "application/json"}
+            )
+        ),
+    ) as client:
+        result = append_once(client, log, req)
+        assert result["state"] == "commit_unknown"
+        assert log.summary()["commit_unknown"] == 1
+        assert log.summary()["pending"] == 1

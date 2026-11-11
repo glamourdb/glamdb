@@ -144,7 +144,7 @@ void AddWorkloadCommands(CLI::App& app, std::optional<int>& exitCode)
                 Flag(*command,
                     *args,
                     "--retry",
-                    "Explicitly resend NOT_FOUND operations with their original ID and bytes");
+                    "Explicitly resend OPERATION_NOT_FOUND operations with their original ID and bytes");
             } else {
                 Value(*command, *args, "--format", "json or arrow (default json)");
             }
