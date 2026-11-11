@@ -25,6 +25,9 @@ def test_single_large_batch_peak_python_heap_is_about_one_body():
                 yield data[start:start + 65536]
 
     def handler(request):
+        if request.url.path.endswith("/scan/open"):
+            return httpx.Response(404, json={"error": {
+                "code": "ROUTE_NOT_FOUND", "message": "fixture provides a single Arrow response"}})
         return httpx.Response(200, stream=Chunked(), headers={
             "content-type": "application/vnd.apache.arrow.stream", "x-glamdb-snapshot-id": "1",
             "content-length": str(len(data)), "x-content-sha256": hashlib.sha256(data).hexdigest()})
