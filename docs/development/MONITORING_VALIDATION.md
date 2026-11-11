@@ -5,7 +5,42 @@ Executed for the library/client and standard-collector configuration on
 Python 3.14.3; formatting uses clang-format 18.1.8. These are current replacement
 checks, not the earlier private collector/textfile tests. There is no claim of
 full native engine durability, production native HTTP integration, or hosted CI
-success from these component results.
+success from these component results. Native server integration checks below
+are separate from the earlier component gate.
+
+## Native server integration
+
+On Darwin arm64 with AppleClang 21.0.0, Python 3.13.5, the cached pinned native
+dependencies and prometheus-cpp 1.3.0, all native targets build. LLVM 18.1.8
+formatting passes for 182 project source/header files. Five focused CTest
+entries pass: three outcome conformance cases, actual engine-health readiness,
+and `glamdb.native_metrics` (three Python test methods). The metrics tests use
+only disposable stores on a filesystem with sufficient reserve:
+
+```sh
+GLAMDB_TEST_TMPDIR=/path/to/disposable/test-parent \
+ctest --test-dir build/local --output-on-failure \
+  -R 'glamdb.native_metrics|glamdb.routes.Databases.ServiceReadinessReadsCoreHealth|glamdb.transport.OutcomeConformance'
+```
+
+Executed coverage includes default-disabled/private-only exposition, actual
+committed create/append counters, readiness with no open databases, explicit
+close/reopen, one failed open while another engine remains healthy, recovery,
+restart persistence, absence of database identities/paths, and listener teardown.
+The C++ readiness case shuts down the actual owned engine while retaining an
+open service descriptor, proving the observation consults core health.
+
+The full host CTest attempt is **not green**: 142 failures out of 533 enabled
+entries. Many existing fixtures hardcode `/tmp`, whose macOS symlink alias is
+rejected by canonical store identity checks; collection writes there also hit
+the real disk reserve. Additional failures include the Linux `/dev/full` CLI
+case, `CiNativeRunnerTest.test_root_build_includes_the_io_probe`, and
+`IcebergMetadataJsonCost.SerializationIsLinearInRetainedSnapshots` (3.28 ratio
+against a limit of 3). The new readiness unit initially shared the `/tmp` alias
+issue; its canonical-path correction passes the focused rerun above. These
+results do not establish a passing Linux native suite or durability qualification.
+LLVM 18 clang-tidy cannot parse this host's libc++ 21 headers (unsupported
+`__builtin_clzg`/`__builtin_ctzg`); no clean tidy result is claimed.
 
 ## Executed PASS
 
