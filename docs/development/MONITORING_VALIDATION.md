@@ -8,6 +8,37 @@ full native engine durability or hosted CI success from these component results.
 Native server integration checks below
 are separate from the earlier component gate.
 
+## Integrated local deployment
+
+The macOS/Podman profile was additionally executed against a persistent native
+server, existing authenticated gateway/edge, Loki/Alloy, Prometheus, Grafana and
+Alertmanager. All 13 configured scrape targets were UP; 307 rules (49 checks
+plus 13 recordings) evaluated without failures. Eight native HTTP/logging test
+methods and the monitoring checker passed: nine Python tests, ASan/UBSan metric
+contract/endpoint checks, rule fixtures and 152 dashboard PromQL expressions.
+
+Infrastructure validation compared 108 values against actual Mach/sysctl,
+vm_stat, IORegistry, filesystem, interface and container/cgroup sources. All
+101 infrastructure dashboard queries returned samples; named joins covered all
+14 running containers, including a Quadlet-managed Loki. The only observed
+nonfinite samples were read/write mean service time on an idle disk (zero I/O).
+They were not filled with zero. This does not qualify arbitrary container count,
+source churn or a production load envelope.
+
+The real identity/gateway checks passed 28 cases; an additional 120 authorized
+edge-to-native reads all returned 200. Four Grafana dashboards and genuine Loki
+records were checked in Chromium without page/datasource errors. An orderly
+Alloy restart preserved offsets and delivered new genuine records without
+observed duplicate completion IDs. Missing-mount refusal and recovery were
+verified on the dedicated bounded Loki filesystem. Telegram grouping is tested
+separately by the alerting suite; notification acceptance is not proof of human
+receipt or exactly-once delivery.
+
+Kubernetes/PVC and native administrative-audit sources remain unavailable in this
+profile. Idle or low-volume p95 checks remain NODATA. Actual low APFS free space
+continues to alarm. None of these local checks establish durability under power
+loss, full hosted native CI, an independent observer or an always-on deployment.
+
 ## Native server integration
 
 The native server additionally passes eight focused real-server test methods
