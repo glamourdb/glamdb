@@ -33,6 +33,42 @@ not serve `/metrics`. The private endpoint has no bearer-token authentication;
 bind it to loopback or a trusted private interface and restrict access to the
 scraper. The application owns listener teardown; no textfile is published.
 
+The native server also registers finite HTTP metrics with `service_instance="core"`:
+
+- `glamdb_http_requests_total{route,method,status_class}` counts accepted connections
+  through full asynchronous response completion or cancellation. Each connection
+  carries at most one request. Classes are `1xx` through `5xx`, plus `cancelled`
+  when the response was not fully written; cancellation is not a synthetic 499.
+- `glamdb_http_responses_total{status_code}` counts only fully written responses.
+  Thirty fixed common codes and `other` distinguish actual 401/403, 429 and 503
+  without multiplying codes by routes/methods.
+- `glamdb_http_request_duration_seconds{route}` measures the actual accepted
+  connection lifetime, including header/body reading and the full response write.
+- `glamdb_http_requests_in_flight{route}` retains ownership through that lifetime.
+
+Seventeen route names and eight method names are registered once. Unparsed
+connections and unknown paths use `other`; methods outside the fixed domain use
+`OTHER`. IDs, target URLs, query strings, headers and payloads are never labels.
+Idle histogram count/sum/buckets remain zero, so an idle quantile has no observed
+latency. The library registry owns all samples and concurrent updates.
+
+`--log-directory /path/to/private/logs` separately enables native operation and
+runtime lifecycle records through the existing Quill 13 structured logger. Its
+`RotatingJsonFileSink` appends schema-1 JSONL to `glamdb.jsonl`, rotating at 8 MiB
+with at most three indexed backups (`glamdb.1.jsonl`, etc.). Rotation and writing
+run on the Quill backend; the request thread uses its 64 KiB bounded dropping
+queue. Successful request records are capped at 20 per second; errors and
+lifecycle records bypass that success limit and can still be dropped when the
+queue is full. Native `glamdb_log_*` counters report those decisions.
+The server uses one registered producer (the I/O thread), drains the logger on
+shutdown, and leaves logging disabled when the flag is omitted. Newly created
+log directories have owner-only access; use a trusted private directory.
+Records contain fixed operation/outcome names, generated request IDs, measured
+duration and completed response status; they contain no database identities,
+tokens, URLs or row values. They observe HTTP completion, not an independent
+commit/delivery guarantee. The shared schema's `row_count` default is not a
+native HTTP row measurement. Log shipping consumes `glamdb*.jsonl` separately.
+
 `glamdb_server_ready{service_instance="core"}` observes actual `Engine::GetHealth`
 at scrape time. It is one only when at least one managed database is open and
 all open engines are write-ready. Registry/lifecycle errors, busy lifecycle gates,
