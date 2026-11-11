@@ -379,9 +379,11 @@ class NativeIdentity:
             raise AssertionError(
                 "Native browser check failed; diagnostics suppressed"
             ) from None
-        assert (
-            result.returncode == 0 and value.get("status") == "pass"
-        ), f"Native browser failure: {value.get('stage','unknown')} / {value.get('error_class','unknown')}"
+        assert result.returncode == 0 and value.get("status") == "pass", (
+            f"Native browser failure: {value.get('stage','unknown')} / "
+            f"{value.get('error_class','unknown')} / "
+            f"{value.get('diagnostics', [])}"
+        )
         return value
 
 
@@ -816,7 +818,8 @@ import { pathToFileURL } from 'node:url';
 const input=JSON.parse(fs.readFileSync(0,'utf8'));
 const fixture=JSON.parse(fs.readFileSync(input.fixture,'utf8'));
 const { chromium,expect }=await import(pathToFileURL(input.root+'/ui/node_modules/@playwright/test/index.mjs').href);
-let stage='launch',browser;
+let stage='launch',browser;const diagnostics=[];
+const safeCodes=new Set(['UNAVAILABLE','UNAUTHENTICATED','PERMISSION_DENIED','NOT_FOUND','INVALID_ARGUMENT','CONFLICT','RESOURCE_EXHAUSTED']);
 function ensure(value){if(!value){const e=new Error();e.name='CheckError';throw e;}}
 function request(url,method='GET',body=null,headers={}){
  return new Promise((resolve,reject)=>{
@@ -902,6 +905,13 @@ try{
    stage='login_'+index;const organization=fixture.organizations[index],owned=fixture.databases.filter(d=>d.owner===organization.id);
    const ctx=await context(),page=await ctx.newPage();const pageErrors=[];let bearerLeak=false;
    page.on('pageerror',error=>pageErrors.push(error.name));
+   page.on('response',async response=>{
+    const url=new URL(response.url());
+    if(url.origin!==new URL(input.base).origin||!/^\/(workbench|databases)\//.test(url.pathname)||response.status()<400)return;
+    const sample={stage,status:response.status(),code:null};
+    try{const body=await response.json();if(safeCodes.has(body?.error?.code))sample.code=body.error.code;}catch{}
+    diagnostics.push(sample);if(diagnostics.length>8)diagnostics.shift();
+   });
    page.on('request',req=>{if(new URL(req.url()).origin===new URL(input.base).origin&&req.headers().authorization)bearerLeak=true;});
    await login(page,organization);const view=await session(page);ensure(view.status===200&&view.value.organization.id===organization.id);
    ensure(JSON.stringify(view.value.databases.map(d=>d.id).sort())===JSON.stringify(owned.map(d=>d.id).sort()));
@@ -957,6 +967,6 @@ try{
   }
   console.log(JSON.stringify(result));
  }
-}catch(error){console.log(JSON.stringify({status:'fail',stage,error_class:error.name}));process.exitCode=1;}
+}catch(error){console.log(JSON.stringify({status:'fail',stage,error_class:error.name,diagnostics}));process.exitCode=1;}
 finally{controlToken=null;if(browser)await browser.close();}
 """
