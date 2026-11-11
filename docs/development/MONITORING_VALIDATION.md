@@ -51,6 +51,26 @@ CivetWeb, pull enabled; push/tests/compression/TLS disabled), prometheus_client
   standalone option is off. Native formatting passes LLVM 18.1.8. The metric adapter also compiles with
   strict warnings against the finalized optional logging stats header; combined
   native logging lifecycle execution remains a separate integration check.
+- After rebasing onto the current main, rebuilding the IO/metrics profile with
+  `BUILD_TESTING=ON` and running `ctest --test-dir BUILD_DIR --output-on-failure
+  --no-tests=error` passed **173/173** tests normally and **173/173** with
+  `GLAMDB_ENABLE_ASAN=ON GLAMDB_ENABLE_UBSAN=ON`. Each run includes 172 native
+  I/O/core cases and the tooling suite; it does not include the full engine.
+  The strict-warning native metric fixture also passed in two fresh processes
+  without sanitizers, in addition to the ASan/UBSan component gate above.
+- LLVM 18.1.8 formatting passed for all **111** project source/header files,
+  and the quality negative controls rejected deliberate format/analyzer errors.
+  Focused LLVM 18 tidy of `core/telemetry/metrics.cpp`, using matching libc++
+  18.1.8 source headers and the current SDK sysroot, passed with no project
+  diagnostics. The same command first reproduced five empty-catch errors;
+  explicit returns document the telemetry failure isolation without disabling
+  the check. This is a focused translation-unit check, not full-project tidy.
+- Official Docker Compose **5.7.0** parsed both monitoring Compose files without
+  a daemon. The exporters render used the disposable configuration value
+  `GLAMDB_NODE_LISTEN=127.0.0.1:9100`; omission correctly fails the required-bind
+  check. These parser results do not establish collector deployment or host
+  access. Strict-warning compilation of the rebased CLI translation unit passed;
+  it retains CLI11 and has no metric publisher or endpoint.
 - Changed workflow passes actionlint 1.7.12 and zizmor 1.32.0 offline pedantic
   checks with no findings.
 - Fourteen mocked Docker-runner tests pass, including explicit recursive
@@ -144,6 +164,8 @@ requirements. These Linux checks do not certify Kubernetes or a database.
 - Complete engine build and installed `glamdb::core` consumer: this checkout's
   current dependency prefix has no SQLite3 package (configure stops at
   `find_package(SQLite3 CONFIG)`) and no installed Arrow/Iceberg stack. The
+  Arrow/Iceberg source submodules are also uninitialized in this component
+  worktree, so whole-prefix submodule verification stops at Arrow. The
   package config now discovers exact prometheus-cpp 1.3.0 so static consumers can
   resolve the private metric library. Build the complete locked prefix, install
   the engine and run the existing installed-consumer CTest before release.
@@ -166,8 +188,6 @@ requirements. These Linux checks do not certify Kubernetes or a database.
 - arianvp/cgroup-exporter 0.3.3 production adoption/load/path/churn qualification
   and parent-scope support: intentionally not enabled. Its source/license/release
   review and explicit gap decision are in the coverage matrix.
-- The Docker Compose CLI was unavailable on this host, so its official config
-  parser was not run. Helm and promtool parsing do not substitute for it.
 - Hosted workflow, full environment load and operator retention/firewall/secret
   provisioning remain deployment checks. Helm render/component smoke results
   must not be reported as those checks.
