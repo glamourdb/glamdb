@@ -1,11 +1,15 @@
-// A stable target preserves positions through rename/reopen and temporary
-// absence. Discovering numbered backups separately would replay their records.
+// Match only the active filename. Periodic discovery also retries startup when
+// the producer has not created it yet. Do not independently discover backups.
 loki.source.file "application" {
   targets = [{
     __path__ = sys.env("GLAMDB_LOG_DIRECTORY") + "/glamdb.jsonl",
     service = "glamdb",
     environment = sys.env("GLAMDB_ENVIRONMENT"),
   }]
+  file_match {
+    enabled = true
+    sync_period = "5s"
+  }
   tail_from_end = false
   forward_to = [loki.process.application.receiver]
 }

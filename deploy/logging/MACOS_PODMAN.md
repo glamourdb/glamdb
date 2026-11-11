@@ -3,10 +3,11 @@
 This profile collects real native JSONL events. The producer must already emit
 schema-1 records into a dedicated directory with bounded application rotation;
 its active file is `glamdb.jsonl`, with numbered backups such as `glamdb.1.jsonl`.
-Only the active filename is a static target. Alloy's file tailer follows
+Only the exact active filename is discovered, every five seconds. This retries
+startup if the producer has not created the file yet. Alloy's file tailer follows
 rotation; discovering each renamed backup separately could replay old records.
-Dynamic discovery can also remove saved positions when a path briefly vanishes,
-so it is unnecessary for this fixed path. See the
+A rescan while the path is absent can remove its saved positions; when the path
+returns, active-file records may replay. See the
 [Alloy file-source behavior](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.file/#component-behavior).
 Startup messages in an unrelated stdout file are not a replacement for this
 source. The collector applies the same allowlist, validation, field projection
@@ -82,6 +83,13 @@ positions. Rotation while the collector is unavailable, truncation or deletion
 can cause unrecoverable gaps: the active-file source does not replay numbered
 backups. A missing positions file can replay active-file records. This is a
 best-effort operational log pipeline, not exactly-once delivery.
+
+In pinned Alloy 1.21.3, `loki_source_file_read_bytes_total` is a checkpoint gauge.
+The tailer refreshes it when processing an entry after the ten-second interval,
+and on orderly shutdown. On a quiet source it can lag lines already sent to
+Loki. Use the actual read-line and sent-entry counters plus a Loki query to
+verify ingestion. See the
+[pinned tailer implementation](https://github.com/grafana/alloy/blob/v1.21.3/internal/component/loki/source/file/tailer.go#L219-L249).
 
 Quadlet service and install semantics follow the
 [Podman systemd documentation](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html).
