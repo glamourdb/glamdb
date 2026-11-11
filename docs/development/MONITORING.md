@@ -65,9 +65,12 @@ shutdown, and leaves logging disabled when the flag is omitted. Newly created
 log directories have owner-only access; use a trusted private directory.
 Records contain fixed operation/outcome names, generated request IDs, measured
 duration and completed response status; they contain no database identities,
-tokens, URLs or row values. They observe HTTP completion, not an independent
-commit/delivery guarantee. The shared schema's `row_count` default is not a
-native HTTP row measurement. Log shipping consumes `glamdb*.jsonl` separately.
+tokens, URLs or row values. Their outcome describes the HTTP request, not the
+durable commit disposition: a cancelled transport can still have committed.
+Actual engine call outcomes, including `commit_unknown`, are recorded separately
+in `glamdb_operations_total`; resolve an individual write through its original
+operation identity. The shared schema's `row_count` default is not a native HTTP
+row measurement. Log shipping consumes `glamdb*.jsonl` separately.
 
 `glamdb_server_ready{service_instance="core"}` observes actual `Engine::GetHealth`
 at scrape time. It is one only when at least one managed database is open and
