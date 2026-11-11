@@ -51,10 +51,12 @@ Current work focuses on qualifying and improving the existing append engine:
 - Bounded Parquet reads and file/row-group pruning for selective scans
   ([#46](https://github.com/glamourdb/glamdb/issues/46)).
 **[Open the public demo](https://nnrpi.github.io/glamdb/)** — anyone can try it.
-An optional [password-protected deployment](docs/development/PROTECTED_DEMO.md)
-requires a server host; it does not change this anonymous Pages publication.
-The [organization workbench](docs/development/ORGANIZATIONS.md) adds separate organization
-logins and server-enforced database allowlists for configured HTTP backends.
+The [organization workbench](docs/development/ORGANIZATIONS.md) uses Keycloak
+sign-in, OAuth2 Proxy sessions and Cerbos policies for isolated database access.
+See the [deployment and operating guide](docs/development/SSO_OPERATIONS.md)
+for HTTPS hosting, native account management and database ownership workflows.
+The static Pages demo contains disposable sample data and remains a separate
+publication; it does not connect to protected database servers.
 
 ### Planned
 

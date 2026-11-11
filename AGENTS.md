@@ -98,20 +98,21 @@ The same UI can publish as a static browser-only demo on GitHub Pages. It has
 no API token or shared backend: tab-local rows/operations disappear on reload.
 JSON export is available there; network SDK and Arrow IPC remain connected-server
 features. Do not present BrowserDemoAPI as the public HTTP or durable core API.
-An optional Caddy deployment protects all demo files with an HTTPS shared-password
-gate; see [PROTECTED_DEMO.md](docs/development/PROTECTED_DEMO.md). It requires a
-server host and does not protect or replace the existing anonymous Pages URL
-merely by merging the code. No gate secrets belong in frontend assets.
-The organization workbench gateway (`apps/workbench_access/`) adds shared
-organization credentials, exclusive database ownership, a private SQLite access
-catalog and local operator CLI. Caddy enforces permissions before proxying `/v0`
-to configured database servers. Transfers fence old gateway connections;
-already-admitted backend writes may finish. The gateway has no storage writer or
-automatic mock fallback. See [ORGANIZATIONS.md](docs/development/ORGANIZATIONS.md)
-for lifecycle, receipts, backup/recovery and deployment. Static shared-group
-configuration remains an explicit compatibility mode.
-Native HTTP/core integration remains pending; gateway mock-backend tests do not
-qualify that integration or engine durability.
+The organization gateway (`apps/workbench_access/`) uses Keycloak accounts and
+organizations, OAuth2 Proxy browser sessions, Authlib/joserfc token verification
+with live introspection, and the official Cerbos SDK with YAML policies. SQLite
+stores database ownership, transactional audit, idempotent lifecycle receipts and
+unresolved backend write admissions; it stores no passwords or password hashes.
+Every list and direct database route uses current server-owned policy attributes.
+A strict transfer closes admission, waits for requests and streams, and requires
+terminal authoritative backend write outcomes before moving ownership. Unknown
+writes survive restart and keep transfer closed. Cross-service identity failures
+leave explicit pending receipts; emergency disables supersede older pending grants.
+See [ORGANIZATIONS.md](docs/development/ORGANIZATIONS.md) and the detailed
+[operator guide](docs/development/SSO_OPERATIONS.md) for setup, native account
+management, migration, recovery and secret rotation. The former Basic and static
+group modes have been removed. Production native HTTP transport remains
+pending; explicit mock-backend tests do not qualify that integration or durability.
 
 The first milestone is an embedded, synchronous, durable **append store** on
 local disk. A store has one owning process and one serialized writer; reads may
@@ -250,7 +251,7 @@ Preserve these boundaries when adding or changing engine behavior:
 | `tests/` | Native unit/recovery/SqlCatalog/VFS/consumer suites, `vertical/` public-API storage tests, `mock/` in-memory scan tests, verification and actual SDK HTTP/HTTPS tests. |
 | `tests/stress/` | Explicit manual native capacity campaigns; excluded from default pytest/CTest and CI. |
 | `apps/mock_server/` | Disposable Python mock, real HTTP/Arrow, no warehouse/catalog access. |
-| `apps/workbench_access/` | Authorization catalog, local operator CLI/supervisor and Caddy HTTPS organization/database routing. |
+| `apps/workbench_access/` | OIDC/Cerbos gateway, ownership/audit catalog, lifecycle CLI and offline migration. |
 | `fixtures/`, `tools/verification/` | Literal canonical/metadata inputs, independent row oracle and evidence helpers. |
 | `sdk/python/`, `ui/` | Standalone Python HTTP SDK; HTML/CSS/ES-module pink workbench and browser/unit tests. |
 | `tools/workload/` | Mimesis datasets, SDK/Locust workloads, per-worker SQLite outcome journals and full verification. |
@@ -308,23 +309,23 @@ the first page against requested/opened snapshots and preserves consumer/decode
 errors through owner cleanup; returned batches retain their buffers. See
 [client conformance](docs/development/CLIENT_CONFORMANCE.md) for separate native
 and mock export/ownership tests and the browser framing validator's scope.
-For the separate real-Caddy website access tests, run
-`python3 scripts/fetch-demo-caddy.py` then `bash scripts/check-protected-demo.sh`.
-This suite requires Caddy/OpenSSL/Chromium, opens only loopback listeners, creates
-disposable TLS/credentials and never installs a test CA into OS trust stores.
-It also tests group compatibility and persistent organization lifecycle against
-separate explicit mock databases, with Chromium transfer/revocation scenarios.
-Initialize the authorization catalog explicitly, then run
-`python3 -m apps.workbench_access --catalog /outside/runtime/authorization.sqlite`.
-The host and actual backend credentials must be supplied explicitly. Metadata
-and secrets must stay outside UI, served and generated runtime-state trees.
-Use one service account with its persistent home listener leases; the child
-inherits catalog, state and listener ownership. Never delete leases to bypass
-an active gateway or edit a live catalog offline.
-The Python operational logger is an optional independent component: the
-supervisor uses it when installed, and an explicit `GLAMDB_LOG_DIRECTORY` must
-fail clearly if unavailable. Never log administrative request parameters or
-interpret best-effort events as transactional audit.
+The standard Python suite includes OIDC claim/CSRF/policy-route/admission,
+workflow/retry/migration and disconnect regressions with explicit test doubles.
+Real identity infrastructure tests are opt-in and require a disposable provisioned
+Keycloak/OAuth2 Proxy/Cerbos deployment. They must not silently create accounts on
+an unknown host. Full system verification targets a configured real GlamDB server
+by default; mock backends require explicit selection and cannot certify native
+integration. See [current validation](docs/development/ORGANIZATIONS_VALIDATION.md).
+Initialize ownership state with `python3 -m apps.workbench_access.admin --catalog
+/outside/runtime/resources.sqlite init`; start the private adapter with
+`python3 -m apps.workbench_access --config /outside/runtime/gateway.json
+--operator-socket /outside/runtime/operator.sock`. Only Caddy public HTTPS is exposed;
+identity administration, the operator socket, backends, PDP and metrics stay private.
+Keep catalog and credential files owned by the service user, mode0600, outside UI.
+Do not edit a live catalog or remove its owner lease to bypass the owning process.
+Operational events use the optional stderr logging adapter when installed; runtime
+journals own rotation. They never replace transactional ownership audit. Optional
+metrics are unavailable when the metrics component is absent, rather than fabricated.
 Mock faults require explicit development configuration. Do not give the mock a
 production store path. Every production write must eventually use the C++ core.
 

@@ -1,6 +1,24 @@
 import { validateRecovery } from './recovery.js';
 import { validateArrowFraming, validateArrowHeaders } from './arrow.js';
 
+export function csrfToken(cookie = globalThis.document?.cookie ?? '') {
+    const values = cookie
+        .split(';')
+        .map((part) => part.trim())
+        .filter((part) => part.startsWith('__Host-glamdb-csrf='));
+    if (values.length !== 1)
+        throw new Error('Reload your access session before submitting this request');
+    let token;
+    try {
+        token = decodeURIComponent(values[0].slice('__Host-glamdb-csrf='.length));
+    } catch {
+        throw new Error('The access session CSRF cookie is invalid');
+    }
+    if (!token || token.length > 4096 || /[\x00-\x20\x7f]/.test(token))
+        throw new Error('The access session CSRF cookie is invalid');
+    return token;
+}
+
 export class APIError extends Error {
     constructor(status, payload) {
         const detail = payload?.error ?? payload;
@@ -31,6 +49,8 @@ export class WorkbenchAPI {
             (url.protocol === 'http:' && !local)
         )
             throw new Error('Use HTTPS, or HTTP on localhost, without credentials in the URL');
+        if (gateway && globalThis.location?.origin && url.origin !== globalThis.location.origin)
+            throw new Error('Gateway requests must remain same-origin');
         this.base = url.href.replace(/\/$/, '');
         this.gateway = gateway;
         this.token = gateway ? '' : token;
@@ -72,8 +92,11 @@ export class WorkbenchAPI {
             options.credentials = 'same-origin';
             options.redirect = 'error';
             for (const name of Object.keys(options.headers)) {
-                if (name.toLowerCase() === 'authorization') delete options.headers[name];
+                if (['authorization', 'x-csrftoken'].includes(name.toLowerCase()))
+                    delete options.headers[name];
             }
+            if (!['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()))
+                options.headers['X-CSRFToken'] = csrfToken();
         }
         if (body !== undefined) {
             options.body = JSON.stringify(body);

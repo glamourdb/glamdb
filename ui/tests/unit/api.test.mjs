@@ -253,3 +253,52 @@ test('Arrow downloads forward cancellation to the real HTTP request', async () =
         );
     });
 });
+
+test('unsafe gateway requests use only the current readable CSRF cookie', async () => {
+    const oldDocument = globalThis.document;
+    globalThis.document = { cookie: '__Host-glamdb-csrf=csrf-cookie-value; other=unrelated' };
+    let received;
+    try {
+        const client = new WorkbenchAPI(
+            'https://workbench.example/databases/00112233-4455-6677-8899-aabbccddeeff',
+            '',
+            async (url, options) => {
+                received = { url, options };
+                return Response.json({});
+            },
+            undefined,
+            { gateway: true },
+        );
+        await client.json('/v0/collections', {
+            method: 'POST',
+            body: {},
+            headers: { authorization: 'forged', 'x-csrftoken': 'forged' },
+        });
+        const headers = new Headers(received.options.headers);
+        assert.equal(headers.get('X-CSRFToken'), 'csrf-cookie-value');
+        assert.equal(headers.has('Authorization'), false);
+        assert.equal(received.options.credentials, 'same-origin');
+        assert.equal(received.options.redirect, 'error');
+        assert.equal(received.options.body, '{}');
+    } finally {
+        if (oldDocument === undefined) delete globalThis.document;
+        else globalThis.document = oldDocument;
+    }
+});
+
+test('gateway mode rejects a cross-origin destination before exposing a CSRF cookie', () => {
+    const previous = globalThis.location;
+    globalThis.location = { origin: 'https://workbench.example' };
+    try {
+        assert.throws(
+            () =>
+                new WorkbenchAPI('https://elsewhere.example', '', async () => {}, undefined, {
+                    gateway: true,
+                }),
+            /same.origin/i,
+        );
+    } finally {
+        if (previous === undefined) delete globalThis.location;
+        else globalThis.location = previous;
+    }
+});

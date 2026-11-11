@@ -19,7 +19,7 @@ fi
 exec > >(tee "artifacts/$suite-tests.log") 2>&1
 case "$suite" in
   python)
-    .venv/bin/python -m pytest --ignore=tests/security --cov=glamdb_verify --cov=glamdb_mock --cov=glamdb_sdk \
+    .venv/bin/python -m pytest --cov=glamdb_verify --cov=glamdb_mock --cov=glamdb_sdk \
       --cov-report=term-missing --cov-report=xml:artifacts/python-coverage.xml \
       --junitxml=artifacts/python-junit.xml --tb=long -ra
     .venv/bin/python -m glamdb_verify check-fixture fixtures/golden/int64-null-duplicates.json

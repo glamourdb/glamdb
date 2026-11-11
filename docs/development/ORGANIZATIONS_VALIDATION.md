@@ -1,73 +1,131 @@
 # Organization access validation
 
-Verified on macOS arm64 with Python 3.13, Caddy 2.11.9, OpenSSL and
-Playwright 1.56.1 / Chromium 1194. Test databases are separate explicitly
-disposable in-memory adapters with distinct bearer credentials. The production
-launcher does not start them and requires real server configuration.
+The checks below run on macOS arm64 with Python 3.13, Chromium 1194,
+Playwright 1.56.1, Caddy 2.11.9, Keycloak 26.8.2, OAuth2 Proxy 7.15.6,
+Cerbos 0.57.0 and PostgreSQL 18.6. Public integration requests use real HTTPS
+with a disposable certificate. Identity/policy services are actual upstream
+processes, while the three database HTTP adapters are explicitly disposable
+in-memory mocks. No production password, warehouse or Telegram destination is
+used. Product launchers never start a mock automatically.
 
-## Checks
+## Repeatable commands
 
-- `bash scripts/check-workbench.sh`: 485 Python tests, 45 Node tests and 31
-  Chromium scenarios passed. Includes independent codecs/oracles, real SDK
-  HTTP/HTTPS, Arrow, packaging, session isolation and responsive UI/theme/logo
-  checks. UI formatting passed.
-- `python -m pytest sdk/python/tests -q`: 276 passed; includes optional Basic
-  credentials, UTF-8 passwords, TLS/loopback validation and every SDK route
-  with both database-prefix slash forms. Bearer behavior remains covered.
-- `bash scripts/check-protected-demo.sh`: 178 passed with the optional logging
-  component enabled and real HTTPS/Caddy and
-  browser checks, covering legacy shared-password mode, static group compatibility
-  and persistent organizations. Chromium runs 3 legacy, 6 static-group and 3
-  organization scenarios. The final 37-case catalog/supervisor gate also passed
-  independently. The actual supervisor-to-JSONL check validates lifecycle,
-  administrative receipts and secret absence; it explicitly skips when the
-  independent optional logging component is not installed. Use
-  `GLAMDB_LOGGING_SOURCE_ROOT=/path/to/component-checkout` for an explicit
-  component source during integration, or install it in the combined checkout.
-- `git diff --check` and Python compilation passed.
+```sh
+bash scripts/bootstrap-workbench.sh
+bash scripts/check-workbench.sh
+.venv/bin/python -m pytest tests/access -ra
 
-After merging current main's split CI and CLI11 parsing, the workbench suites
-were rerun: 485 Python, 45 Node and 31 Chromium tests passed. The standalone
-HTTPS suite remains a dedicated browser-job gate rather than running twice in
-repository-wide Python discovery. Workflow syntax/security lint passed.
+# Explicit provisioned disposable identity infrastructure, not target discovery:
+GLAMDB_IDENTITY_FIXTURE=/private/fixture.json \
+  .venv/bin/python -m pytest tests/access/test_real_identity.py -ra
 
-The organization browser tests use fresh Pink/Blue/Empty contexts. They check
-only owned databases, no token/server prompt or browser storage, no HTTP
-administration, transfer while a scan response is held and an append dialog is
-open, stale-result rejection, automatic old-view clearing, disable/re-enable
-without reload, and no page errors. No production credential or chat is used.
+# Default native-system qualification rejects adapters that report mock=true:
+.venv/bin/python scripts/check-system.py --config /private/disposable-system.json
 
-## Regression and failure evidence
+# A separate explicit protocol mode cannot certify native storage:
+.venv/bin/python scripts/check-system.py \
+  --config /private/disposable-system.json --backend mock
+```
 
-Tests failed before the corresponding fixes and passed afterward for malformed
-text coerced by SQLite, catalog placement in generated runtime output, empty
-organization wording, reconciliation that reused an old connection, packaging
-failure reporting and consistent private backup creation. A delayed-response
-test harness was corrected to capture identity before disconnect; removing the
-actual stale-session guard still made that regression fail.
+The operator guide describes the private fixture requirements. Outage cases need
+additional explicit connection/container settings, accept only task-scoped
+loopback resources, and restore the inspected running service in `finally`.
+Without infrastructure configuration the native tests skip explicitly; ordinary
+unit tests do not require credentials or reach an external identity host.
 
-Actual Caddy allowed two independent runtimes to reuse listeners. A retained
-connection proved revision 7 remained reachable after a second runtime reported
-revision 8. Shared persistent listener leases, inherited child descriptors,
-occupied-listener probes and process-specific readiness were added. Repeating
-that actual-process probe rejected the second start, created no second child
-and kept the original connection on its sole valid runtime. An orphan-process
-test also proves catalog ownership remains locked until the child exits.
+## Executed replacement checks
 
-Additional checks cover atomic rollback/batches, conflicting revisions,
-32 concurrent retries of one operation with exactly one commit, restart and
-receipt replay, safe audit transfer direction, no-overwrite/symlink backup
-outputs, CLI restore into a new file, online backup and actual CLI-generated
-UTF-8 password authentication through the SDK. Metrics use a dedicated listener;
-the actual Caddy histogram labels are server=workbench, handler=subroute and
-unknown methods become OTHER rather than unbounded label values.
+- SDK: direct Bearer and Authlib token providers, real HTTP/HTTPS requests,
+  Device Authorization pending/slow-down/refresh, concurrency, total deadlines,
+  exact database prefixes, Arrow ownership and once-per-call writes.
+- Gateway: actual JOSE cryptography and live-introspection transport, signature,
+  issuer/audience/type/time rejection, changed roles/membership, same policy for
+  list and direct resource, CSRF/Origin and mixed-credential denial.
+- Ownership: stable UUIDs, unique canonical origins, disabled/pending states,
+  concurrent/stale revisions and content-bound retries, external-effect markers,
+  emergency-disable superseding, restart-persistent uncertain writes and audit.
+- Fencing: admitted reads/streams, unknown write resolution, failed policy probes,
+  detach/assignment, send-start/body/read/close/header-construction failures and
+  catalog-finalization errors. Exceptions release in-memory admission while
+  preserving durable uncertainty.
+- Telemetry: actual prometheus_client exposition, fixed 1850 HTTP/stage samples
+  plus bounded logging samples, actual in-flight/backpressure/cancellation,
+  observed dependency readiness and no per-user/database/request labels.
 
-## Limits
+The live native identity suite passed **13 cases**: eleven normal/browser cases,
+one Cerbos outage and one Keycloak outage. It used three organizations with
+2/1/0 databases, actual native memberships and fresh access tokens. Checks covered
+foreign UUIDs, encoded paths, forged headers, JSON API errors, the prefixed SDK
+and Arrow, transfer while an append outcome was unknown, terminal reconciliation,
+receipt replay and restoration of original ownership. All three organizations
+finished active with zero unresolved admissions.
 
-No public host, DNS or production TLS certificate was provisioned. The supplied
-systemd unit was reviewed as an example, not started on a Linux production host.
-No live organization/database was removed or moved. No user warehouse was
-opened, no power-loss/faulting-filesystem qualification was performed and no
-native HTTP/scanner integration or engine durability claim follows from these
-gateway checks. Browser polling cannot retract data already downloaded, and
-requests already admitted by a backend can complete after an access change.
+Chromium visited all eight Workbench pages, including Style Studio, both populated
+and empty organization selectors, browser create/append/Arrow, native Account
+Console, native password change/session revocation and logout. The runtime theme
+file changed and reloaded without rebuilding, then was restored byte-for-byte.
+The supplied PNGs matched their original hashes. Only the authenticated dummy
+database UI was captured; no HAR, token/cookie dump, video or login trace was saved.
+The separate UI suite also exercises late responses after identity/collection
+changes, dialogs, responsive layout and the standalone browser demo.
+
+Protocol corrections were observed failing before their fixes: the proxy lost
+Arrow's snapshot header, failed to recognize plain successful create receipts
+with schema defaults, and redirected encoded paths before gateway validation.
+The corrected public flow passed the system harness's **15 route checks**.
+The same explicitly mock target was rejected by the default native mode.
+
+## Deployment and persistence evidence
+
+The production Python image built from the exact 46-package hash lock; binary
+installation and nonroot `pip check` passed. Native Compose parsing, native Caddy
+configuration/CEL validation and the Docker JSON Alloy override passed. Separate
+bounded containers exercised the actual private-admin hostname topology, native
+realm provisioning, master/private and glamdb/public issuers, Admin Console HTML,
+public administration denial, strict browser email verification and native OAuth
+API responses. All of those disposable deployment containers/volumes were removed.
+
+Actual PostgreSQL `pg_dump -Fc` and `pg_restore --exit-on-error` into a separate
+owned database preserved the realm/organization/user counts (1/3/9). The original
+database was not overwritten. Catalog backup/migration tests verify private files,
+stable mapping, disabled activation and absence of copied password columns.
+A realm export is not treated as a complete PostgreSQL/session backup.
+
+## Local diagnostic costs
+
+A 300-request sequential metadata trial used the same explicitly mock backend
+route before and after the migration. The older cached Basic/Caddy path measured
+226.7 requests/s, p95 8.05 ms and p99 33.93 ms. The new complete HTTPS path, with
+native identity/policy services in a local 4-CPU/4-GiB VM, measured 59.2 requests/s,
+p95 29.00 ms and p99 35.22 ms. Each request performed live introspection and a
+fresh PDP decision; no grant cache was introduced.
+
+Actual component observer p95/p99 values were 0.31/0.48 ms for local JWT
+validation, 16.41/29.95 ms for native introspection, and 4.51/6.21 ms for Cerbos.
+Gateway CPU increased by 1.57 s during the 300 full requests; its sampled RSS
+went from 29,232 to 55,312 KiB. This excludes other processes and is not a
+whole-stack memory comparison. The key cache was warm, the host was not CPU
+isolated, and VM/SSH networking is part of the new path. These observations show
+its measured additional cost; they are not a production RPS promise or native
+storage benchmark. Logging/metrics costs are measured separately in their
+validation guides.
+
+A separate 16-worker metadata trial completed 600/600 requests with HTTP 200,
+204.4 requests/s, p95 105.36 ms and p99 129.65 ms. It used the same mandatory
+live checks and explicit mock backend, with the same diagnostic limitations.
+
+## Qualification limits
+
+The embedded engine/backend/scanner now exist on `main`; a production native
+HTTP adapter is still missing. These identity and mock-protocol checks do not
+prove that adapter, native data durability, power-loss behavior or throughput.
+No public DNS/ACME certificate, SMTP server, real notification destination or
+Kubernetes cluster was configured. The complete assembled production Compose
+runtime remains an operator deployment gate even though its real components,
+image, topology and source configurations were exercised separately.
+
+Live introspection and local admission fencing cover new requests. Already
+downloaded data cannot be retracted; admitted streams may finish and prevent a
+strict transfer from completing. An interrupted create without an authoritative
+backend outcome remains blocked. Backups must be restored under maintenance
+and reconciled against subsequent revocations before public access reopens.
