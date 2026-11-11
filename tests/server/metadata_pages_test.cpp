@@ -161,4 +161,97 @@ TEST(MetadataPages, ValidatesSelectorsBoundsAndSinglePagesWithoutRetainingCapaci
         EXPECT_TRUE(result.at("next_cursor").is_null());
     }
 }
+
+TEST(MetadataPages, CompletedListingsAllowRepeatedRefreshesAndRecentReplay)
+{
+    TMetadata pages;
+    for (size_t refresh = 0; refresh < 12; ++refresh) {
+        for (const auto& kind : {"snapshots", "files"}) {
+            const auto first = pages.Page("database", "collection", kind, {{"page_size", "2"}}, Inventory);
+            const std::map<std::string, std::string> query{{"page_size", "2"},
+                {"cursor", first.at("next_cursor").get<std::string>()}};
+            const auto last = pages.Page("database", "collection", kind, query, Inventory);
+            ASSERT_TRUE(last.at("next_cursor").is_null());
+            EXPECT_EQ(last.at("items").at(0).at("record_count"), "2");
+            EXPECT_EQ(pages.Page("database", "collection", kind, query, Inventory), last);
+        }
+    }
+}
+
+TEST(MetadataPages, DatabasePressureEvictsOnlyTheOldestCompletedInventory)
+{
+    TMetadata pages;
+    const auto active = pages.Page("database", "collection", "files", {{"page_size", "2"}}, Inventory);
+    std::vector<std::map<std::string, std::string>> queries;
+    for (size_t i = 0; i < 7; ++i) {
+        const auto first = pages.Page("database", "collection", "files", {{"page_size", "2"}}, Inventory);
+        queries.push_back({{"page_size", "2"}, {"cursor", first.at("next_cursor").get<std::string>()}});
+        EXPECT_TRUE(
+            pages.Page("database", "collection", "files", queries.back(), Inventory).at("next_cursor").is_null());
+    }
+    EXPECT_FALSE(
+        pages.Page("database", "collection", "files", {{"page_size", "2"}}, Inventory).at("next_cursor").is_null());
+    FailureCode(
+        [&] {
+            pages.Page("database", "collection", "files", queries.front(), Inventory);
+        },
+        "NOT_FOUND");
+    EXPECT_TRUE(pages.Page("database", "collection", "files", queries.back(), Inventory).at("next_cursor").is_null());
+    EXPECT_TRUE(pages
+                    .Page("database",
+                        "collection",
+                        "files",
+                        {{"page_size", "2"}, {"cursor", active.at("next_cursor").get<std::string>()}},
+                        Inventory)
+                    .at("next_cursor")
+                    .is_null());
+}
+
+TEST(MetadataPages, GlobalPressureReclaimsCompletedInventoriesAcrossDatabases)
+{
+    TMetadata pages;
+    const auto active = pages.Page("active", "collection", "files", {{"page_size", "2"}}, Inventory);
+    for (size_t i = 0; i < 63; ++i) {
+        const auto database = std::to_string(i);
+        const auto first = pages.Page(database, "collection", "files", {{"page_size", "2"}}, Inventory);
+        EXPECT_TRUE(pages
+                        .Page(database,
+                            "collection",
+                            "files",
+                            {{"page_size", "2"}, {"cursor", first.at("next_cursor").get<std::string>()}},
+                            Inventory)
+                        .at("next_cursor")
+                        .is_null());
+    }
+    EXPECT_FALSE(pages.Page("new", "collection", "files", {{"page_size", "2"}}, Inventory).at("next_cursor").is_null());
+    EXPECT_TRUE(pages
+                    .Page("active",
+                        "collection",
+                        "files",
+                        {{"page_size", "2"}, {"cursor", active.at("next_cursor").get<std::string>()}},
+                        Inventory)
+                    .at("next_cursor")
+                    .is_null());
+}
+
+TEST(MetadataPages, RetainedBytePressureReclaimsCompletedInventoryStorage)
+{
+    TMetadata pages;
+    const auto read = [](SnapshotSelector selector) {
+        auto inventory = Inventory(selector);
+        inventory["items"][0]["padding"] = std::string(size_t{14} * 1024 * 1024, 'x');
+        return inventory;
+    };
+    for (size_t i = 0; i < 6; ++i) {
+        const auto first = pages.Page("database", "collection", "files", {{"page_size", "2"}}, read);
+        EXPECT_TRUE(pages
+                        .Page("database",
+                            "collection",
+                            "files",
+                            {{"page_size", "2"}, {"cursor", first.at("next_cursor").get<std::string>()}},
+                            read)
+                        .at("next_cursor")
+                        .is_null());
+    }
+}
 } // namespace glamdb::NServer

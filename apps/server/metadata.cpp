@@ -502,6 +502,7 @@ struct TMetadata::TImpl
         size_t Bytes = 0;
         int64_t Created = 0;
         int64_t Touched = 0;
+        bool Completed = false;
         TJson Value;
         std::vector<std::string> Tokens;
     };
@@ -538,6 +539,27 @@ struct TMetadata::TImpl
         Erase([&](const auto& session) {
             return now - session.Created >= Lifetime || now - session.Touched >= Idle;
         });
+    }
+    void Reclaim(const std::string& database, size_t incomingBytes)
+    {
+        for (;;) {
+            const bool databaseFull = std::count_if(Sessions.begin(), Sessions.end(), [&](const auto& session) {
+                return session->Database == database;
+            }) >= static_cast<std::ptrdiff_t>(MaxDatabaseSessions);
+            if (!databaseFull && Sessions.size() < MaxSessions && incomingBytes <= MaxRetainedBytes - Bytes) {
+                return;
+            }
+            const auto victim = std::find_if(Sessions.begin(), Sessions.end(), [&](const auto& session) {
+                return session->Completed && (!databaseFull || session->Database == database);
+            });
+            if (victim == Sessions.end()) {
+                return;
+            }
+            const auto* retired = victim->get();
+            Erase([&](const auto& session) {
+                return &session == retired;
+            });
+        }
     }
     TJson Slice(const TSession& session, size_t position) const
     {
@@ -597,6 +619,9 @@ TJson TMetadata::Page(const std::string& database,
         Require(session.Kind == kind && session.Selector == selectorText && session.PageSize == pageSize,
             "metadata cursor parameters do not match");
         const auto result = Impl_->Slice(session, found->second.Position);
+        if (result.at("next_cursor").is_null()) {
+            found->second.Session->Completed = true;
+        }
         found->second.Session->Touched = now;
         return result;
     }
@@ -617,9 +642,13 @@ TJson TMetadata::Page(const std::string& database,
     if (count <= pageSize) {
         return Impl_->Slice(session, 0);
     }
+    // Include token overhead before reclaiming completed replay inventories.
+    session.Bytes += (count - 1) / pageSize * 256;
+    Require(session.Bytes <= MaxRetainedBytes, "metadata cursor capacity reached", "RESOURCE_EXHAUSTED");
     std::lock_guard lock(Impl_->Mutex);
     Impl_->Expire(Now());
-    Require(Impl_->Sessions.size() < MaxSessions && bytes <= MaxRetainedBytes - Impl_->Bytes,
+    Impl_->Reclaim(database, session.Bytes);
+    Require(Impl_->Sessions.size() < MaxSessions && session.Bytes <= MaxRetainedBytes - Impl_->Bytes,
         "metadata retained page capacity reached",
         "RESOURCE_EXHAUSTED");
     Require(std::count_if(Impl_->Sessions.begin(),
@@ -630,11 +659,6 @@ TJson TMetadata::Page(const std::string& database,
         "database metadata page capacity reached",
         "RESOURCE_EXHAUSTED");
     auto retained = std::make_shared<TImpl::TSession>(std::move(session));
-    // Cursor overhead is bounded by one token per item and included in the cap.
-    retained->Bytes += (count - 1) / pageSize * 256;
-    Require(retained->Bytes <= MaxRetainedBytes - Impl_->Bytes,
-        "metadata cursor capacity reached",
-        "RESOURCE_EXHAUSTED");
     try {
         for (size_t position = pageSize; position < count; position += pageSize) {
             auto token = Token();

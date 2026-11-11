@@ -558,6 +558,10 @@ expire after 60 seconds idle or 300 seconds total. There are at most 64 metadata
 sessions, eight per database, 16 MiB serialized JSON per inventory and 64 MiB
 retained serialized JSON overall. These are JSON accounting limits, not a full
 DOM/heap governor. Read admission is checked even for cached pages.
+After the last page is consumed, its inventory remains available for replay
+while capacity permits. New listings reclaim the oldest completed inventories
+before refusing admission; inventories with unread pages are never evicted for
+capacity. Reclaimed continuation tokens return `404` like expired tokens.
 Lifecycle close/reconcile clears tokens. No raw file paths can be requested;
 file IDs outside the selected snapshot fail even when the file exists elsewhere.
 See `glamdb.native_metadata` and [system acceptance](NATIVE_ACCEPTANCE.md).

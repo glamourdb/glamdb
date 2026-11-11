@@ -116,7 +116,12 @@ then restores the frozen request. It never submits a write or generates a new
 UUID. Choose **Check outcome** or **Retry same operation** explicitly; an imported
 creation keeps its original UUID, name and schema. The SDK likewise requires
 caller-supplied IDs. Recovery files contain user row data and remain caller-owned;
-no recovery state or credentials are written to browser storage.
+no recovery state or credentials are written to browser storage. Export and import
+share a separate 32 MiB UTF-8 recovery-file limit, including the complete JSON
+envelope, schema, server/database scope and formatting. This limit is independent
+of HTTP request and response limits. Export refuses an oversized file rather than
+offering a download that cannot be imported; import checks file size before
+reading or parsing it. Existing version-1 pretty-printed files remain supported.
 The mock serves same-origin API/UI; direct access to another origin requires
 appropriate production proxy/CORS work at the future adapter boundary.
 

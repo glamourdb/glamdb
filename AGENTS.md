@@ -65,9 +65,11 @@ reload/restart restore these views from the server. Storage IDs derive from
 selected committed manifest membership; details verify actual Parquet footers,
 field IDs, statistics and row groups. Unsupported backends retain explicit
 session/count fallbacks. Metadata requests are sequenced to respect per-database
-admission; stale selections cannot replace a newer workspace. Unresolved
-create/append requests have explicit token-free export/import, retaining their
-original identity/schema/payload. Import never submits a write; confirmed outcomes
+admission; stale selections cannot replace a newer workspace.
+Completed metadata inventories retain replay while capacity permits; new listings
+reclaim completed inventories before refusing admission, preserving unread pages.
+Unresolved create/append requests have explicit token-free export/import, retaining
+their original identity/schema/payload. Import never submits a write; confirmed outcomes
 survive failed metadata refreshes. Published snapshot operation IDs remain
 available after reload and look up original outcomes.
 

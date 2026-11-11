@@ -117,6 +117,73 @@ test('typed unresolved append exports and imports after reload with its exact or
     expect(await page.evaluate(() => ({ ...localStorage, ...sessionStorage }))).toEqual({});
 });
 
+test('pretty recovery files above 16 MiB import and export without submitting a write', async ({
+    page,
+}) => {
+    test.setTimeout(60000);
+    await connect(page);
+    const name = `large_recovery_${Date.now()}`;
+    await create(page, name);
+    let writes = 0;
+    await page.route('**/collections/*/append', async (route) => {
+        writes++;
+        await route.abort('failed');
+    });
+    const form = page.locator('#write-form');
+    await form.getByLabel('key row 1', { exact: true }).fill('large-recovery');
+    await form.getByRole('button', { name: 'Append rows', exact: true }).click();
+    await expect(form.getByText('Outcome unresolved · keep this operation ID')).toBeVisible();
+    await page.getByRole('button', { name: 'Pending requests', exact: true }).click();
+    const document = JSON.parse(await recoveryFile(page));
+    // Each value and row fit native limits. Only the pretty recovery envelope
+    // exceeds the 16 MiB HTTP body limit.
+    const originalRow = document.request.body.rows[0];
+    document.request.body.rows = Array.from({ length: 16 }, (_, index) => ({
+        ...originalRow,
+        key: `large-recovery-${index}`,
+        label: '',
+    }));
+    document.request.body.expected_snapshot = '9007199254740995';
+    const base = Buffer.byteLength(
+        JSON.stringify({
+            ...document.request.body,
+            operation_id: document.request.operation_id,
+        }),
+    );
+    const labelBytes = Math.floor((16 * 1024 * 1024 - 1024 - base) / 16);
+    expect(labelBytes).toBeLessThanOrEqual(1024 * 1024);
+    for (const row of document.request.body.rows) row.label = 'a'.repeat(labelBytes);
+    const buffer = Buffer.from(JSON.stringify(document, null, 2));
+    expect(
+        Buffer.byteLength(
+            JSON.stringify({
+                ...document.request.body,
+                operation_id: document.request.operation_id,
+            }),
+        ),
+    ).toBeLessThan(16 * 1024 * 1024);
+    expect(buffer.length).toBeGreaterThan(16 * 1024 * 1024);
+    await page.reload();
+    await page.getByLabel('Access token').fill(token);
+    await page.getByRole('button', { name: 'Open my workspace' }).click();
+    await page.locator('.collection-list button').filter({ hasText: name }).click();
+    await page.getByRole('button', { name: 'Pending requests', exact: true }).click();
+    await page.getByLabel('Recovery JSON file').setInputFiles({
+        name: 'large-pending.json',
+        mimeType: 'application/json',
+        buffer,
+    });
+    await page.getByRole('button', { name: 'Import pending request', exact: true }).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    await expect(form.getByText(document.request.operation_id, { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Pending requests', exact: true }).click();
+    const exported = await recoveryFile(page);
+    expect(exported.length).toBeGreaterThan(16 * 1024 * 1024);
+    expect(JSON.parse(exported)).toEqual(document);
+    expect(exported.toString()).not.toContain(token);
+    expect(writes).toBe(1);
+});
+
 test('valid unknown create envelope is exported before disconnect and retried with its original schema', async ({
     page,
 }) => {

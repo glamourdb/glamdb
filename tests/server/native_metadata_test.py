@@ -155,9 +155,12 @@ class NativeMetadataHTTP(NativeHTTP):
             self.api(target + 'f', status=404)
             other = self.api('/databases', {'name': 'other_' + kind})['database_id']
             self.api('/databases/' + other + target, status=404)
-        # Eight retained inventories per database; unused sessions expire or close.
-        for _ in range(6):
-            self.api(path + '/files?page_size=1')
+            while second['next_cursor'] is not None:
+                second = self.api(path + '/' + kind + '?page_size=1&cursor=' + quote(second['next_cursor'], safe=''))
+        # Completed replay inventories make room for eight unread listings.
+        for _ in range(8):
+            opened = self.api(path + '/files?page_size=1')
+        target = path + '/files?page_size=1&cursor=' + quote(opened['next_cursor'], safe='')
         self.api(path + '/files?page_size=1', status=429)
         old = self.api('/databases/' + self.store_id + '/close', {})
         self.assertEqual(old['state'], 'closed')
@@ -220,6 +223,24 @@ class NativeMetadataHTTP(NativeHTTP):
         self.api(path + '/files/' + '0' * 64, status=404)
         for query in ('page_size=0', 'page_size=1001', 'page_size=01', 'cursor=forged'):
             self.api(path + '/files?' + query, status=404 if query.startswith('cursor') else 400)
+
+    def test_completed_metadata_refreshes_do_not_exhaust_database_sessions(self):
+        path, _, _ = self.seed()
+        expected = {}
+        for refresh in range(12):
+            for kind in ('snapshots', 'files'):
+                target = path + '/' + kind + '?page_size=1'
+                items = []
+                while True:
+                    page = self.api(target)
+                    items.extend(page['items'])
+                    if page['next_cursor'] is None:
+                        break
+                    target = path + '/' + kind + '?page_size=1&cursor=' + quote(page['next_cursor'], safe='')
+                self.assertEqual(len(items), 2, (refresh, kind))
+                if refresh == 0:
+                    expected[kind] = items
+                self.assertEqual(items, expected[kind])
 
     def test_retained_metadata_pages_obey_recovery_admission(self):
         path, _, _ = self.seed()

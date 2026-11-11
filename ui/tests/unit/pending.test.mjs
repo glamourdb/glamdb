@@ -110,3 +110,102 @@ test('pending schema preserves supported UTF-8 field names without imposing iden
     });
     assert.deepEqual(pending.importPending(exported, scope).draft.schema, namedSchema);
 });
+
+test('recovery file roundtrip accepts a valid wide append whose pretty envelope exceeds 16 MiB', async () => {
+    assert.equal(typeof pending.serializePendingFile, 'function');
+    assert.equal(typeof pending.readPendingFile, 'function');
+    const fields = Array.from({ length: 64 }, (_, index) => ({
+        field_id: index + 1,
+        name: index === 0 ? 'key' : `f${index}`,
+        type: 'string',
+        nullable: false,
+    }));
+    const row = Object.fromEntries(fields.map((field) => [field.name, 'abcdefgh']));
+    const wide = {
+        ...draft,
+        schema: { fields },
+        body: {
+            rows: Array.from({ length: 10000 }, () => ({ ...row })),
+            expected_snapshot: body.expected_snapshot,
+        },
+    };
+    assert.ok(
+        Buffer.byteLength(JSON.stringify({ ...wide.body, operation_id: operationId })) <
+            16 * 1024 * 1024,
+    );
+    const text = pending.serializePendingFile(scope, 'append', wide);
+    assert.ok(Buffer.byteLength(text) > 16 * 1024 * 1024);
+    assert.ok(!text.includes('do-not-export-token'));
+    const imported = await pending.readPendingFile(new File([text], 'wide.json'), scope);
+    assert.equal(imported.draft.operationId, operationId);
+    assert.equal(imported.draft.collectionId, collectionId);
+    assert.deepEqual(imported.draft.schema, wide.schema);
+    assert.deepEqual(imported.draft.body, wide.body);
+    assert.equal(imported.draft.fingerprint, JSON.stringify(wide.body));
+});
+
+test('recovery file export bounds the complete UTF-8 envelope, including scope and schema', () => {
+    assert.equal(typeof pending.serializePendingFile, 'function');
+    const maxBytes = 32 * 1024 * 1024;
+    const minimal = {
+        ...draft,
+        schema: { fields: [{ ...schema.fields[0], name: 'label' }] },
+        body: { rows: [{ label: '' }] },
+    };
+    const baseline = JSON.stringify(pending.exportPending(scope, 'append', minimal), null, 2);
+    const padding = maxBytes - Buffer.byteLength(baseline);
+    const atLimit = { ...minimal, body: { rows: [{ label: 'a'.repeat(padding) }] } };
+    assert.equal(
+        Buffer.byteLength(pending.serializePendingFile(scope, 'append', atLimit)),
+        maxBytes,
+    );
+    assert.throws(
+        () =>
+            pending.serializePendingFile(
+                { ...scope, backend: `${scope.backend}x` },
+                'append',
+                atLimit,
+            ),
+        /32 MiB/,
+    );
+    assert.throws(
+        () =>
+            pending.serializePendingFile(scope, 'append', {
+                ...minimal,
+                body: { rows: [{ label: 'é'.repeat(maxBytes / 2) }] },
+            }),
+        /32 MiB/,
+    );
+});
+
+test('oversized recovery imports are rejected before reading or parsing the file', async () => {
+    assert.equal(typeof pending.readPendingFile, 'function');
+    let read = false;
+    await assert.rejects(
+        pending.readPendingFile(
+            {
+                size: 32 * 1024 * 1024 + 1,
+                text() {
+                    read = true;
+                    throw new Error('must not read');
+                },
+            },
+            scope,
+        ),
+        /32 MiB/,
+    );
+    assert.equal(read, false);
+    // Validate encoded text as well, before JSON.parse, even for a custom file reader.
+    await assert.rejects(
+        pending.readPendingFile(
+            {
+                size: 1,
+                async text() {
+                    return 'é'.repeat(16 * 1024 * 1024 + 1);
+                },
+            },
+            scope,
+        ),
+        /32 MiB/,
+    );
+});

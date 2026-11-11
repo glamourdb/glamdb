@@ -424,3 +424,26 @@ export function importPending(value, currentScope) {
         },
     };
 }
+
+// Recovery files include the request, schema, scope and pretty-print whitespace.
+// Their independent cap must not depend on an API response or request-body limit.
+const PENDING_FILE_MAX_BYTES = 32 * 1024 * 1024;
+function checkPendingFileSize(bytes) {
+    requirePending(
+        Number.isSafeInteger(bytes) && bytes >= 0 && bytes <= PENDING_FILE_MAX_BYTES,
+        'Choose a recovery JSON file within the 32 MiB recovery file limit',
+    );
+}
+export function serializePendingFile(scope, kind, draft) {
+    const text = JSON.stringify(exportPending(scope, kind, draft), null, 2);
+    checkPendingFileSize(new TextEncoder().encode(text).byteLength);
+    return text;
+}
+export async function readPendingFile(file, currentScope) {
+    requirePending(file, 'Choose a recovery JSON file');
+    // Reject large files before allocating their text or parsing their JSON.
+    checkPendingFileSize(file.size);
+    const text = await file.text();
+    checkPendingFileSize(new TextEncoder().encode(text).byteLength);
+    return importPending(JSON.parse(text), currentScope);
+}

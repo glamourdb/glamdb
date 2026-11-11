@@ -25,6 +25,8 @@ NTransport::TJson ExplainJson(const Engine& engine, const std::string& collectio
 
 // Bounded, expiring value pages. The first public-facade result and resolved
 // identity are retained, so concurrent appends cannot change later pages.
+// Completed inventories retain replay until expiry or capacity reclamation;
+// admission never evicts an inventory with unread pages.
 // Page/Clear are thread-safe. The caller holds its database lease and admits
 // every request; read runs outside the cache mutex and is never retained.
 class TMetadata

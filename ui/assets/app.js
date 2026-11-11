@@ -14,8 +14,8 @@ import {
     sessionSnapshots,
     sessionRowCount,
     prepareMutation,
-    exportPending,
-    importPending,
+    serializePendingFile,
+    readPendingFile,
     schemaSignature,
     supportsFeature,
     queryMaxRows,
@@ -1086,10 +1086,10 @@ function exportRecovery(kind, id) {
     );
     if (!entry) throw new Error('This request is already terminal or is no longer in this tab');
     const { draft } = entry;
-    const exported = exportPending(draft.scope ?? recoveryScope(), kind, draft);
+    const exported = serializePendingFile(draft.scope ?? recoveryScope(), kind, draft);
     download(
         `glamdb-pending-${kind === 'create' ? draft.body.collection_id : draft.operationId}.json`,
-        JSON.stringify(exported, null, 2),
+        exported,
         'application/json',
     );
 }
@@ -1099,7 +1099,7 @@ function openRecovery(disconnecting = false) {
         disconnecting ? 'Keep your pending requests' : 'Pending requests',
         `
         <p>Export unresolved requests before reload or disconnect. After reconnecting to the same database, import the file, then check its outcome or retry the original request.</p>
-        <p class="small muted">Recovery files contain the original schema and row data, without the access token. Importing does not submit a write.</p>
+        <p class="small muted">Recovery files contain the original schema and row data, without the access token. Export and import allow up to 32 MiB per file. Importing does not submit a write.</p>
         ${entries.length ? entries.map(({ kind, draft }) => `<div class="operations-card"><div><strong>${kind === 'create' ? 'Create collection' : 'Append rows'}</strong><p class="mono">${e(kind === 'create' ? draft.body.collection_id : draft.operationId)}</p></div><button class="button small" data-action="export-pending" data-kind="${kind}" data-id="${e(kind === 'create' ? draft.body.collection_id : draft.operationId)}">Export pending request</button></div>`).join('') : '<p class="result-empty">No unresolved requests in this database.</p>'}
         <form id="recovery-form"><label class="field">Recovery JSON file<input type="file" name="recovery" accept="application/json,.json" required></label><p id="modal-error" class="modal-error" role="alert"></p><div class="modal-actions"><button class="button" type="submit">Import pending request</button>${disconnecting ? '<button class="button" type="button" data-action="disconnect-clear">Disconnect and clear</button>' : ''}</div></form>`,
     );
@@ -1112,9 +1112,7 @@ async function importRecovery(form) {
     setBusy(button, true);
     try {
         const file = form.elements.recovery.files[0];
-        if (!file || file.size > (api.maxBytes ?? 16 * 1024 * 1024))
-            throw new Error('Choose a recovery JSON file within the server response limit');
-        const { kind, draft } = importPending(JSON.parse(await file.text()), scope);
+        const { kind, draft } = await readPendingFile(file, scope);
         draft.scope = scope;
         if (kind === 'append') {
             const schema = await api.json(
