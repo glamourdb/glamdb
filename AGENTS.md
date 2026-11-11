@@ -199,7 +199,7 @@ Preserve these boundaries when adding or changing engine behavior:
 | `core/backend/` | Production StorageBackend over `glamdb_storage`, built with `GLAMDB_BUILD_STORAGE`. |
 | `core/scan/` | Predicate evaluation, snapshot planning and Parquet scan cursor. |
 | `core/telemetry/` | Private typed event adapter over pinned Quill; bounded frontend/backend memory and stderr process counters. |
-| `deploy/logging/`, `tools/logging/` | Pinned Loki/Alloy/private Grafana deployment, control-plane adapter and real ingestion/redaction checks. |
+| `deploy/logging/`, `tools/logging/` | Pinned Loki/Alloy/private Grafana deployment, native macOS/Podman collection, control-plane adapter and real ingestion/redaction checks. |
 | `core/io/` | Independent local filesystem, attempts, receipts, durable files and copying (`glamdb_io`). |
 | `core/storage/` | FileIO, Parquet writer, Iceberg staging, publication/recovery and capacity checks (`glamdb_storage`). |
 | `apps/cli/`, `apps/client/` | Standalone `glamdb-cli`: network database management and HTTP/HTTPS requests, without engine dependencies. |
@@ -365,6 +365,9 @@ Never add payload/header/query text or uncontrolled identifiers to the event
 schema. Quill queue admission and backend callbacks are measurable; exact
 native delivery/backlog are unavailable. Read [LOGGING.md](docs/development/LOGGING.md)
 for actual counters, lifecycle, journal quotas, collection and private search.
+The [macOS/Podman profile](deploy/logging/MACOS_PODMAN.md) installs native Alloy
+and a Loki Quadlet with a dedicated 1 GiB filesystem and required mount guard;
+its file source requires actual bounded schema-1 JSONL producer files.
 Install the pinned formatter before Python/CTest: `python3 -m pip install
 --require-hashes --only-binary=:all: --no-deps -r tools/logging/requirements.txt`
 inside the development virtualenv. Run `python3 -m unittest discover -s

@@ -1,0 +1,15 @@
+// Native macOS service only. The application owns bounded JSONL rotation.
+local.file_match "application" {
+  path_targets = [{
+    __path__ = sys.env("GLAMDB_LOG_DIRECTORY") + "/glamdb*.jsonl",
+    service = "glamdb",
+    environment = sys.env("GLAMDB_ENVIRONMENT"),
+  }]
+  sync_period = "5s"
+}
+
+loki.source.file "application" {
+  targets = local.file_match.application.targets
+  tail_from_end = false
+  forward_to = [loki.process.application.receiver]
+}
