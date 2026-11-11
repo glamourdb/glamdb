@@ -73,6 +73,26 @@ scrape_configs:
     static_configs:
       - targets: ['alertmanager:9093']
         labels: {cluster: local, service: alerting}
+  - job_name: macos-node
+    sample_limit: 50000
+    label_limit: 30
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/macos.json']
+  - job_name: podman
+    sample_limit: 50000
+    label_limit: 30
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/podman.json']
+  - job_name: cgroup
+    sample_limit: 50000
+    label_limit: 30
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/cgroup.json']
+  - job_name: grafana
+    sample_limit: 50000
+    label_limit: 30
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/grafana.json']
 alerting:
   alertmanagers:
     - static_configs:

@@ -13,6 +13,17 @@ field, its actual scope/units, missing-source decisions and validation limits.
 production/Kubernetes work. An exporter returning 200 establishes reachability;
 it does not establish database readiness, a committed write or durability.
 
+## macOS and Podman profile
+
+The [collector profile](../../deploy/monitoring/collectors/README.md) provides
+actual Darwin host, Podman inventory and exact read-only cgroup-v2 measurements.
+Its dashboards and optional four-state checks distinguish the Mac, the Linux VM
+and container leaves. All additional discovery files are empty by default.
+The live overview combines source availability, native/gateway/edge HTTP signals,
+engine outcomes, log shipping and Telegram delivery health. Missing producers
+remain No data. Logs need Loki/Alloy from the logging deployment; state checks
+need the alerting deployment.
+
 ## Application integration
 
 Native code records only real operation outcomes, in-flight/admission ownership,
@@ -70,7 +81,7 @@ durable commit disposition: a cancelled transport can still have committed.
 Actual engine call outcomes, including `commit_unknown`, are recorded separately
 in `glamdb_operations_total`; resolve an individual write through its original
 operation identity. The shared schema's `row_count` default is not a native HTTP
-row measurement. Log shipping consumes `glamdb*.jsonl` separately.
+row measurement. Log shipping tails the active `glamdb.jsonl` file; numbered backups are not rediscovered as new sources.
 
 `glamdb_server_ready{service_instance="core"}` observes actual `Engine::GetHealth`
 at scrape time. It is one only when at least one managed database is open and

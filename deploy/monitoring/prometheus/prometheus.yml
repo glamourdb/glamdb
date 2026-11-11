@@ -69,3 +69,23 @@ scrape_configs:
     label_limit: 25
     file_sd_configs:
       - files: ['/etc/prometheus/targets/alloy.json']
+  - job_name: macos-node
+    sample_limit: 50000
+    label_limit: 30
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/macos.json']
+  - job_name: podman
+    sample_limit: 50000
+    label_limit: 30
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/podman.json']
+  - job_name: cgroup
+    sample_limit: 50000
+    label_limit: 30
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/cgroup.json']
+  - job_name: grafana
+    sample_limit: 50000
+    label_limit: 30
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/grafana.json']
