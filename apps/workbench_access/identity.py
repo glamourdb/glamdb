@@ -191,10 +191,18 @@ class TokenVerifier:
                     token=raw,
                     token_type_hint="access_token",
                 )
-                response.raise_for_status()
                 if len(response.content) > 32768:
                     raise ValueError()
+                if response.status_code == 400 and response.json().get("error") in (
+                    "invalid_request",
+                    "invalid_token",
+                ):
+                    # Keycloak reports a revoked organization context this way.
+                    raise AuthError()
+                response.raise_for_status()
                 current = response.json()
+            except AuthError:
+                raise
             except Exception:
                 raise AuthError(503, "UNAVAILABLE") from None
             if (

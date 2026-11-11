@@ -119,3 +119,48 @@ async def test_idp_failure_is_unavailable_not_grant(tmp_path):
         with pytest.raises(AuthError) as failure:
             await verifier.verify("a.b.c")
         assert failure.value.status == 503
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "status,code,expected",
+    [
+        (400, "invalid_request", 401),
+        (400, "invalid_token", 401),
+        (400, "invalid_client", 503),
+        (401, "invalid_client", 503),
+        (503, "server_error", 503),
+    ],
+)
+async def test_native_token_rejection_is_not_dependency_outage(
+    tmp_path, status, code, expected
+):
+    key = jwk.RSAKey.generate_key(2048)
+    key.ensure_kid()
+    now = int(time.time())
+    claims = {
+        "iss": "https://login.example/realms/glamdb",
+        "aud": "glamdb-api",
+        "sub": str(uuid4()),
+        "iat": now,
+        "exp": now + 60,
+        "typ": "Bearer",
+        "realm_access": {"roles": ["glamdb-operator"]},
+    }
+
+    async def peer(request):
+        if request.url.path.endswith("/certs"):
+            return httpx.Response(200, json={"keys": [key.as_dict(private=False)]})
+        return httpx.Response(status, json={"error": code})
+
+    secret = tmp_path / "secret"
+    secret.write_text("long-service-client-secret")
+    secret.chmod(0o600)
+    settings = SsoSettings(
+        issuer=claims["iss"], client_id="gateway", client_secret_file=secret
+    )
+    async with TokenVerifier(settings, transport=httpx.MockTransport(peer)) as verifier:
+        token = jwt.encode({"alg": "RS256", "kid": key.kid}, claims, key)
+        with pytest.raises(AuthError) as failure:
+            await verifier.verify(token)
+        assert failure.value.status == expected
