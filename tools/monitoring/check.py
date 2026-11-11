@@ -82,6 +82,9 @@ def main():
             dashboard = json.loads(dashboard_path.read_text())
             for panel in dashboard["panels"]:
                 for target in panel.get("targets", []):
+                    source = target.get("datasource", panel.get("datasource", {}))
+                    if isinstance(source, dict) and source.get("type") == "loki":
+                        continue
                     expression = target["expr"].replace("$__rate_interval", "5m")
                     expression = re.sub(r"\$[a-zA-Z_]+", ".*", expression)
                     queries.append({"record": "glamdb_dashboard_check_" + str(len(queries)), "expr": expression})

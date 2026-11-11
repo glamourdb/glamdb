@@ -527,6 +527,14 @@ mechanical rules; vendor and generated code are excluded.
 - Keep generated builds, dependencies, and experiment output in the ignored
   `build/`, `.deps/`, and `artifacts/` directories.
 
+The optional monitoring profile in `deploy/monitoring/collectors/` uses actual
+macOS node_exporter, named Podman inventory and narrow read-only cgroup-v2
+exporters. Its pinned collectors keep Mac, VM and container measurements separate
+from Kubernetes. The live Grafana overview separates transport, engine outcomes
+and edge/gateway layers. `tools/monitoring/extend_checks.py` applies optional
+source checks to alerting config; unavailable producers remain NODATA. Validate
+Prometheus and Loki dashboard queries with their respective engines.
+
 ## Validation and reporting
 
 - For behavior changes, add and run focused tests in the appropriate suite.
