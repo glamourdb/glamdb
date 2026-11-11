@@ -22,10 +22,11 @@ services:
     cpus: 1.0
   grafana:
     image: grafana/grafana:13.3.0@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205
+    user: '472:472'
     ports: ['127.0.0.1:3000:3000']
     environment:
       GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_SECURITY_ADMIN_PASSWORD: '$$__file{/run/secrets/grafana_admin_password}'
       GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_AUTH_ANONYMOUS_ENABLED: 'false'
       GF_ANALYTICS_REPORTING_ENABLED: 'false'
@@ -52,7 +53,7 @@ volumes:
   grafana-data: {}
 secrets:
   grafana_admin_password:
-    file: ${GLAMDB_GRAFANA_PASSWORD_FILE:-../../artifacts/monitoring/grafana-password.container}
+    file: ${GLAMDB_GRAFANA_PASSWORD_FILE:?set the owned private Grafana password file}
 networks:
   observability:
     name: glamdb-observability
