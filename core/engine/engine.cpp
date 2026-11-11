@@ -663,7 +663,19 @@ struct Engine::Impl
         }
         try {
             RecoverStore(reopen);
+        } catch (const Failure& error) {
+            using namespace NGlamDB::NTelemetry;
+            if (error.detail.code == "IO_ERROR" || error.detail.code == "CORRUPTION" ||
+                error.detail.code == "UNSUPPORTED_STORE_VERSION")
+            {
+                TLogScope::Emit(ELogEvent::StorageFailed);
+            }
+            TLogScope::Emit(ELogEvent::RecoveryRequired);
+            std::lock_guard lock(state_mutex);
+            recovering = false;
+            throw;
         } catch (...) {
+            NGlamDB::NTelemetry::TLogScope::Emit(NGlamDB::NTelemetry::ELogEvent::RecoveryRequired);
             std::lock_guard lock(state_mutex);
             recovering = false;
             throw;

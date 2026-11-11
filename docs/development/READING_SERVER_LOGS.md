@@ -33,16 +33,18 @@ jq -Rc --arg id 'paste-request_id-here' \
 | Event | Meaning |
 | --- | --- |
 | `runtime_started` | Runtime initialization began; this alone does not mean the listener is ready. |
-| `runtime_stopped` | Shutdown completed, or startup/teardown failed (`outcome=error`). |
+| `runtime_stopped` | The process runtime finished; `outcome` reflects its exit result, not a durability guarantee. |
 | `request_completed` | One HTTP session finished: operation, duration in microseconds and HTTP status. A cancelled transport can have status 0 or an attempted response status. |
 | `storage_failed` | The core observed an I/O failure or invalid stored data on an instrumented operation path. |
-| `recovery_required` | The core invalidated readiness after corruption or an uncertain commit. `outcome=unknown` means the commit needs authoritative reconciliation. |
+| `recovery_required` | The core requires recovery after corruption, an uncertain commit, or failed reconciliation/reopening. `outcome=unknown` means the commit needs authoritative reconciliation. |
 
 Native numeric fields are JSON **strings**, including `schema`, `status_code`
 and `duration_us`. `timestamp` is Unix nanoseconds. `request_id` is generated
-internally and shared by synchronous core events and the corresponding HTTP
-completion; client headers cannot choose it. No raw URL, headers, credentials,
-exception text or stored values enter structured events.
+internally. During a request it links synchronous core events to the HTTP
+completion; client headers cannot choose it. Startup/shutdown core events use
+a separate runtime context (`operation=other`) and have no HTTP completion.
+No raw URL, headers, credentials, exception text or stored values enter
+structured events.
 
 By default, successful requests are sampled **1 in 100**, with at most **20**
 sampled successes per second. Errors, denials, cancellations and lifecycle/core

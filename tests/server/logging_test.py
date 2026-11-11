@@ -109,12 +109,13 @@ class ServerLogging(unittest.TestCase):
         requests = [e for e in records if e['event'] == 'request_completed']
         self.assertTrue(any(e['operation'] == 'append' and e['outcome'] == 'ok' for e in requests))
         self.assertTrue(any(e['operation'] == 'scan' and e['outcome'] == 'ok' for e in requests))
-        failures = [e for e in records if e['event'] == 'storage_failed']
+        # Shutdown may independently retry recovery and report an operation=other failure.
+        failures = [e for e in records if e['event'] == 'storage_failed' and e['operation'] == 'scan']
         self.assertTrue(failures, records)
         self.assertTrue(any(e['event'] == 'recovery_required' for e in records))
         for event in failures:
             self.assertTrue(any(r['request_id'] == event['request_id'] and r['operation'] == 'scan'
-                                and r['outcome'] == 'error' for r in requests))
+                                and r['outcome'] == 'error' for r in requests), event)
 
     def test_disconnected_session_is_logged_once_without_inventing_http_success(self):
         self.start()
@@ -127,6 +128,37 @@ class ServerLogging(unittest.TestCase):
         self.assertEqual(len(cancelled), 1, records)
         self.assertEqual(int(cancelled[0]['status_code']), 0)
         self.assertEqual(sum(e['request_id'] == cancelled[0]['request_id'] for e in records), 1)
+
+    def test_reconcile_and_reopen_failures_emit_correlated_core_events(self):
+        self.start('--log-success-sample-every', '1', '--log-max-success-per-second', '1000000')
+        status, database = self.request('/databases', {'name': 'recovery'})
+        self.assertEqual(status, 200)
+        base = '/databases/' + database['database_id']
+        cid = str(uuid.uuid4())
+        self.assertEqual(self.request(base + '/collections', {'collection_id': cid, 'name': 'events',
+            'schema': {'fields': [{'name': 'key', 'type': 'string'}]}})[0], 200)
+        self.assertEqual(self.request(base + '/collections/' + cid + '/append',
+            {'operation_id': str(uuid.uuid4()), 'rows': [{'key': 'private-marker'}]})[0], 200)
+        files = list(Path(self.tmp.name).rglob('*.parquet'))
+        self.assertTrue(files)
+        files[0].write_bytes(b'corrupt')
+        status, response = self.request(base + '/reconcile', {})
+        self.assertEqual(status, 500)
+        self.assertEqual(response['error']['code'], 'CORRUPTION')
+        records = self.stop()
+        completion = next(e for e in records if e['event'] == 'request_completed'
+                          and e['operation'] == 'database' and int(e['status_code']) == 500)
+        correlated = [e['event'] for e in records if e['request_id'] == completion['request_id']]
+        self.assertIn('storage_failed', correlated)
+        self.assertIn('recovery_required', correlated)
+        # Managed startup reopens the same corrupt database through EngineFactory.
+        self.log.seek(0)
+        self.log.truncate()
+        self.start()
+        self.assertEqual(self.request(base + '/readyz')[0], 503)
+        reopened = self.stop()
+        self.assertTrue(any(e['event'] == 'storage_failed' for e in reopened), reopened)
+        self.assertTrue(any(e['event'] == 'recovery_required' for e in reopened), reopened)
 
     def test_failed_startup_records_error_lifecycle(self):
         env = dict(os.environ)

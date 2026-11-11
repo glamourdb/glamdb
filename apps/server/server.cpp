@@ -63,6 +63,7 @@ ELogOperation ClassifyOperation(const TRequest& request) noexcept
             return ELogOperation::Database;
         }
     } catch (...) {
+        return ELogOperation::Other;
     }
     return ELogOperation::Other;
 }

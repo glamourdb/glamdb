@@ -474,6 +474,7 @@ TLogRuntime::TLogRuntime(const TLogOptions& options) noexcept
         }
     } catch (...) {
         // Operational telemetry never prevents the application from running.
+        ProcessStats.AdapterErrors.fetch_add(1, std::memory_order_relaxed);
     }
 }
 

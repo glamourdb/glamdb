@@ -20,8 +20,8 @@ and typed operations into synchronous engine calls, and restores the previous
 context on return. The scope itself never allocates a producer queue.
 
 The coordinator emits `recovery_required` for uncertain create/append commits
-and corruption that invalidates readiness. Its observed I/O/corruption paths
-emit `storage_failed`. These events share the HTTP request ID even if the client
+and failed recovery, including corruption discovered by explicit reconciliation
+or startup reopening. Its observed I/O/corruption paths emit `storage_failed`. These events share the HTTP request ID even if the client
 has disconnected before the engine call finishes. They do not replace durable
 outcomes or claim exhaustive tracing of every file operation. Embedded callers
 without a scope remain silent. The installed core package carries the private

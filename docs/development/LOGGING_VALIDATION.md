@@ -13,17 +13,32 @@ Executed on Linux x86-64 with Clang 18 and the existing pinned storage prefix:
 - The native SQLite VFS uncertainty test failed against the original binary
   with zero recovery events, then passed with matching request IDs on core
   `recovery_required` and HTTP 503 completion.
-- Six real server/admin logging tests passed: lifecycle, success sampling,
+- Seven real server/admin logging tests passed: lifecycle, success sampling,
   HTTP 400/401/404/408, redaction, append/scan, damaged Parquet and correlated
   core failure, disconnected sessions, failed startup, `/dev/full`, admin
-  creation/inspection/quiescence and failed read classification.
+  creation/inspection/quiescence and failed read classification. Recovery failure
+  coverage includes explicit reconcile and fresh-process reopening.
 - `ctest --test-dir build/local -R '^glamdb.logging$' --output-on-failure` passed
   all 17 underlying native/Python adapter cases.
 - The seven CTest entries `admin`, `native_http`, `native_http_fault`,
   `http_review`, `http_security`, `server_logging`, and `installed_consumer`
   passed. The installed consumer configures, links and executes actual writes
   and fresh-process reads through the exported core package.
-- LLVM 18 format checking of 220 files and pinned-submodule verification passed.
+- The complete build and `ctest --test-dir build/local --output-on-failure -j 4`
+  passed: 698 tests passed, three child-process entrypoints skipped, and one
+  pre-existing test disabled (701 enabled entries, zero failures).
+- All seven CMake configuration tests passed using the pinned Clang 18/libc++
+  toolchain and storage prefix, including the installed-archive regression.
+- Focused LLVM 18 tidy passed for the five changed production translation units:
+  server, server main, admin main, structured logger and engine. This is not a
+  whole-repository tidy claim.
+- LLVM 18 format checking of 220 files, pinned-submodule verification and the
+  quality negative check passed.
+
+Independent review found one instrumentation gap: corruption found by recovery
+was not reported through the core event path. A real-server regression first
+failed with only HTTP completion, then passed after instrumenting recovery's
+failure handlers. The fix preserves existing readiness and exception handling.
 
 The following older collector/adapter evidence is historical and was not rerun
 for this integration. In particular, the separately configured producer below

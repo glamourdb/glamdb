@@ -29,4 +29,9 @@
   reproc and paged/legacy stream fixtures.
 - Server and SQLite VFS logging regressions observed failing on old binaries.
 - Server/core/admin integration and guide implemented; focused checks pass.
-- General build/static checks and independent review remain to be completed.
+- Complete build and CTest pass: 698 passed, three skipped child entrypoints,
+  one previously disabled test; focused static analysis and quality checks pass.
+- Initial integration committed and pushed to the existing PR after rebase.
+- Independent review found missing recovery/reopening failure events. Added a
+  failing real-server regression, fixed the gap, and verified the full suite.
+- Final recovery fix and validation record are ready for the follow-up push.
