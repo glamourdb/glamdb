@@ -2,7 +2,9 @@
 
 This profile collects real native JSONL events. The producer must already emit
 schema-1 records into a dedicated directory with bounded application rotation;
-its active file is `glamdb.jsonl`, and rotated files match `glamdb*.jsonl`.
+its active file is `glamdb.jsonl`, with numbered backups such as `glamdb.1.jsonl`.
+Only the active filename is discovered. Alloy's file tailer follows rotation;
+discovering each renamed backup separately could replay old records.
 Startup messages in an unrelated stdout file are not a replacement for this
 source. The collector applies the same allowlist, validation, field projection
 and trusted labels as the Linux journal profile.
@@ -73,7 +75,10 @@ initial file source can have no targets until a real matching log file exists.
 Successful ingestion is established only by querying real schema-1 application
 events from `/loki/api/v1/query_range`, then observing file-read and sent-entry
 counters. Readiness alone does not establish this path. Collector restart keeps
-positions; a missing or truncated producer file can still cause gaps or replay.
+positions. Rotation while the collector is unavailable, truncation or deletion
+can cause unrecoverable gaps: the active-file source does not replay numbered
+backups. A missing positions file can replay active-file records. This is a
+best-effort operational log pipeline, not exactly-once delivery.
 
 Quadlet service and install semantics follow the
 [Podman systemd documentation](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html).

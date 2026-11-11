@@ -1,7 +1,8 @@
-// Native macOS service only. The application owns bounded JSONL rotation.
+// Follow only the native service's active file. Alloy's file tailer handles
+// rename/reopen; separately discovering numbered backups would replay them.
 local.file_match "application" {
   path_targets = [{
-    __path__ = sys.env("GLAMDB_LOG_DIRECTORY") + "/glamdb*.jsonl",
+    __path__ = sys.env("GLAMDB_LOG_DIRECTORY") + "/glamdb.jsonl",
     service = "glamdb",
     environment = sys.env("GLAMDB_ENVIRONMENT"),
   }]

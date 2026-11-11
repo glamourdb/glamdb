@@ -186,7 +186,7 @@ systemctl is-active --quiet glamdb-logging-loki.service
     wait_ready("http://127.0.0.1:12345/-/ready")
     print(json.dumps({"status": "ready", "loki": "http://127.0.0.1:3100",
                       "alloy": "http://127.0.0.1:12345", "runtime": str(runtime),
-                      "source_glob": str(args.log_directory.resolve() / "glamdb*.jsonl"),
+                      "source_path": str(args.log_directory.resolve() / "glamdb.jsonl"),
                       "loki_volume_bytes": 1073741824}, sort_keys=True))
 
 
