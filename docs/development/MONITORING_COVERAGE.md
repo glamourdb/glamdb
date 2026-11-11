@@ -46,6 +46,25 @@ boundary when removing the previous private collector.
 | Total disk utilization | `rate(node_disk_io_time_seconds_total[5m])`, `/proc/diskstats` busy milliseconds | Device busy fraction; concurrent modern disks need throughput/latency/queue context. | Linux block stats; compare actual source with bounded I/O. This is not a hard throughput ceiling. |
 | Separate read/write utilization | `rate(node_disk_read_time_seconds_total[5m])` and write equivalent | Explicit **directional service-time proxy**, can exceed 100% with concurrent I/O. Exact directional wall-busy percentages are **No data**. | Linux exposes aggregate device wall busy time, not separate directional wall fractions. Do not clamp or relabel service time as exact busy utilization. |
 
+## Separate macOS and Podman profile
+
+The [optional collector profile](../../deploy/monitoring/collectors/README.md)
+adds an explicitly selected, source-qualified Darwin and rootful Podman setup.
+It does not change the default Kubernetes source contract above. Actual Mac
+anonymous resident memory comes from Mach internal pages; exact container
+anonymous/file/unevictable memory comes from real cgroup-v2 leaves, including
+both direct-run and Quadlet paths. Inventory joins name those actual containers.
+Neither source establishes pod-parent or PVC coverage.
+
+The profile pins cgroup-exporter 0.3.3 with read-only cgroup mounts, dropped
+capabilities, 64 MiB/0.25 CPU process bounds and scraper sample limits. These
+external bounds do not add an internal target/device budget or make partial
+collection failures visible as a success metric. The 108 live comparisons and
+101 dashboard queries qualify only the documented local environment; large
+container fleets, path churn, induced OOM/pressure and Kubernetes remain unrun.
+Exact TCP namespace statistics, unconstrained scheduling demand and mlock-only
+memory are not inferred from other measurements.
+
 ## Explicit cgroup source-gap decision
 
 The previous private `resource_exporter.py` read exact pod-parent cgroup-v2
