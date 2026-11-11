@@ -216,6 +216,8 @@ try {
         metrics->Phases[operationIndex][phaseIndex]->Observe(seconds);
     }
 } catch (...) {
+    // Telemetry must not change an engine operation's outcome.
+    return;
 }
 
 void RecordFinished(EOperation operation,
@@ -240,6 +242,8 @@ try {
         metrics->Errors[operationIndex][phaseIndex][errorIndex]->Increment();
     }
 } catch (...) {
+    // Telemetry must not change an engine operation's outcome.
+    return;
 }
 
 void RecordIncomplete(EOperation operation, double seconds) noexcept
@@ -251,6 +255,8 @@ try {
         metrics->Durations[operationIndex][3]->Observe(seconds);
     }
 } catch (...) {
+    // Telemetry must not change an engine operation's outcome.
+    return;
 }
 
 void AdjustInFlight(EOperation operation, int64_t delta) noexcept
@@ -261,6 +267,8 @@ try {
         metrics->InFlight[operationIndex]->Increment(static_cast<double>(delta));
     }
 } catch (...) {
+    // Telemetry must not change an engine operation's outcome.
+    return;
 }
 
 void AdjustAdmission(int64_t pendingDelta, int64_t bytesDelta) noexcept
@@ -271,6 +279,8 @@ try {
         metrics->OwnedBytes->Increment(static_cast<double>(bytesDelta));
     }
 } catch (...) {
+    // Telemetry must not change an engine operation's outcome.
+    return;
 }
 
 std::shared_ptr<prometheus::Collectable> GetMetricsCollectable()
