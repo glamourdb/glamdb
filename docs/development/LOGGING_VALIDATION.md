@@ -18,6 +18,12 @@ file mode; runtime journal quotas/rotation require the separate Linux gate below
 
 Final executed commands/results after rebasing onto main `6264b04`:
 
+- In a fresh non-recursive checkout and clean Python 3.13.5 environment,
+  `bash scripts/bootstrap-workbench.sh` initialized only the pinned Quill
+  headers; Arrow/Iceberg remained uninitialized. The original missing-header
+  compiler failure was reproduced before setup. The exact workbench Python
+  check then passed **429 tests**, with one Linux `/dev/full` skip, and
+  `python -m pip check` reported no broken requirements.
 - `cmake -S . -B build/logging-quill -G Ninja -DGLAMDB_IO_ONLY=ON -DBUILD_TESTING=ON -DPython3_EXECUTABLE="$PWD/.venv/bin/python"`,
   build, then `ctest --test-dir build/logging-quill --output-on-failure`:
   **174/174 PASS**, including **17 logging tests** (sixteen pass on macOS; the Linux ENOSPC device test skips). The logging test uses the
