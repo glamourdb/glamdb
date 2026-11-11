@@ -116,6 +116,26 @@ class NativeMetadataHTTP(NativeHTTP):
         self.assertEqual(self.api(path + '/snapshots')['items'], history)
         self.assertEqual(self.api(path + '/files')['items'], files_b['items'])
 
+    def test_explain_preserves_compound_predicates_and_null_literals(self):
+        path = self.collection()
+        predicates = [
+            {'op': 'true'},
+            {'op': 'eq', 'field': 'n', 'value': None},
+            {'op': 'in', 'field': 'n', 'values': ['9007199254740993', None, '-9223372036854775808']},
+            {'op': 'is_null', 'field': 'n'},
+            {'op': 'is_not_null', 'field': 'ts'},
+            {'op': 'and', 'args': [
+                {'op': 'or', 'args': [
+                    {'op': 'is_null', 'field': 'n'},
+                    {'op': 'eq', 'field': 'key', 'value': 'точное значение'}]},
+                {'op': 'not', 'arg': {'op': 'ge', 'field': 'ts', 'value': '2026-01-01T00:00:00.123456Z'}},
+                {'op': 'in', 'field': 'n', 'values': ['9007199254740993', None]}]},
+        ]
+        for predicate in predicates:
+            with self.subTest(predicate=predicate):
+                explained = self.api(path + '/explain', {'projection': ['key'], 'predicate': predicate})
+                self.assertEqual(explained['predicate'], predicate)
+
     def test_metadata_cursor_is_bound_to_view_parameters_and_database(self):
         path, a, b = self.seed()
         for kind in ('snapshots', 'files'):

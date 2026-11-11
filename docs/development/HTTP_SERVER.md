@@ -60,7 +60,7 @@ system OpenSSL Crypto for page SHA-256 checksums.
 | `POST /databases/{id}/open` | Open existing data and run core recovery |
 | `POST /databases/{id}/close` | Stop new calls, drain admitted calls and shut down |
 | `POST /databases/{id}/reconcile` | Run core reconciliation for an open engine |
-| `POST /databases/{id}/discard` | Remove an uninitialized reservation, preserving any incomplete files |
+| `POST /databases/{id}/discard` | Remove an uninitialized reservation and verified disposable initialization files |
 
 Close/reconcile/discard take `{}`; open accepts `{limits?:object}`. All routes require the bearer token. Collection
 routes in the next table are relative to `/databases/{id}` in managed mode;
@@ -80,9 +80,13 @@ automatic client retries. An unfinished reservation without a store can be
 completed only by explicit creation. `open` never creates anything. An incomplete
 store, or a missing initialized store, remains an error and is never replaced.
 Discard returns `{database_id,discarded:true}` and releases the name, UUID and registry slot.
-It requires an uninitialized reservation with no owned engine and no `store.ready`;
-otherwise it returns 412. Any incomplete directory is preserved as an `incomplete-...`
-sibling. A registry write with an uncertain outcome requires restart before reuse;
+It requires an uninitialized reservation with no owned engine or valid readiness
+marker. Empty or mismatched markers are disposable only with a known initialization
+layout and an empty warehouse. Cleanup holds the directory ownership lock, rejects
+symlinks and unknown contents, and never follows directory links. Valid ready stores
+remain protected even if their identity differs from the reservation. Unknown
+contents require inspection; existing unregistered `incomplete-...` siblings are
+not swept. A registry write with an uncertain outcome requires restart before reuse;
 after restart, inspect the original ID (404 means the reservation was removed).
 Discard never removes an initialized or ready store. There is no drop/import/rename
 endpoint for initialized databases in this release.
@@ -115,7 +119,7 @@ catalogs or data. A definitely rolled-back registry write can be retried. An unc
 blocks further lifecycle mutations until restart; outcome lookup and core reconciliation
 remain available for owned engines. Service initialization builds and syncs the complete
 registry before publishing it. Explicit create can retry an incomplete, uninitialized
-store reservation by preserving its files under an `incomplete-...` sibling. It never
+store reservation by reclaiming only those verified disposable files. It never
 replaces an initialized store.
 A missing registry in a nonempty directory fails startup. Each service directory
 has one process owner; each core store retains its own identity and owner lock.
@@ -129,6 +133,8 @@ timeout does not roll back lifecycle changes: inspect state or retry the same
 action. Per-database leases drain accepted calls and reject new calls during
 close/reconcile; unrelated databases remain usable within the fixed worker pool.
 Database info/list requests read immutable descriptors without waiting for lifecycle changes.
+An unresolved registry fence makes reconcile fail with `OperatorAction`; it cannot
+return success while the database remains fenced in `error`.
 Repeated open/create of an already healthy database does not drain active calls. Failed core
 reconciliation preserves outcome lookup while core readiness rejects unsafe work.
 The workbench clears query results and schema caches on database switch and ignores
@@ -257,10 +263,16 @@ fractional digits, normalized to UTC with six digits, years 0001–9999.
 Scan: `{projection?,predicate?,snapshot_id?,limit?,batch_rows?}`. Omission selects
 latest once; null or `"initial"` selects the initial empty view. Historical IDs
 are decimal strings. Omitted/null projection defaults to all columns; zero-column projection
-is unavailable. Predicates are null/`{op:"true"}` or one comparison
-`{op:"eq|ne|lt|le|gt|ge",field,value}` with a correctly typed literal. Other
-operators return 501. Limit is a nonnegative int64 integer; batch_rows is 1..65536.
-Only TRUE survives NULL filtering. No SQL parser is implied.
+is unavailable. Predicates are `null`/`{op:"true"}`, comparisons
+`{op:"eq|ne|lt|le|gt|ge",field,value}` (where `value` is a correctly typed
+literal or `null`), `{op:"in",field,values:[...]}` (typed literals and/or
+`null`), `{op:"is_null|is_not_null",field}`, or recursive boolean trees
+`{op:"and|or",args:[...]}` (non-empty `args`) and `{op:"not",arg:{...}}` within
+`predicate_depth <= 64`, `predicate_nodes <= 1024`, and `predicate_literals <=
+4096` (exceeding limits or malformed shapes/types returns 400; unknown operators
+within the depth limit return 501). Limit is a nonnegative int64 integer;
+batch_rows is 1..65536. SQL three-valued NULL logic applies across the tree and
+only TRUE at the root survives. No SQL parser is implied.
 
 JSON scan returns `{schema,snapshot_id,rows,identity,profile,next_cursor}`. The
 snapshot is the resolved selected view, including null for the initial empty
@@ -289,15 +301,12 @@ a cursor cannot be replayed: opening again creates a new scan. The SDK's scan en
 consumed cursor and returns `{"cancelled":true}`. Tokens are scoped to database,
 collection and representation; stale or missing tokens return 404, never restart
 queries. Each database has eight sessions within a server limit of 64. Idle sessions expire
-after 60 seconds (checked every second); replay does not refresh that deadline. All
-sessions expire after five minutes. Retained response bodies have a shared 128 MiB
-budget; completed replay caches may be evicted to admit new scans. Before advancing
-a page, the server reserves a full 16 MiB response in addition to its previous
-replay body. Replay-capacity refusal returns 429 before consuming rows and preserves
-the cursor and its previous replay; cancel unused scans and retry the same token.
-Successful encoding replaces that reservation with the actual retained body size.
-Other page failures invalidate the session. These are replay reservations, not a
-bound on decode buffers or outgoing copies. Close, reconciliation
+after 60 seconds (checked every second); replay does not refresh that deadline.
+Active production scans have no absolute lifetime limit. Admission reserves the
+16 MiB hard response bound for each session within a shared 1 GiB replay budget,
+before planning or consuming rows. This logical reservation covers retained
+serialized bodies, not pending Arrow buffers, outgoing copies or total memory.
+Completed replay caches may be evicted to admit new scans. A failed page invalidates its session. Close, reconciliation
 and shutdown release sessions after admitted calls drain. Cancellation releases
 between page calls; it does not interrupt an active filesystem read.
 
@@ -307,7 +316,12 @@ full receipt/error and recovery context. No 202 or asynchronous admission exists
 A timeout/disconnect/HTTP error alone never proves rollback. Retain the original
 ID and payload, query its outcome, and reconcile/reopen when core requires it.
 HTTP parsing/codec rejection precedes the core call and returns an error object;
-it does not register an operation. No implicit retry occurs in server or CLI.
+it does not register an operation. Pre-execution `SERVER_BUSY` (503) and
+`REQUEST_TIMEOUT` (408) refusals include `execution_started:false` and
+`Retry-After: 1`. The SDK treats only the complete matching envelope as a definite
+refusal; malformed or generic write failures remain uncertain. This describes
+the current call and says nothing about an earlier attempt with the same ID.
+No implicit retry occurs in server or CLI.
 
 Errors are `{error:{code,message,retry_hint}}`, with the core retry hint unchanged.
 400 invalid request, 401 authentication, 404 authoritative absence, 409 conflict,
@@ -318,7 +332,7 @@ uses 429 for bounded admission (busy writer, pending budget) and
 507 when the core marks it `OperatorAction`: free-space reserves, store limits,
 `max_collections`/`max_operations`/catalog bytes, or failed allocation. `CAPACITY_EXCEEDED`
 is always 507. Writer preflight also currently emits `RESOURCE_EXHAUSTED` with
-`FixInput` (429) when its separate row/input estimate exceeds a bound; reduce the
+`FixInput` (413) when its separate row/input estimate exceeds a bound; reduce the
 input instead of retrying it unchanged. The free-space reserve is the larger of 1 GiB and 5% of the data
 filesystem plus 512 MiB for an attempt and journal. Database, collection and
 operation absence have distinct codes; only `OPERATION_NOT_FOUND` proves an
@@ -334,26 +348,43 @@ Collections accept `page_size` 1..1000; insufficient size or any cursor returns
 
 ## HTTP service profile
 
-Standalone Asio provides asynchronous sockets, timers and signals. Four data workers
-admit at most two concurrent calls per database. Two lifecycle workers and two
-control/static workers keep database descriptors and outcome lookup independent of
-long data calls. Outcome lookup uses nonblocking catalog admission: publication
-contention returns 503 `OPERATION_IN_PROGRESS`, never authoritative absence or an
-append disposition. Retry the original lookup after publication finishes. Health
-and global capabilities run on the I/O thread. Core retains
-its single serialized writer. Overload returns 503 with `Retry-After: 1` within the
-bounded response capacity. There are at most 64 header readers (32 per peer), 16
-admitted request bodies and 96 total connections, including overload responses;
+Standalone Asio provides asynchronous sockets, timers and signals. Separate pools
+serve readers (four workers, two calls per database), publishers (four workers,
+one per database), lifecycle (four workers, one per database), and controls/static
+files (two workers, one per database). Each pool uses per-database FIFO queues and
+round-robin dispatch: at most 64 queued calls and 64 MiB of queued bodies per pool,
+with at most 16 calls and 32 MiB per database. Queue deadlines use
+`--request-timeout-ms`; expiry and observed TCP resets or socket errors remove
+calls before core entry. A complete request remains valid after the client closes
+its send side; queued and active calls retain their response socket. Active core
+calls finish independently of read/queue deadlines. Outcome
+lookup never waits on an in-progress catalog publication. Health and capabilities
+run on the I/O thread. Core retains its single serialized writer.
+
+Ordinary header allowances are 64 globally and 32 per peer; excess accepted
+connections have a 100 ms header probe so complete requests can still progress.
+At most 16 request bodies are read at once, including at most 12 ordinary uploads.
+The remaining four readers are reserved for authenticated database
+create/open/close/reconcile/discard and scan cancellation; these control bodies
+can also use other free readers. Public/static POSTs cannot spend the reserve.
+Additional headers wait within the connection ceiling and original read deadline;
+eligible control bodies can pass ordinary waiters when only reserved capacity is
+available. Authentication and body reservation precede `100 Continue`. Body slots
+release when reading finishes, on disconnect, timeout or shutdown; retained
+queued bodies use the separate byte limits above.
+There are 96 total connections, including overload responses;
 at the final ceiling, accept pauses and checks for capacity every 100 ms. Excess
 connections wait in the kernel backlog instead of being accepted and reset. The
 OS backlog remains finite; connect/read timeouts still require clients to preserve
-the original write identity. Header reads have at most one
-second; body reads use `--request-timeout-ms` (default 10 seconds), and response
-writes have five seconds. Read deadlines never cancel admitted core work.
+the original write identity. Headers and bodies share `--request-timeout-ms`
+(default 10 seconds); response writes have 30 seconds. Early errors half-close
+their reply and drain at most 32 MiB for at most two seconds to preserve responses
+to eager senders. Read deadlines never cancel admitted core work.
 Transient accept failures retry with backoff. Header limit: 16 KiB; request/response:
-16 MiB; append: 10000 rows. JSON depth and event limits bound a single-pass parser
-and accommodate the full 256-field append schema. These transport bounds are not
-a qualified process-memory or storage budget.
+16 MiB; append: 10000 rows. JSON parsing allows 160 nesting levels for compound
+predicates. Event limits bound the single-pass parser and accommodate 10,000 rows
+of the full 64-field append schema (1,300,100 parser events). These transport
+bounds are not a qualified process-memory or storage budget.
 
 The [shared resource budget matrix](RESOURCE_BUDGETS.md) specifies which limits
 are per request, store or service, who reserves/releases them and which aggregate
@@ -373,6 +404,29 @@ Use ordinary buffered JSON requests. The server defaults to 127.0.0.1:8080.
 reverse proxy for remote access. There is one bearer identity, no user/RBAC layer.
 The token comes only from `GLAMDB_TOKEN`, never a URL, log, config response or UI
 storage. API responses are uncached. CORS is disabled; the UI uses the same origin.
+
+### Remote access through TLS
+
+Keep the native listener on `127.0.0.1` and expose only the TLS reverse proxy.
+Configure the proxy with the deployment certificate and key, forward
+`Authorization` unchanged, and retain native bearer authentication on every API
+request. `X-Forwarded-*` headers grant no access. The single bearer identity can
+administer every managed database; a scan cursor is additionally bound to its
+database, collection and representation. A cursor alone never authenticates.
+
+Set proxy header/body/concurrency limits and timeouts as well as the native
+limits. If the proxy accepts chunked uploads, buffer them under its own finite
+byte cap and forward an HTTP/1.1 Content-Length request. The native listener
+rejects Transfer-Encoding and compressed request bodies before reading or
+decompressing them, so neither can bypass its 16 MiB input cap. A proxy that
+decompresses requests must independently cap decompressed bytes before forwarding.
+Buffering and native limits bound different resources.
+
+Use an HTTPS base URL and a trusted CA for CLI/SDK clients; verification must
+cover both the certificate chain and hostname. Keep tokens out of URLs and proxy
+access/error logs; do not log authorization headers or request bodies. The
+native server emits its listening address but does not log request headers,
+targets or bodies, and authentication errors contain no supplied credentials.
 
 SIGINT/SIGTERM stop accepting, close incomplete requests, cancel scan sessions and
 reject new scans before draining workers. Cancellation reaches core cursors without
@@ -415,6 +469,15 @@ repeat-ID conflicts, fixed snapshots, lost-response lookup, reopen, owner lockin
 request framing/auth/limits and UI assets. Mock/client suites remain separate.
 Passing these tests does not qualify physical power-loss durability.
 
+`glamdb.http_review` also forwards exact request bytes through a disposable TLS
+terminator into the native server. It checks certificate verification, bearer
+rejection (including URL/proxy-header substitutes), compressed/chunked/oversized
+input, row and scan-session limits, and credential-free errors/logs. The
+`glamdb.native_http_fault` suite checks ordinary/total body admission boundaries,
+protected control progress, encoded routes and reservation release over HTTP and
+verified HTTPS. Its SQLite VFS fault controls are test-only; these admission
+cases use the production listener and storage without injecting a fault.
+
 The deterministic `glamdb.http_lifecycle` test uses a test-only backend barrier
 to disconnect and deliver SIGTERM during publication, verifies that the server
 waits, then checks the committed receipt after reopen. It validates lifecycle
@@ -443,14 +506,38 @@ producer path corruption, descriptor exhaustion, close waiting for an admitted
 native append, and SIGTERM draining publication after a shutdown deadline while
 an independent embedded open still fails. Fresh-process restart resolves uncertain
 COMMIT results and retains original receipts and duplicate rows.
-`glamdb.http_review` checks HTTP error responses, Expect handshakes,
-idle-header admission, media negotiation and canonical scoped dispatch.
+`glamdb.http_review` checks HTTP error responses, complete half-closed requests,
+Expect handshakes, idle-header admission, media negotiation and canonical scoped
+dispatch.
 `glamdb.scan_http` covers fixed-view pages beyond 100000 rows and 16 MiB, response
 replay, scope, cancellation, expiry, resource capacity, small-batch IPC, abandoned
 SDK iterators and real read corruption. Scan session tests also pause a real Parquet
 read while another database progresses, check nonblocking shutdown cancellation
 and closed scan admission, and enforce the shared replay byte budget.
 These deterministic checks are separate from physical power-loss qualification.
+
+Admission regressions additionally cover six queued appends, pre-execution queue
+expiry, reset queued/active clients, half-closed queued/active appends, two paused
+stores with healthy reads and lifecycle calls elsewhere, and 32/64 concurrent
+fixed-view sessions. Slow page I/O is activity rather than idle time. Runtime
+capabilities use the same scan policy constants as admission
+(`scan_lifetime_seconds:0` means no absolute lifetime).
+
+A Release run on Linux x86-64 (clang 18/libc++, `-O3 -DNDEBUG`) used four databases
+with one million two-field rows each, projection `key,c1`, and a 1,000-row limit.
+One same-host Python process used one SDK client per thread, no retries, and a
+five-second closed-loop phase. Every successful query checked row values and count.
+
+| Sessions | Complete queries | Refusals | Successful queries/s | Success-only p95 |
+| --- | ---: | --- | ---: | ---: |
+| 32 (eight/database) | 312 | 0 | 56.94 | 888.17 ms |
+| 64 (sixteen/database) | 317 | 69 `RESOURCE_EXHAUSTED` | 54.08 | 1740.11 ms |
+
+The 64-client phase exceeds the eight-cursor database quota; neither phase had
+`SERVER_BUSY` refusals. Concurrent builds/analyzers and the shared Python process
+limit timing interpretation. This is concurrency evidence, not a capacity or
+before/after performance claim. Configurable cursor quotas and aggregate process
+memory admission remain separate work.
 
 ## Metadata selectors and cursors
 
@@ -460,6 +547,9 @@ the scan body (`snapshot_id: null` for initial). Root identity and resolved
 selected `snapshot_id` are distinct: an older view never claims the newest
 snapshot as its own. Metadata counts and IDs are decimal strings. Logical bytes,
 unknown bounds and unsupported physical IO remain null/unavailable.
+Explain retains the validated compound predicate tree, including NULL literals,
+and uses reader admission so a blocked publisher does not delay the selected-view
+plan.
 
 Only history/files support metadata pagination: `page_size` 1..1,000 and opaque
 `cursor`, repeated with the same kind/database/collection/selector/page size.

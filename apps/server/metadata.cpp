@@ -1,6 +1,8 @@
 #include "apps/server/metadata.h"
+#include "apps/server/scans.h"
 
 #include "apps/transport/outcome_json.h"
+#include "core/scan/predicate.h"
 
 #include <arrow/util/utf8.h>
 #include <openssl/rand.h>
@@ -200,6 +202,50 @@ TJson Columns(const std::vector<TColumnChunkMetadata>& columns, const SchemaSpec
     }
     return value;
 }
+TJson LiteralJson(const OptionalLiteral& value)
+{
+    return value ? std::visit(
+                       [](const auto& literal) {
+                           return EncodeCell(Cell(literal));
+                       },
+                       *value)
+                 : TJson(nullptr);
+}
+TJson PredicateJson(const Predicate& predicate)
+{
+    switch (predicate.kind()) {
+        case Predicate::Kind::True:
+            return {{"op", "true"}};
+        case Predicate::Kind::Compare: {
+            const std::array operators{"eq", "ne", "lt", "le", "gt", "ge"};
+            return {{"op", operators.at(static_cast<size_t>(predicate.op()))},
+                {"field", predicate.field()},
+                {"value", LiteralJson(predicate.optional_value())}};
+        }
+        case Predicate::Kind::In: {
+            auto values = TJson::array();
+            for (const auto& value : predicate.values()) {
+                values.push_back(LiteralJson(value));
+            }
+            return {{"op", "in"}, {"field", predicate.field()}, {"values", std::move(values)}};
+        }
+        case Predicate::Kind::IsNull:
+        case Predicate::Kind::IsNotNull:
+            return {{"op", predicate.kind() == Predicate::Kind::IsNull ? "is_null" : "is_not_null"},
+                {"field", predicate.field()}};
+        case Predicate::Kind::And:
+        case Predicate::Kind::Or: {
+            auto args = TJson::array();
+            for (const auto& child : predicate.children()) {
+                args.push_back(PredicateJson(child));
+            }
+            return {{"op", predicate.kind() == Predicate::Kind::And ? "and" : "or"}, {"args", std::move(args)}};
+        }
+        case Predicate::Kind::Not:
+            return {{"op", "not"}, {"arg", PredicateJson(predicate.children().front())}};
+    }
+    throw TFailure({"INTERNAL", "unsupported validated predicate"});
+}
 int64_t Now()
 {
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
@@ -261,17 +307,18 @@ TJson CapabilitiesJson(const EngineCapabilities& capabilities,
                 {"metadata_pagination", metadata},
                 {"pagination", false},
                 {"zero_column_projection", false}}},
-        {"predicate_ops", {"true", "eq", "ne", "lt", "le", "gt", "ge"}},
+        {"predicate_ops",
+            {"true", "eq", "ne", "lt", "le", "gt", "ge", "in", "is_null", "is_not_null", "and", "or", "not"}},
         {"limits",
             {{"request_bytes", MaxRequestBytes},
                 {"response_bytes", MaxResponseBytes},
                 {"append_rows", 10000},
                 {"scan_page_rows", 10000},
-                {"scan_sessions", 64},
-                {"scan_sessions_per_database", 8},
-                {"scan_lifetime_seconds", 300},
-                {"scan_replay_bytes", 128ULL * 1024 * 1024},
-                {"scan_idle_seconds", 60},
+                {"scan_sessions", TScans::SessionLimit},
+                {"scan_sessions_per_database", TScans::DatabaseSessionLimit},
+                {"scan_lifetime_seconds", TScans::LifetimeSeconds},
+                {"scan_replay_bytes", TScans::ReplayBytes},
+                {"scan_idle_seconds", TScans::IdleSeconds},
                 {"metadata_page_size", 1000},
                 {"metadata_sessions", MaxSessions},
                 {"metadata_sessions_per_database", MaxDatabaseSessions},
@@ -279,7 +326,10 @@ TJson CapabilitiesJson(const EngineCapabilities& capabilities,
                 {"metadata_idle_seconds", 60},
                 {"metadata_retained_json_bytes", MaxRetainedBytes},
                 {"metadata_inventory_json_bytes", MaxInventoryBytes},
-                {"batch_rows", 65536}}}};
+                {"batch_rows", 65536},
+                {"predicate_depth", detail::MaxPredicateDepth},
+                {"predicate_nodes", detail::MaxPredicateNodes},
+                {"predicate_literals", detail::MaxPredicateLiterals}}}};
     if (!storeID.empty()) {
         value["store_id"] = storeID;
     }
@@ -416,24 +466,12 @@ TJson ExplainJson(const Engine& engine, const std::string& collection, const TJs
     for (const auto& field : schema.at("fields")) {
         output.push_back(field.at("name"));
     }
-    TJson predicate{{"op", "true"}};
-    if (explanation.predicate.kind() == Predicate::Kind::Compare) {
-        const std::array operators{"eq", "ne", "lt", "le", "gt", "ge"};
-        predicate = {{"op", operators.at(static_cast<size_t>(explanation.predicate.op()))},
-            {"field", explanation.predicate.field()},
-            {"value",
-                std::visit(
-                    [](const auto& literal) {
-                        return EncodeCell(Cell(literal));
-                    },
-                    explanation.predicate.value())}};
-    }
     auto capabilities =
         CapabilitiesJson(engine.GetCapabilities(), engine.GetHealth(), false, engine.GetStoreInfo().store_id);
     value.update({{"schema", schema},
         {"read_columns", explanation.read_fields},
         {"output_columns", output},
-        {"predicate", predicate},
+        {"predicate", PredicateJson(explanation.predicate)},
         {"limit", OptionalInteger(explanation.limit)},
         {"batch_rows", std::to_string(explanation.batch_rows)},
         {"plan",

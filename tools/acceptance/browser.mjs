@@ -119,7 +119,10 @@ assert Counter(tuple(row[name] for name in ('key','n','label')) for row in t.to_
     }
     await navigate('Explain');
     await page.locator('[data-action="explain-current"]').click();
-    await page.getByText('Native scan', { exact: true }).waitFor();
+    const plan = page.locator('.panel').filter({
+        has: page.getByRole('heading', { name: 'Query plan', exact: true }),
+    });
+    await plan.getByText('Native scan', { exact: true }).waitFor();
     await screenshot('explain');
     await navigate('Operations');
     await page.getByLabel('Operation ID', { exact: true }).fill(config.operation_id);
