@@ -1169,6 +1169,16 @@ register disposable mock databases for authorization tests. Such a result must
 be labelled accordingly. Do not reuse production accounts or point the suite
 at a guessed host.
 
+The browser refresh and ephemeral-store restart cases are in
+`tests/access/test_real_refresh.py`. They require the native Redis session
+deployment, the same explicit fixture and browser installation. The restart
+case additionally requires `GLAMDB_IDENTITY_SESSION_STORE_CONNECTION` and
+`GLAMDB_IDENTITY_SESSION_STORE_CONTAINER` naming the inspected disposable Podman
+resources. Outage cases similarly need explicit dependency settings. Never point
+those settings at an unknown or production container. When forwarding PDP only
+on `127.0.0.1`, use that exact IPv4 address in the fixture; `localhost` can also
+resolve to an unbound IPv6 listener.
+
 The system harness requires a private mode0600 configuration with
 `version:1`, `disposable:true`, `base_url`, optional `ca_file`, and exactly one
 of `token_file` or an `oauth` object containing `token_url`, `client_id`,

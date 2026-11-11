@@ -2,7 +2,7 @@
 
 The checks below run on macOS arm64 with Python 3.13, Chromium 1194,
 Playwright 1.56.1, Caddy 2.11.9, Keycloak 26.8.2, OAuth2 Proxy 7.15.6,
-Cerbos 0.57.0 and PostgreSQL 18.6. Public integration requests use real HTTPS
+Cerbos 0.57.0, PostgreSQL 18.6 and Valkey 9.1.3. Public integration requests use real HTTPS
 with a disposable certificate. Identity/policy services are actual upstream
 processes, while the three database HTTP adapters are explicitly disposable
 in-memory mocks. No production password, warehouse or Telegram destination is
@@ -52,13 +52,28 @@ unit tests do not require credentials or reach an external identity host.
   plus bounded logging samples, actual in-flight/backpressure/cancellation,
   observed dependency readiness and no per-user/database/request labels.
 
-The live native identity suite passed **13 cases**: eleven normal/browser cases,
-one Cerbos outage and one Keycloak outage. It used three organizations with
+The live native identity suite passed **15 cases**, including one Cerbos outage,
+one Keycloak outage, concurrent browser refresh after 31 seconds with stale
+in-flight tickets, and fresh sign-in after losing the ephemeral session store.
+It used three organizations with
 2/1/0 databases, actual native memberships and fresh access tokens. Checks covered
 foreign UUIDs, encoded paths, forged headers, JSON API errors, the prefixed SDK
 and Arrow, transfer while an append outcome was unknown, terminal reconciliation,
 receipt replay and restoration of original ownership. All three organizations
 finished active with zero unresolved admissions.
+
+The session store used the exact authenticated health command and restricted ACL;
+persistence/export/administration commands were denied, AOF and RDB saves were
+zero, and its writable directory was empty tmpfs. Refresh-token rotation stayed
+enabled with maximum reuse zero. Native account sessions were logged out after
+testing. The two-second upstream refresh-lock lease still requires production
+latency/stall qualification; these tests do not prove arbitrary-delay consistency.
+
+The test policy endpoint explicitly used the IPv4 address of its IPv4-only SSH
+tunnel. Earlier runs recorded intermittent PDP transport failures before the
+server handler; those failures remain unqualified historical evidence. A closed
+IPv6 probe reproduces connection refusal, but the exact address selected by the
+earlier failed calls was not retained, so it is not claimed as their proven cause.
 
 Chromium visited all eight Workbench pages, including Style Studio, both populated
 and empty organization selectors, browser create/append/Arrow, native Account
@@ -72,7 +87,7 @@ changes, dialogs, responsive layout and the standalone browser demo.
 Protocol corrections were observed failing before their fixes: the proxy lost
 Arrow's snapshot header, failed to recognize plain successful create receipts
 with schema defaults, and redirected encoded paths before gateway validation.
-The corrected public flow passed the system harness's **15 route checks**.
+The corrected public flow passed the system harness's **16 route checks**.
 The same explicitly mock target was rejected by the default native mode.
 
 Capability-profile regressions run the real network SDK and CLI against an
@@ -90,6 +105,13 @@ through the actual gateway/catalog. They first reproduced the unresolved
 failed-create and 412/409 append-lookup cases, then verified terminal admission
 cleanup. Mismatched/missing IDs, unknown outcomes, incorrect native status/
 phase/retry hints, unknown codes and bare errors preserve durable uncertainty.
+Both `OPERATION_CONFLICT` and `IDEMPOTENCY_CONFLICT` are rejected before any
+terminal inference, including legacy wrappers claiming a matching ID and a
+committed or failed outcome. A conflicting request says nothing about the bound
+operation. Legitimate 409 schema failures and 412 precondition failures retain
+their separate authoritative-outcome contract. New-main conflict regressions
+were observed failing before the gateway guard, then passing with the SDK's
+corresponding conflict/failure-envelope tests.
 The fixtures describe native serializer shapes, not actual native execution.
 
 ## Deployment and persistence evidence

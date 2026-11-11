@@ -59,6 +59,10 @@ def test_noncanonical_original_write_identity_never_reaches_backend(setup, kind)
         "bad_phase",
         "unknown",
         "wrong_identity",
+        "operation_conflict",
+        "idempotency_conflict",
+        "committed_conflict",
+        "committed_idempotency_conflict",
     ],
 )
 def test_native_failed_create_uses_exact_terminal_envelope(setup, mutation):
@@ -86,6 +90,21 @@ def test_native_failed_create_uses_exact_terminal_envelope(setup, mutation):
         status = 503
     elif mutation == "wrong_identity":
         envelope["collection_id"] = str(uuid4())
+    elif mutation in (
+        "operation_conflict",
+        "idempotency_conflict",
+        "committed_conflict",
+        "committed_idempotency_conflict",
+    ):
+        envelope["collection_id"] = payload["collection_id"]
+        envelope["error"]["code"] = (
+            "IDEMPOTENCY_CONFLICT"
+            if "idempotency" in mutation
+            else "OPERATION_CONFLICT"
+        )
+        if mutation.startswith("committed"):
+            envelope["outcome"] = "committed"
+            status = 200
 
     async def backend(request):
         seen.append(request)
@@ -110,7 +129,54 @@ def test_native_failed_create_uses_exact_terminal_envelope(setup, mutation):
 
 
 @pytest.mark.parametrize(
-    "status,code", [(412, "PRECONDITION_FAILED"), (409, "OPERATION_CONFLICT")]
+    "code,disposition",
+    [
+        ("OPERATION_CONFLICT", "definitely_not_committed"),
+        ("IDEMPOTENCY_CONFLICT", "definitely_not_committed"),
+        ("OPERATION_CONFLICT", "committed"),
+        ("IDEMPOTENCY_CONFLICT", "committed"),
+    ],
+)
+def test_conflicting_append_response_never_establishes_the_original_outcome(
+    setup, code, disposition
+):
+    app, path, _, _, own, _, seen = setup
+    collection, operation = str(uuid4()), str(uuid4())
+    payload = {"operation_id": operation, "rows": [{"key": "conflicting-content"}]}
+    envelope = {
+        "outcome": disposition,
+        "operation_id": operation,
+        "error": {
+            "code": code,
+            "message": "different content",
+            "retry_hint": "FixInput",
+        },
+    }
+    status = 200 if disposition == "committed" else 409
+
+    async def backend(request):
+        seen.append(request)
+        assert json.loads(request.content) == payload
+        return httpx.Response(status, json=envelope)
+
+    app.app.state.gateway.backend_transport = httpx.MockTransport(backend)
+    with TestClient(app, base_url="https://testserver") as client:
+        response = client.post(
+            f"/databases/{own}/v0/collections/{collection}/append",
+            headers={"Authorization": "Bearer valid"},
+            json=payload,
+        )
+        assert response.status_code == status and response.json() == envelope
+    with ResourceCatalog(path) as catalog:
+        pending = catalog.unresolved(own)
+        assert len(pending) == 1
+        assert pending[0]["operation_id"] == operation
+        assert pending[0]["outcome"] == "unknown"
+    assert len(seen) == 1
+
+
+@pytest.mark.parametrize(
+    "status,code", [(412, "PRECONDITION_FAILED"), (409, "SCHEMA_MISMATCH")]
 )
 @pytest.mark.parametrize(
     "mutation",
@@ -124,6 +190,10 @@ def test_native_failed_create_uses_exact_terminal_envelope(setup, mutation):
         "bad_hint",
         "bad_phase",
         "unknown",
+        "operation_conflict",
+        "idempotency_conflict",
+        "committed_conflict",
+        "committed_idempotency_conflict",
     ],
 )
 def test_native_failed_append_lookup_resolves_only_matching_authoritative_receipt(
@@ -180,6 +250,21 @@ def test_native_failed_append_lookup_resolves_only_matching_authoritative_receip
     elif mutation == "unknown":
         envelope.update(outcome="commit_unknown", recovery_required=True)
         status = 503
+    elif mutation in (
+        "operation_conflict",
+        "idempotency_conflict",
+        "committed_conflict",
+        "committed_idempotency_conflict",
+    ):
+        envelope["error"]["code"] = (
+            "IDEMPOTENCY_CONFLICT"
+            if "idempotency" in mutation
+            else "OPERATION_CONFLICT"
+        )
+        status = 409
+        if mutation.startswith("committed"):
+            envelope["outcome"] = "committed"
+            status = 200
 
     async def backend(request):
         seen.append(request)

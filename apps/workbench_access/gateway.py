@@ -77,9 +77,17 @@ def receipt_schema(value):
     return {"schema_id": schema_id, "fields": normalized}
 
 
+def operation_conflict(value):
+    detail = value.get("error") if isinstance(value, dict) else None
+    return isinstance(detail, dict) and detail.get("code") in (
+        "OPERATION_CONFLICT",
+        "IDEMPOTENCY_CONFLICT",
+    )
+
+
 def native_failure_receipt(value, status, *, operation_id=None):
     """Recognize the native ToJson terminal-failure envelope, never a bare HTTP error."""
-    if not isinstance(value, dict):
+    if not isinstance(value, dict) or operation_conflict(value):
         return False
     fields = {"outcome", "phase", "error"}
     if operation_id is not None:
@@ -113,7 +121,6 @@ def native_failure_receipt(value, status, *, operation_id=None):
     # stay unresolved until their contract is reviewed, including default-500 codes.
     statuses = {
         "INVALID_ARGUMENT": 400,
-        "OPERATION_CONFLICT": 409,
         "ALREADY_EXISTS": 409,
         "SCHEMA_MISMATCH": 409,
         "STALE_BASE": 409,
@@ -537,6 +544,9 @@ class Gateway:
                 continue
             if not isinstance(result, dict):
                 continue
+            if operation_conflict(result):
+                # Conflicting input says nothing about the bound operation.
+                continue
             matching = result.get("operation_id") == admission["operation_id"]
             committed = (
                 response.status_code == 200 and result.get("outcome") == "committed"
@@ -718,7 +728,10 @@ class Gateway:
                         if route.kind == "append"
                         else write["collection_id"]
                     )
-                    if outcome.get(identity_key) == expected and outcome.get(
+                    if operation_conflict(outcome):
+                        # A matching ID cannot make conflicting input authoritative.
+                        pass
+                    elif outcome.get(identity_key) == expected and outcome.get(
                         "outcome"
                     ) in ("committed", "definitely_not_committed"):
                         write["outcome"] = outcome["outcome"]
