@@ -192,9 +192,10 @@ cmake --build build/monitoring --target glamdb_metrics
 `check.py --helm PATH --chart PINNED_ARCHIVE` also verifies the chart's locked
 SHA-256, lints/renders it and rejects rendered TLS verification bypasses.
 The native tests exercise the actual prometheus-cpp Exposer over localhost and
-check listener teardown. A production native HTTP/backend/scanner integration
-and installed engine consumer require the complete locked dependency prefix;
-component tests do not supply them.
+check listener teardown. The storage backend and scanner are implemented;
+production native HTTP integration is still absent. Building the installed
+engine consumer requires the complete locked dependency prefix. These component
+tests do not establish full engine or HTTP integration.
 
 `tools/monitoring/container_smoke.py` requires an explicitly selected disposable
 Podman connection/machine. It creates only its own bounded containers/network,
