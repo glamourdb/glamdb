@@ -66,6 +66,52 @@ class CmakeConfigurationTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("git submodule update --init third_party/quill", " ".join(result.stdout.split()))
 
+    def test_installed_logging_archive_needs_no_quill_target(self):
+        install = self.root / "install"
+        with (self.source / "CMakeLists.txt").open("a") as output:
+            output.write('''
+set_target_properties(glamdb_logging PROPERTIES EXPORT_NAME logging)
+install(TARGETS glamdb_logging EXPORT LoggingTargets ARCHIVE DESTINATION lib)
+install(EXPORT LoggingTargets NAMESPACE logging:: DESTINATION lib/cmake/logging)
+''')
+        result = self.configure("-DBUILD_TESTING=OFF", f"-DCMAKE_INSTALL_PREFIX={install}")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assert_success(self.cmake, "--build", str(self.build), "--target", "glamdb_logging")
+        self.assert_success(self.cmake, "--install", str(self.build))
+        consumer = self.root / "consumer"
+        consumer.mkdir()
+        (consumer / "main.cpp").write_text('''#include "core/telemetry/structured_log.h"
+int main()
+{
+    using namespace NGlamDB::NTelemetry;
+    auto logger = TStructuredLogger::Open();
+    if (!logger || !(**logger).TryLog({.Event = ELogEvent::RuntimeStarted})) {
+        return 1;
+    }
+    (**logger).Shutdown();
+    return GetProcessLogStats().Accepted == 1 ? 0 : 2;
+}
+''')
+        (consumer / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.28)
+project(InstalledLogging LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 23)
+find_package(Threads REQUIRED)
+include("{install.as_posix()}/lib/cmake/logging/LoggingTargets.cmake")
+add_executable(consumer main.cpp)
+target_include_directories(consumer PRIVATE "{self.source.as_posix()}")
+target_link_libraries(consumer PRIVATE logging::logging)
+''')
+        consumer_build = self.root / "consumer-build"
+        toolchain = os.environ.get("GLAMDB_TEST_TOOLCHAIN")
+        self.assert_success(
+            self.cmake, "-S", str(consumer), "-B", str(consumer_build), "-G", self.generator,
+            f"-DCMAKE_CXX_COMPILER={shutil.which(self.cxx_compiler) or self.cxx_compiler}",
+            "-DCMAKE_CXX_SCAN_FOR_MODULES=OFF",
+            *([f"-DCMAKE_TOOLCHAIN_FILE={toolchain}"] if toolchain else []),
+        )
+        self.assert_success(self.cmake, "--build", str(consumer_build))
+        self.assert_success(str(consumer_build / "consumer"))
+
     def test_enabled_tests_explain_missing_googletest(self):
         result = self.configure("-DBUILD_TESTING=ON")
         self.assertNotEqual(result.returncode, 0)

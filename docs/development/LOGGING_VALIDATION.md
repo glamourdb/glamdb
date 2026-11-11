@@ -44,6 +44,14 @@ Final executed commands/results after rebasing onto main `6264b04`:
   failed on missing standard headers and unrelated existing source diagnostics.
   It is not recorded as a passing whole-project tidy gate. A separate global
   `python3 scripts/quality.py format-check` passed all **135** project files.
+- The installed-archive regression in `test_cmake_configuration.py` first
+  reproduced CMake's rejection of the non-exported private Quill target.
+  Keeping Quill headers in the build interface and retaining `Threads::Threads`
+  fixes the static dependency boundary. The test exports and installs the actual
+  `glamdb_logging` target, then builds and runs a separate consumer with its real
+  adapter header and installed archive, without defining a Quill target.
+  This checks component packaging; the complete engine consumer still needs
+  the installed storage dependency prefix.
 - Strict native CLI and engine translation-unit compilation with
   `-std=c++23 -Wall -Wextra -Wpedantic -Werror`: **PASS**, including
   `GLAMDB_HAS_STORAGE=1` against the pinned Arrow/Iceberg source headers. CLI
