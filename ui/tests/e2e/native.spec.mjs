@@ -2,6 +2,22 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 test.skip(!process.env.GLAMDB_NATIVE_SERVER, 'native server profile only');
+test.afterEach(async ({ request }) => {
+    // The disposable server is shared; release engine reservations between scenarios.
+    const headers = { Authorization: 'Bearer e2e-only-local-token' };
+    const response = await request.get('/databases', { headers });
+    expect(response.ok()).toBe(true);
+    const { items } = await response.json();
+    for (const database of items) {
+        if (database.state !== 'open') continue;
+        const closed = await request.post(`/databases/${database.database_id}/close`, {
+            headers,
+            data: {},
+        });
+        expect(closed.ok()).toBe(true);
+        expect((await closed.json()).state).toBe('closed');
+    }
+});
 async function connect(page) {
     await page.goto('/');
     await page.getByLabel('Access token').fill('e2e-only-local-token');

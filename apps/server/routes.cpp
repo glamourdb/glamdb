@@ -7,6 +7,8 @@
 #include "apps/transport/outcome_json.h"
 #include "core/api/canonical.h"
 
+#include "storage/resources.h"
+
 #include <arrow/io/memory.h>
 #include <arrow/ipc/api.h>
 
@@ -199,7 +201,8 @@ std::vector<std::string> Split(const std::string& path)
 } // namespace
 
 TRoutes::TRoutes(std::shared_ptr<Engine> engine, std::filesystem::path uiRoot, std::string token)
-    : Scans_(std::make_shared<TScans>())
+    : Resources_(engine->GetResourceOwner())
+    , Scans_(std::make_shared<TScans>())
     , Metadata_(std::make_shared<TMetadata>())
     , Engine_(std::move(engine))
     , UIRoot_(std::move(uiRoot))
@@ -207,7 +210,8 @@ TRoutes::TRoutes(std::shared_ptr<Engine> engine, std::filesystem::path uiRoot, s
 { }
 
 TRoutes::TRoutes(std::shared_ptr<TDatabases> databases, std::filesystem::path uiRoot, std::string token)
-    : Scans_(std::make_shared<TScans>())
+    : Resources_(databases->GetResourceOwner())
+    , Scans_(std::make_shared<TScans>())
     , Metadata_(std::make_shared<TMetadata>())
     , Databases_(std::move(databases))
     , UIRoot_(std::move(uiRoot))
@@ -223,6 +227,11 @@ TRoutes::TRoutes(std::shared_ptr<TDatabases> databases, std::filesystem::path ui
             pages->Clear(database);
         }
     });
+}
+
+std::shared_ptr<ResourceOwner> TRoutes::GetResourceOwner() const
+{
+    return Resources_;
 }
 
 bool TRoutes::IsAuthorized(const TRequest& request) const
@@ -250,8 +259,16 @@ TResponse TRoutes::Handle(const TRequest& request) const
         if (!IsAuthorized(request)) {
             return ErrorResponse(401, "UNAUTHORIZED", "bearer token required");
         }
+        const bool protectedCall = UsesProtectedAdmission(request) && request.Body.size() <= (64ULL << 10);
+        const auto resource = protectedCall ? ResourceClass::Completion : ResourceClass::Data;
+        // JSON DOM/cells/Arrow copies and response assembly coexist. Ordinary
+        // requests cannot use protected lookup/lifecycle capacity.
+        auto work = Unwrap(
+            Resources_->Reserve(resource, protectedCall ? 4ULL << 20 : (128ULL << 20) + request.Body.size() * 32));
         auto response = Route(request);
         Require(response.Body.size() <= MaxResponseBytes, "response exceeds transport limit", "INPUT_TOO_LARGE");
+        response.ResourceLease =
+            Unwrap(Resources_->Reserve(resource, static_cast<uint64_t>(response.Body.capacity()) * 2 + (64ULL << 10)));
         return response;
     } catch (const TFailure& error) {
         return {ErrorStatus(error.Detail), EncodeError(error.Detail).dump()};
