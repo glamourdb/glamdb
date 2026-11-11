@@ -3,9 +3,9 @@ global:
 
 route:
   receiver: telegram
-  group_by: [cluster, service, check, namespace, pod, node]
+  group_by: [cluster, service]
   group_wait: 30s
-  group_interval: 1m
+  group_interval: 5m
   repeat_interval: 4h
   routes:
     - matchers: ['state="NODATA"', 'notify_nodata="false"']
@@ -22,16 +22,16 @@ receivers:
         chat_id_file: /run/secrets/telegram_chat_id
         send_resolved: false
         parse_mode: ""
-        timeout: 5s
+        timeout: 15s
+        # Group by service to avoid one Telegram request per check at startup.
+        # Compact lines keep the usual service inventory within Telegram's limit.
         message: |-
-          {{ range .Alerts.Firing }}{{ .Labels.state }} GlamDB {{ .Labels.check }}
-          Scope: {{ .Labels.cluster }}/{{ .Labels.service }} {{ .Labels.namespace }} {{ .Labels.pod }} {{ .Labels.node }}
-          Observed at (Unix seconds): {{ .Annotations.observed_at }}
-          State since (UTC): {{ .StartsAt.UTC.Format "2006-01-02T15:04:05Z" }}
-          {{ .Annotations.summary }}
-          {{ .Annotations.description }}
-          {{ .Annotations.runbook_url }}
+          GlamDB {{ .CommonLabels.cluster }}/{{ .CommonLabels.service }}
+          {{ with index .Alerts 0 }}Observed at (Unix seconds): {{ .Annotations.observed_at }}{{ end }}
+          Each row: state / check / observed Unix seconds / state since UTC / node.
+          {{ range .Alerts.Firing }}{{ .Labels.state }} GlamDB {{ .Labels.check }} · {{ .Annotations.observed_at }} · {{ .StartsAt.UTC.Format "2006-01-02T15:04:05Z" }} {{ .Labels.node }}
           {{ end }}
+          {{ with index .Alerts 0 }}{{ .Annotations.runbook_url }}{{ end }}
         http_config:
           follow_redirects: false
 
