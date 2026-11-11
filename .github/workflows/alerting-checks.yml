@@ -32,6 +32,8 @@ jobs:
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13'
+      - name: Test deployment ownership, storage guards, and configuration
+        run: python3 -m unittest discover -s tools/observability/tests -v
       - name: Extract native validators from digest-pinned images
         run: |
           set -euo pipefail
