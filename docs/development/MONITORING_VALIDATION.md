@@ -4,7 +4,7 @@ Executed for the library/client and standard-collector configuration on
 2026-11-11. Native component environment: Darwin arm64, AppleClang 21.0.0,
 Python 3.14.3; formatting uses clang-format 18.1.8. These are current replacement
 checks, not the earlier private collector/textfile tests. There is no claim of
-full native engine durability, production HTTP/scanner integration, or hosted CI
+full native engine durability, production native HTTP integration, or hosted CI
 success from these component results.
 
 ## Executed PASS
@@ -51,20 +51,25 @@ CivetWeb, pull enabled; push/tests/compression/TLS disabled), prometheus_client
   standalone option is off. Native formatting passes LLVM 18.1.8. The metric adapter also compiles with
   strict warnings against the finalized optional logging stats header; combined
   native logging lifecycle execution remains a separate integration check.
-- After rebasing onto the current main, rebuilding the IO/metrics profile with
+- After rebasing onto main `6264b04`, rebuilding the IO/metrics profile with
   `BUILD_TESTING=ON` and running `ctest --test-dir BUILD_DIR --output-on-failure
   --no-tests=error` passed **173/173** tests normally and **173/173** with
   `GLAMDB_ENABLE_ASAN=ON GLAMDB_ENABLE_UBSAN=ON`. Each run includes 172 native
   I/O/core cases and the tooling suite; it does not include the full engine.
   The strict-warning native metric fixture also passed in two fresh processes
   without sanitizers, in addition to the ASan/UBSan component gate above.
-- LLVM 18.1.8 formatting passed for all **111** project source/header files,
+- LLVM 18.1.8 formatting passed for all **134** project source/header files,
   and the quality negative controls rejected deliberate format/analyzer errors.
-  Focused LLVM 18 tidy of `core/telemetry/metrics.cpp`, using matching libc++
-  18.1.8 source headers and the current SDK sysroot, passed with no project
-  diagnostics. The same command first reproduced five empty-catch errors;
-  explicit returns document the telemetry failure isolation without disabling
-  the check. This is a focused translation-unit check, not full-project tidy.
+  Focused LLVM 18 tidy of `core/telemetry/metrics.cpp` and storage-enabled
+  `core/engine/engine.cpp`, using matching libc++ 18.1.8 source headers and the
+  current SDK sysroot, passed with no project diagnostics. The metric command
+  first reproduced five empty-catch errors; explicit returns document telemetry
+  failure isolation without disabling the check. These are focused
+  translation-unit checks, not full-project tidy.
+- Strict-warning compilation of the instrumented `core/engine/engine.cpp`
+  passed with both `GLAMDB_HAS_STORAGE=0` and `GLAMDB_HAS_STORAGE=1`, using the
+  pinned Arrow/Iceberg source headers. This checks the rebase's instrumentation
+  and storage-enabled declarations without claiming a linked engine test.
 - Official Docker Compose **5.7.0** parsed both monitoring Compose files without
   a daemon. The exporters render used the disposable configuration value
   `GLAMDB_NODE_LISTEN=127.0.0.1:9100`; omission correctly fails the required-bind
@@ -169,12 +174,16 @@ requirements. These Linux checks do not certify Kubernetes or a database.
   package config now discovers exact prometheus-cpp 1.3.0 so static consumers can
   resolve the private metric library. Build the complete locked prefix, install
   the engine and run the existing installed-consumer CTest before release.
+  A direct coordinator-test compile also stops at the missing generated
+  `arrow/util/config.h`; source headers alone do not provide a configured Arrow
+  installation.
 - Combined optional native Quill/log metric lifecycle, Linux/GCC/TSan/MSan and
   full clang-tidy execution were not run. The compile-only stats compatibility
   check does not establish runtime teardown or sanitizer coverage.
-- Production native HTTP/backend/scanner requests, authoritative native
-  readiness/current-unknown state and full gateway/native comparative load.
-  The current native transport integration is absent; a mock is not evidence.
+- Production native HTTP requests, authoritative native readiness/current-unknown
+  state and full gateway/native comparative load. The storage backend and scanner
+  are implemented; the native HTTP transport integration is absent. These
+  component checks do not exercise them through a production HTTP path.
 - Actual Kubernetes server dry-run/deployment, CSI PVC fill/free quantiles,
   kubelet certificate/RBAC/runtime checks and Kubernetes controller outages.
   Kubernetes is optional and was not introduced solely for a test.
