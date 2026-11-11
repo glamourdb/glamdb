@@ -31,6 +31,11 @@ CivetWeb, pull enabled; push/tests/compression/TLS disabled), prometheus_client
   verification, binary-only resolution and `--no-deps`. The exact workbench
   Python check passed **420 tests**, the installed client was **0.26.0**, and
   `python -m pip check` reported no broken requirements.
+- The storage-disabled CMake fixture reuses the public headers copied by its
+  shared setup. Source preparation runs before the optional dependency-prefix
+  check so missing local packages cannot hide setup errors. The focused CMake
+  suite passed with GCC 16.2.0; its full-engine configuration still requires the
+  installed Arrow/Iceberg/SQLite prefix.
 - Native component compiles with strict warnings and ASan/UBSan. Eight threads
   record 80,000 committed outcomes; exact count=80,000, sum=800 seconds and the
   inclusive 0.01-second bucket are checked. Tests also cover incomplete scopes,
