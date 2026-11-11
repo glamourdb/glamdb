@@ -58,6 +58,10 @@ Final executed commands/results after rebasing onto main `6264b04`:
   adapter header and installed archive, without defining a Quill target.
   This checks component packaging; the complete engine consumer still needs
   the installed storage dependency prefix.
+- Storage-disabled fixture preparation reuses shared dependency directories
+  and runs before the optional installed-prefix check. The focused CMake suite,
+  including its real installed-archive consumer, passed with GCC 16.2.0.
+  The native probe passed all nine cases with GCC normally and with ASan/UBSan.
 - Strict native CLI and engine translation-unit compilation with
   `-std=c++23 -Wall -Wextra -Wpedantic -Werror`: **PASS**, including
   `GLAMDB_HAS_STORAGE=1` against the pinned Arrow/Iceberg source headers. CLI
@@ -72,6 +76,11 @@ Final executed commands/results after rebasing onto main `6264b04`:
   Docker JSON source: **PASS**. Daemonless Compose 5.7.0 rendering of the base
   and optional private Grafana deployments: **PASS**. Archive SHA256s match the
   deployment lock. `py_compile` and `git diff --check`: **PASS**.
+- Pinned Grafana 13.3.0's native file provider failed with exit 1 for an
+  unreadable root-owned mode-0600 secret. A UID-472 mode-0400 disposable secret
+  produced health 200/database `ok` and password login 200; the default admin
+  password was rejected with 401. These checks used UID/GID 472:472 and private
+  SELinux `:Z` mounts.
 
 ## Real ingestion and outages
 
@@ -113,9 +122,14 @@ and a closed OS pipe. Before the stream-ownership fix, `/dev/full` counted one
 sink error but the interpreter exited **120**; afterward the same child emitted
 `submitted=1`, `accepted=1`, `sink_errors=1` and exited **0**. No custom writer or
 retry loop was added: the handler uses standard unbuffered IO on owned stderr.
-The test container was removed afterward. A Linux compiler-image attempt hit
-its disposable VM filesystem limit and was stopped; no native Linux compiler
-qualification is claimed. Native Quill and sanitizers were tested on macOS.
+The test container was removed afterward. A separate bounded Ubuntu 24.04
+arm64 container with Clang/libc++ 18 ran the actual Quill producer and Python
+suite: **17/17 normal**, **17/17 ASan/UBSan** and **17/17 LSan PASS**. Three
+hundred independent LSan maximum-record processes also passed strict JSON
+checks. Invalid native stderr retains its offending line in failure diagnostics;
+it is never filtered. The blocked-pipe check fills the queue with 10,000 calls,
+retaining its ten-second deadline, exact submission count and positive drops.
+Full-engine six-profile CI qualification remains a separate check.
 
 ## Measurement scope and costs
 
@@ -153,9 +167,10 @@ Quill source and dependency footprint are not counted as removed project code.
   it does not establish a runtime journal's retention or native Linux behavior.
   Use a task-owned capped volume, emit beyond the configured runtime limit,
   restart the collector and verify both retained bytes and new-event search.
-- Docker deployment containers and private Grafana were rendered but not started
-  in this run. Grafana login, remote TLS/authentication and multi-node retention
-  remain deployment checks. Local Loki/Alloy ingestion was real.
+- The full Docker logging deployment was rendered. An isolated Grafana
+  file-provider startup/login check passed above; remote TLS/authentication,
+  datasource wiring and multi-node retention remain deployment checks.
+  Local Loki/Alloy ingestion was real.
 - Native output has no exact delivered/backlog metric. Quill callback drop
   reports are delayed and duplicate the queue-loss observation; their count is
   never added to queue rejection. Runtime/collector loss can occur after a

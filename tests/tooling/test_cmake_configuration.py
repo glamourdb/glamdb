@@ -132,14 +132,14 @@ target_link_libraries(consumer PRIVATE logging::logging)
         self.assertIn(str(added), {entry["file"] for entry in commands})
 
     def test_storage_off_configures_core_without_storage_targets(self):
+        shutil.copytree(ROOT / "public", self.source / "public")
+        for name in ("cli11", "asio", "json", "reproc"):
+            (self.source / "third_party" / name).symlink_to(ROOT / "third_party" / name, target_is_directory=True)
+        # Keep source preparation covered even without the optional installed prefix.
         prefix = os.environ.get("GLAMDB_TEST_PREFIX")
         if not prefix or not any((Path(path) / library / "cmake/Arrow").is_dir()
                                  for path in prefix.split(";") for library in ("lib", "lib64")):
             self.skipTest("the pinned dependency prefix is not configured")
-        shutil.copytree(ROOT / "public", self.source / "public")
-        (self.source / "third_party").mkdir()
-        for name in ("cli11", "asio", "json", "reproc"):
-            (self.source / "third_party" / name).symlink_to(ROOT / "third_party" / name, target_is_directory=True)
         result = self.configure("-DGLAMDB_IO_ONLY=OFF", "-DGLAMDB_BUILD_STORAGE=OFF", "-DBUILD_TESTING=OFF",
                                 f"-DCMAKE_PREFIX_PATH={prefix}", "-DCMAKE_CXX_SCAN_FOR_MODULES=OFF")
         self.assertEqual(result.returncode, 0, result.stdout)

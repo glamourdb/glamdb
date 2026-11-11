@@ -29,7 +29,14 @@ class NativeLoggingTest(unittest.TestCase):
         result = subprocess.run([self.binary, mode, "stderr", str(count)],
                                 text=True, capture_output=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr)
-        return json.loads(result.stdout), [json.loads(line) for line in result.stderr.splitlines()]
+        events = []
+        for index, line in enumerate(result.stderr.splitlines(), 1):
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                self.fail(f"{mode} probe emitted non-JSON stderr on line {index}: {line[:2048]!r}; "
+                          f"stderr tail: {result.stderr[-4096:]!r}")
+        return json.loads(result.stdout), events
 
     def test_library_json_sink_preserves_safe_domain_fields_and_stdout(self):
         stats, events = self.run_probe()
@@ -83,12 +90,15 @@ class NativeLoggingTest(unittest.TestCase):
         self.assertEqual(stats["accepted"], 17)
 
     def test_blocked_runtime_pipe_does_not_block_operation_path(self):
-        process = subprocess.Popen([self.binary, "blocked", "stderr", "500000"],
+        # Fill the fixed queue and blocked pipe with bounded sanitizer work.
+        count = 10000
+        process = subprocess.Popen([self.binary, "blocked", "stderr", str(count)],
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             readable, _, _ = select.select([process.stdout], [], [], 10)
             self.assertTrue(readable, "Producer did not finish while stderr remained blocked")
             stats = json.loads(process.stdout.readline())
+            self.assertEqual(stats["submitted"], count + 2)
             self.assertGreater(stats["dropped_full"], 0)
             self.assertLess(stats["elapsed_us"], 10000000)
             # Releasing the runtime pipe permits library-owned shutdown to drain.
