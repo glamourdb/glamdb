@@ -25,6 +25,8 @@ Tests cover real files, injected failures and fresh-process recovery.
 A storage backend connecting these primitives to the coordinator and a minimal
 scanner (`Engine::Scan`) are implemented and tested through `glamdb_vertical`;
 see [SCANNER.md](docs/development/SCANNER.md).
+Returned scan buffers retain allocator accounting, FileIO and engine ownership
+through slices and Arrow exports, including after shutdown.
 The [installed public API consumer](docs/development/BUILDING.md#build-and-install)
 checks real A/B appends, fixed-view scans, persisted receipts and retries after
 reopening in a new process, with a separate storage-disabled contour.
@@ -50,8 +52,9 @@ remains available for development. Its data files,
 snapshots and commits are synthetic and disappear on restart.
 
 The embedded C++ facade also exposes [native metadata](docs/development/METADATA.md):
-capabilities, receipt-backed snapshot history, selected-view statistics, scan
-explain and execution profiles. The HTTP, SDK and workbench adapters use this
+capabilities, receipt-backed snapshot history, selected-view statistics,
+snapshot-bound file and row-group details, fixed-view collection/history/file
+pages, scan explain and execution profiles. The HTTP, SDK and workbench adapters use this
 same facade, including precise int64 identities and unknown/null measurements.
 
 Run the [installed cross-client acceptance recipe](docs/development/NATIVE_ACCEPTANCE.md)
