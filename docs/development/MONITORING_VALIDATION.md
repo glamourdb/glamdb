@@ -87,6 +87,11 @@ CivetWeb, pull enabled; push/tests/compression/TLS disabled), prometheus_client
   check. These parser results do not establish collector deployment or host
   access. Strict-warning compilation of the rebased CLI translation unit passed;
   it retains CLI11 and has no metric publisher or endpoint.
+- Pinned Grafana 13.3.0's native file provider failed with exit 1 for an
+  unreadable root-owned mode-0600 secret. A UID-472 mode-0400 disposable secret
+  produced health 200/database `ok` and password login 200; the default admin
+  password was rejected with 401. These checks used UID/GID 472:472 and private
+  SELinux `:Z` mounts.
 - Changed workflow passes actionlint 1.7.12 and zizmor 1.32.0 offline pedantic
   checks with no findings.
 - Fourteen mocked Docker-runner tests pass, including explicit recursive
