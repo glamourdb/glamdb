@@ -184,6 +184,28 @@ Loki API. Connect the existing private Grafana datasource, or use
 `GLAMDB_GRAFANA_PASSWORD_FILE`. Anonymous access/signup remain disabled. Open
 `http://127.0.0.1:3000` through an authenticated operator tunnel, then Explore → Loki.
 
+The optional Grafana runs as UID/GID **472:472**. Compose file-backed secrets
+preserve the host file owner/mode; an arbitrary owner's mode0600 file is not
+readable by that container. For rootful Docker, install a secret-manager export
+into a root-owned mode0700 parent, without printing its contents:
+
+```sh
+sudo install -d -m 0700 -o root -g root /var/lib/glamdb-observability/private
+sudo install -m 0400 -o 472 -g 472 /operator-private/grafana-password \
+  /var/lib/glamdb-observability/private/grafana-password
+export GLAMDB_GRAFANA_PASSWORD_FILE=/var/lib/glamdb-observability/private/grafana-password
+```
+
+Replace the source with the actual private export. Rootless/user-namespace
+owners require separate mapping/readability validation. The native
+[Grafana file provider](https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#file-provider)
+fails startup when the file cannot be read; Compose's `$$` keeps its expression
+literal. The image's shell `__FILE` expansion does not reliably fail startup on
+read errors and is not used. This setting bootstraps a new Grafana database;
+rotate an existing administrator through native account administration. Recreate
+the container after replacing the mounted file. Keep the existing private
+Grafana when monitoring already provides it.
+
 ## Storage limits, outages and checks
 
 Loki keeps the existing TSDB v13/filesystem setup with **168-hour** Compactor
