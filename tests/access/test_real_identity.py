@@ -909,8 +909,8 @@ try{
     const url=new URL(response.url());
     if(url.origin!==new URL(input.base).origin||!/^\/(workbench|databases)\//.test(url.pathname)||response.status()<400)return;
     const sample={stage,status:response.status(),code:null};
-    try{const body=await response.json();if(safeCodes.has(body?.error?.code))sample.code=body.error.code;}catch{}
     diagnostics.push(sample);if(diagnostics.length>8)diagnostics.shift();
+    try{const body=await response.json();if(safeCodes.has(body?.error?.code))sample.code=body.error.code;}catch{}
    });
    page.on('request',req=>{if(new URL(req.url()).origin===new URL(input.base).origin&&req.headers().authorization)bearerLeak=true;});
    await login(page,organization);const view=await session(page);ensure(view.status===200&&view.value.organization.id===organization.id);
