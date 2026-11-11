@@ -263,6 +263,11 @@ For four-state rules and native Telegram setup, see [the alerting guide](ALERTIN
 
 For metrics, Grafana dashboards and deployment steps, see [the monitoring guide](docs/development/MONITORING.md).
 
+For a single Linux server, the [complete observability quickstart](deploy/observability/QUICKSTART.ru.md)
+provides one command for Prometheus, Grafana, Loki, Alloy, Alertmanager and host/container
+collectors. Real application endpoints and a dedicated Loki filesystem are inputs;
+repeated deployment preserves owned data and credentials.
+
 ### Client and UI tests
 
 The workbench development environment requires Python 3.13, Node.js 22+, and

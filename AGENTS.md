@@ -258,6 +258,18 @@ For branding/static hosting read [PUBLIC_DEMO.md](docs/development/PUBLIC_DEMO.m
 Preserve the supplied PNGs unchanged. Brand paths must be local assets; sizes
 belong in theme.json. Asset URLs must support both / and /glamdb/.
 
+The complete single-host Linux monitoring/logging/alerting deployment is
+`scripts/observability.py`, implemented in `tools/observability/`. Read the
+[Russian quickstart](deploy/observability/QUICKSTART.ru.md) before deployment.
+It requires local rootful Podman, systemd/cgroup-v2, actual application metrics
+and logs, and a dedicated bounded Loki mount. `init/up/status/check/down` use
+owned resources and preserve persistent data. Run its standard-library unit
+suite with `python3 -m unittest discover -s tools/observability/tests -v`;
+the real lifecycle test requires an explicitly disposable `glamdb-lab-*` config.
+Linux arm64 runtime was exercised; amd64 plans/pins and boot-unit generation do
+not establish an executed amd64 or actual-reboot test. Missing sources never
+become mock producers or synthetic healthy metrics.
+
 ## Build and development commands
 
 For alerting setup and validation, read [ALERTING.md](ALERTING.md) and run
