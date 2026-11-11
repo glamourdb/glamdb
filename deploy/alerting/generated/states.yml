@@ -6,6 +6,186 @@
       "rules": [
         {
           "record": "glamdb_alert_value",
+          "expr": "((max(1-min(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) > -Inf) and (max(1-min(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) < 90))",
+          "labels": {
+            "cluster": "local",
+            "service": "glamdb",
+            "check": "core_availability"
+          }
+        },
+        {
+          "record": "glamdb_alert_state",
+          "expr": "((glamdb_alert_value{check=\"core_availability\",cluster=\"local\",service=\"glamdb\"} >= bool 0.5) + (glamdb_alert_value{check=\"core_availability\",cluster=\"local\",service=\"glamdb\"} >= bool 1)) or on() vector(3)",
+          "labels": {
+            "cluster": "local",
+            "service": "glamdb",
+            "check": "core_availability"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"core_availability\",cluster=\"local\",service=\"glamdb\"} == 0",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "glamdb",
+            "check": "core_availability",
+            "state": "OK",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Native core metrics scrape availability",
+            "description": "ALARM means the configured native core /metrics target cannot be scraped; missing or stale target data is NODATA. Scrape reachability does not establish engine write readiness; inspect core_readiness separately.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"core_availability\",cluster=\"local\",service=\"glamdb\"} == 1",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "glamdb",
+            "check": "core_availability",
+            "state": "WARN",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Native core metrics scrape availability",
+            "description": "ALARM means the configured native core /metrics target cannot be scraped; missing or stale target data is NODATA. Scrape reachability does not establish engine write readiness; inspect core_readiness separately.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"core_availability\",cluster=\"local\",service=\"glamdb\"} == 2",
+          "for": "1m",
+          "labels": {
+            "cluster": "local",
+            "service": "glamdb",
+            "check": "core_availability",
+            "state": "ALARM",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Native core metrics scrape availability",
+            "description": "ALARM means the configured native core /metrics target cannot be scraped; missing or stale target data is NODATA. Scrape reachability does not establish engine write readiness; inspect core_readiness separately.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"core_availability\",cluster=\"local\",service=\"glamdb\"} == 3",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "glamdb",
+            "check": "core_availability",
+            "state": "NODATA",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Native core metrics scrape availability",
+            "description": "ALARM means the configured native core /metrics target cannot be scraped; missing or stale target data is NODATA. Scrape reachability does not establish engine write readiness; inspect core_readiness separately.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "record": "glamdb_alert_value",
+          "expr": "((max(1-min(glamdb_server_ready{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) > -Inf) and (max(1-min(glamdb_server_ready{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < +Inf)) and on() ((time() - min(timestamp(glamdb_server_ready{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) >= -5) and (time() - min(timestamp(glamdb_server_ready{cluster=\"local\",service=\"glamdb\",service_instance=\"core\"})) < 90) and on() (time() - min(timestamp(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"})) < 90) and on() (min(up{job=\"glamdb-core\",cluster=\"local\",service=\"glamdb\"}) == 1))",
+          "labels": {
+            "cluster": "local",
+            "service": "glamdb",
+            "check": "core_readiness"
+          }
+        },
+        {
+          "record": "glamdb_alert_state",
+          "expr": "((glamdb_alert_value{check=\"core_readiness\",cluster=\"local\",service=\"glamdb\"} >= bool 0.5) + (glamdb_alert_value{check=\"core_readiness\",cluster=\"local\",service=\"glamdb\"} >= bool 1)) or on() vector(3)",
+          "labels": {
+            "cluster": "local",
+            "service": "glamdb",
+            "check": "core_readiness"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"core_readiness\",cluster=\"local\",service=\"glamdb\"} == 0",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "glamdb",
+            "check": "core_readiness",
+            "state": "OK",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Native engine write readiness",
+            "description": "The live core aggregates Engine::GetHealth across open databases: readiness is 1 only when every open database is write-ready, and 0 when none are open, a health lookup fails, or any database is not ready. ALARM can occur while /metrics remains reachable. Missing or stale gauge data, or a failed core scrape, is NODATA.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"core_readiness\",cluster=\"local\",service=\"glamdb\"} == 1",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "glamdb",
+            "check": "core_readiness",
+            "state": "WARN",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Native engine write readiness",
+            "description": "The live core aggregates Engine::GetHealth across open databases: readiness is 1 only when every open database is write-ready, and 0 when none are open, a health lookup fails, or any database is not ready. ALARM can occur while /metrics remains reachable. Missing or stale gauge data, or a failed core scrape, is NODATA.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"core_readiness\",cluster=\"local\",service=\"glamdb\"} == 2",
+          "for": "1m",
+          "labels": {
+            "cluster": "local",
+            "service": "glamdb",
+            "check": "core_readiness",
+            "state": "ALARM",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Native engine write readiness",
+            "description": "The live core aggregates Engine::GetHealth across open databases: readiness is 1 only when every open database is write-ready, and 0 when none are open, a health lookup fails, or any database is not ready. ALARM can occur while /metrics remains reachable. Missing or stale gauge data, or a failed core scrape, is NODATA.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "alert": "GlamDBCheckState",
+          "expr": "glamdb_alert_state{check=\"core_readiness\",cluster=\"local\",service=\"glamdb\"} == 3",
+          "for": "2m",
+          "labels": {
+            "cluster": "local",
+            "service": "glamdb",
+            "check": "core_readiness",
+            "state": "NODATA",
+            "notify_nodata": "true"
+          },
+          "annotations": {
+            "summary": "Native engine write readiness",
+            "description": "The live core aggregates Engine::GetHealth across open databases: readiness is 1 only when every open database is write-ready, and 0 when none are open, a health lookup fails, or any database is not ready. ALARM can occur while /metrics remains reachable. Missing or stale gauge data, or a failed core scrape, is NODATA.",
+            "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
+            "observed_at": "{{ with query \"time()\" }}{{ . | first | value }}{{ end }}"
+          }
+        },
+        {
+          "record": "glamdb_alert_value",
           "expr": "((max(1-min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) > -Inf) and (max(1-min(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < +Inf)) and on() ((time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) >= -5) and (time() - min(timestamp(up{job=\"glamdb-gateway\",cluster=\"local\",service=\"glamdb\"})) < 90))",
           "labels": {
             "cluster": "local",
