@@ -108,6 +108,7 @@ struct TFileDetails
     SnapshotSelector SelectorResolved{};
     TDataFileMetadata File{};
     std::vector<TRowGroupMetadata> RowGroups{};
+    int64_t FooterBytes = 0;
 };
 
 struct ScanExplanation

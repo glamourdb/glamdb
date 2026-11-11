@@ -1,6 +1,7 @@
 """Managed HTTP + real storage; deterministic SQLite VFS faults, not power-loss simulation."""
 import http.client
 import json
+import os
 import select
 import socket
 import subprocess
@@ -18,7 +19,7 @@ TOKEN = 'fault-test-token'
 
 class NativeFaultHTTP(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix='glamdb-http-fault-', dir='/tmp')
+        self.tmp = tempfile.TemporaryDirectory(prefix='glamdb-http-fault-', dir=str(Path(os.environ.get('GLAMDB_TEST_TMPDIR', '/tmp')).resolve()))
         self.addCleanup(self.tmp.cleanup)
         self.directory = Path(self.tmp.name) / 'server'
         self.start()

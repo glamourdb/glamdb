@@ -7,6 +7,7 @@
 namespace glamdb::NServer {
 class TDatabases;
 class TScans;
+class TMetadata;
 class TRoutes
 {
 public:
@@ -26,6 +27,7 @@ private:
         const NTransport::TJson& body) const;
     NTransport::TResponse StaticFile(const std::string& path) const;
     std::shared_ptr<TScans> Scans_;
+    std::shared_ptr<TMetadata> Metadata_;
     std::string DatabaseID_;
     std::shared_ptr<Engine> Engine_;
     std::shared_ptr<TDatabases> Databases_;

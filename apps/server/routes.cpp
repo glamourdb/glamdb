@@ -1,5 +1,6 @@
 #include "apps/server/routes.h"
 #include "apps/server/databases.h"
+#include "apps/server/metadata.h"
 #include "apps/server/scans.h"
 #include "core/api/binary.h"
 
@@ -140,6 +141,7 @@ std::vector<std::string> Split(const std::string& path)
 
 TRoutes::TRoutes(std::shared_ptr<Engine> engine, std::filesystem::path uiRoot, std::string token)
     : Scans_(std::make_shared<TScans>())
+    , Metadata_(std::make_shared<TMetadata>())
     , Engine_(std::move(engine))
     , UIRoot_(std::move(uiRoot))
     , Token_(std::move(token))
@@ -147,14 +149,19 @@ TRoutes::TRoutes(std::shared_ptr<Engine> engine, std::filesystem::path uiRoot, s
 
 TRoutes::TRoutes(std::shared_ptr<TDatabases> databases, std::filesystem::path uiRoot, std::string token)
     : Scans_(std::make_shared<TScans>())
+    , Metadata_(std::make_shared<TMetadata>())
     , Databases_(std::move(databases))
     , UIRoot_(std::move(uiRoot))
     , Token_(std::move(token))
 {
     std::weak_ptr<TScans> weak = Scans_;
-    Databases_->SetScanCanceller([weak](const std::string& database) {
+    std::weak_ptr<TMetadata> metadata = Metadata_;
+    Databases_->SetScanCanceller([weak, metadata](const std::string& database) {
         if (const auto scans = weak.lock()) {
             scans->Clear(database);
+        }
+        if (const auto pages = metadata.lock()) {
+            pages->Clear(database);
         }
     });
 }
@@ -245,37 +252,11 @@ TResponse TRoutes::RoutePrepared(const TRequest& request,
         return ReadinessResponse(health);
     }
     if (request.Method == "GET" && path == "/capabilities") {
-        return JsonResponse({{"api_version", "v0"},
-            {"health", Engine_ ? EncodeHealth(Engine_->GetHealth()) : TJson(nullptr)},
-            {"backend", "local"},
-            {"mock", false},
-            {"durability_validation", "designed"},
-            {"collection_modes", {"append"}},
-            {"features",
-                {{"database_management", static_cast<bool>(Databases_)},
-                    {"append", true},
-                    {"scan", true},
-                    {"scan_pagination", true},
-                    {"scan_cancel", true},
-                    {"arrow_export", true},
-                    {"stats", false},
-                    {"snapshots", false},
-                    {"files", false},
-                    {"explain", false},
-                    {"pagination", false},
-                    {"zero_column_projection", false}}},
-            {"predicate_ops", {"true", "eq", "ne", "lt", "le", "gt", "ge"}},
-            {"limits",
-                {{"request_bytes", MaxRequestBytes},
-                    {"response_bytes", MaxResponseBytes},
-                    {"append_rows", 10000},
-                    {"scan_page_rows", 10000},
-                    {"scan_sessions", 64},
-                    {"scan_sessions_per_database", 8},
-                    {"scan_lifetime_seconds", 300},
-                    {"scan_replay_bytes", 128ULL * 1024 * 1024},
-                    {"scan_idle_seconds", 60},
-                    {"batch_rows", 65536}}}});
+        Require(query.empty(), "unknown capability parameter");
+        return JsonResponse(CapabilitiesJson(Engine_ ? Engine_->GetCapabilities() : InstalledCapabilities(),
+            Engine_ ? std::optional(Engine_->GetHealth()) : std::nullopt,
+            static_cast<bool>(Databases_),
+            Engine_ ? Engine_->GetStoreInfo().store_id : std::string{}));
     }
     if (path == "/databases" || path.starts_with("/databases/")) {
         Require(static_cast<bool>(Databases_), "database management requires --data-dir", "UNSUPPORTED_OPERATION");
@@ -294,11 +275,25 @@ TResponse TRoutes::RoutePrepared(const TRequest& request,
             if (parts[2] == "readyz") {
                 return ReadinessResponse(health);
             }
-            auto response = RoutePrepared(request, "/capabilities", query, body);
-            auto value = TJson::parse(response.Body);
-            value["health"] = EncodeHealth(health);
-            value["features"]["database_management"] = false;
-            return JsonResponse(value);
+            try {
+                return Databases_->Use(
+                    parts[1],
+                    [&](const auto& engine) {
+                        return JsonResponse(CapabilitiesJson(engine->GetCapabilities(),
+                            health,
+                            false,
+                            engine->GetStoreInfo().store_id));
+                    },
+                    true);
+            } catch (const TFailure& error) {
+                Require(error.Detail.code == "DATABASE_BUSY" || error.Detail.code == "DATABASE_CLOSED" ||
+                        error.Detail.code == "RECOVERY_REQUIRED",
+                    error.Detail.message,
+                    error.Detail.code);
+                // Installed operations are independent of lifecycle admission.
+                // Keep health inspectable while the per-store gate is unavailable.
+                return JsonResponse(CapabilitiesJson(InstalledCapabilities(), health, false, parts[1]));
+            }
         }
         if (parts.size() == 3 && request.Method == "POST" &&
             (parts[2] == "open" || parts[2] == "close" || parts[2] == "reconcile" || parts[2] == "discard"))
@@ -392,10 +387,24 @@ TResponse TRoutes::RoutePrepared(const TRequest& request,
         append.batches.push_back(ParseRows(Unwrap(Engine_->SchemaForAppend(id)), body.at("rows")));
         return OutcomeResponse(json_adapter::ToJson(Engine_->AppendDurable(append)));
     }
-    const auto info = Unwrap(Engine_->GetCollection(id));
-    if ((action == "stats" || action == "snapshots" || action == "files" || action == "explain")) {
-        throw TFailure({"UNSUPPORTED_OPERATION", "native metadata/explain API is not available; inspect capabilities"});
+    if (request.Method == "GET" && parts.size() == 3 && action == "stats") {
+        return JsonResponse(StatisticsJson(*Engine_, id, query));
     }
+    if (request.Method == "GET" && parts.size() == 3 && (action == "snapshots" || action == "files")) {
+        // Continuations retain already-read values, but still obey current core
+        // admission and collection ownership just like scan continuations.
+        (void)Unwrap(Engine_->GetCollection(id));
+        return JsonResponse(Metadata_->Page(DatabaseID_, id, action, query, [&](SnapshotSelector selector) {
+            return action == "snapshots" ? SnapshotsJson(*Engine_, id, selector) : FilesJson(*Engine_, id, selector);
+        }));
+    }
+    if (request.Method == "GET" && parts.size() == 4 && action == "files") {
+        return JsonResponse(FileJson(*Engine_, id, parts[3], query));
+    }
+    if (request.Method == "POST" && parts.size() == 3 && action == "explain") {
+        return JsonResponse(ExplainJson(*Engine_, id, body));
+    }
+    const auto info = Unwrap(Engine_->GetCollection(id));
     Require(query.empty(), "unknown query parameter");
     if (request.Method == "GET") {
         if (parts.size() == 2) {
@@ -423,10 +432,12 @@ TResponse TRoutes::RoutePrepared(const TRequest& request,
 void TRoutes::CancelScans() const
 {
     Scans_->Stop();
+    Metadata_->Clear();
 }
 void TRoutes::CancelScans(const std::string& database) const
 {
     Scans_->Clear(database);
+    Metadata_->Clear(database);
 }
 
 TResponse TRoutes::StaticFile(const std::string& path) const

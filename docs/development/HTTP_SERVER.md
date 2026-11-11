@@ -26,7 +26,7 @@ uses unscoped collection routes and does not offer database management.
 `glamdb-cli` is a standalone network client with DNS and verified HTTPS; it does
 not link the engine or storage libraries. `create-store --name analytics` calls
 the managed database API. The optional `glamdb-admin` contains offline
-`create-store`/`inspect-store`, which acquire core ownership and fail with
+`create-store`/`inspect-store`, bounded snapshot `read`, and `quiesce-store`, which acquire core ownership and fail with
 `STATE_IN_USE` while the server owns the store. See the [client guide](../../apps/cli/README.md)
 for its independent build and TLS configuration. Online:
 
@@ -167,8 +167,11 @@ separate, broader development profile.
 | `POST /collections/{id}/scan/open` | `Scan` | Resolve a fixed view and return a cursor without consuming rows |
 | `POST /collections/{id}/scan` | `Scan` / `ScanCursor::Next` | First page or cursor continuation, JSON or Arrow IPC |
 | `POST /collections/{id}/scan/cancel` | `ScanCursor::Cancel` | Release a cursor and its retained resources |
-| `GET .../stats`, `.../snapshots`, `.../files`, `.../files/{file}` | Proposed public metadata methods | `501 UNSUPPORTED_OPERATION` |
-| `POST .../explain` | Proposed public explain method | `501 UNSUPPORTED_OPERATION` |
+| `GET .../stats` | `GetStatistics` / `ListSnapshots` | Selected-view counts with metric kinds and null unknowns |
+| `GET .../snapshots` | `ListSnapshots` | Receipt-backed history, bounded fixed-view pages |
+| `GET .../files` | `ListFiles` | Manifest membership and opaque file IDs, bounded pages |
+| `GET .../files/{file}` | `GetFileDetails` | Selected-view membership plus actual Parquet footer/row groups |
+| `POST .../explain` | `ExplainScan` | Fixed-view plan, unsupported pruning remains false |
 
 CLI mapping: `create-store` → `POST /databases`; `request` exposes every route
 in the tables above. Offline `glamdb-admin` uses `CreateStore` / `OpenExisting`.
@@ -448,3 +451,23 @@ SDK iterators and real read corruption. Scan session tests also pause a real Par
 read while another database progresses, check nonblocking shutdown cancellation
 and closed scan admission, and enforce the shared replay byte budget.
 These deterministic checks are separate from physical power-loss qualification.
+
+## Metadata selectors and cursors
+
+Stats/history/files accept omitted `snapshot_id` for latest, `snapshot_id=initial`
+for the initial empty view, or a canonical decimal snapshot ID. Explain accepts
+the scan body (`snapshot_id: null` for initial). Root identity and resolved
+selected `snapshot_id` are distinct: an older view never claims the newest
+snapshot as its own. Metadata counts and IDs are decimal strings. Logical bytes,
+unknown bounds and unsupported physical IO remain null/unavailable.
+
+Only history/files support metadata pagination: `page_size` 1..1,000 and opaque
+`cursor`, repeated with the same kind/database/collection/selector/page size.
+The first bounded inventory is frozen; later appends cannot change it. Tokens
+expire after 60 seconds idle or 300 seconds total. There are at most 64 metadata
+sessions, eight per database, 16 MiB serialized JSON per inventory and 64 MiB
+retained serialized JSON overall. These are JSON accounting limits, not a full
+DOM/heap governor. Read admission is checked even for cached pages.
+Lifecycle close/reconcile clears tokens. No raw file paths can be requested;
+file IDs outside the selected snapshot fail even when the file exists elsewhere.
+See `glamdb.native_metadata` and [system acceptance](NATIVE_ACCEPTANCE.md).
