@@ -1,7 +1,8 @@
 # GlamDB alerting
 
-Prometheus evaluates **OK, WARN, ALARM and NODATA**. Alertmanager sends the
-current observed state through its native Telegram receiver. There is no
+Prometheus evaluates **OK, WARN, ALARM and NODATA**. Alertmanager sends one
+combined current-state summary daily at **10:00 Europe/Moscow** through its
+native Telegram receiver. State changes between summaries do not notify. There is no
 GlamDB webhook, delivery daemon or SQLite outbox. These rules depend on the
 metric and recording-rule contracts in [monitoring](MONITORING.md).
 
@@ -48,7 +49,7 @@ and an independent observer; an evaluator failure is not a healthy reading.
 
 The default evaluation interval is 15 seconds and the source window is 90
 seconds. Holds are 2 minutes for OK/WARN/NODATA and 1 minute for ALARM. Initial
-healthy checks can notify OK; this is an observed starting state. Example
+healthy checks can appear as OK in the daily summary; this is an observed starting state. Example
 thresholds include CPU 80/95%, disk 20/10% remaining, HTTP errors 1/5% with at
 least 100 requests in five minutes. Tune these to actual quotas and traffic.
 
@@ -145,21 +146,39 @@ amtool --alertmanager.url=http://localhost:9093 alert add \
   --annotation=observed_at="$(date +%s)"
 ```
 
-This sends to the configured chat after grouping delay; automated tests never
-run it. Expire the setup alert in Alertmanager afterwards. A successful Telegram
+The setup alert obeys the same daily 10:00 Moscow delivery window. A setup alert
+that expires before the window will not be delivered; use the loopback tests
+for immediate receiver validation. Automated tests never send to the real chat.
+Expire the setup alert in Alertmanager afterwards. A successful Telegram
 API response means acceptance by Telegram, not that a person read the message.
 
 ## Delivery, noise and restart semantics
 
-Alertmanager groups by cluster and service, waits 30 seconds initially,
-evaluates group changes every five minutes, and repeats problem
-states every four hours. OK repeats every 24 hours. NODATA inhibits other states
-of the same identity; ALARM inhibits OK/WARN. These guards also limit noise during
-configuration transitions. Use time-bounded silences with narrow stable labels,
-an owner and a reason. A silence cannot retract a request already in flight.
+Alertmanager keeps one group across services and opens the native
+`daily-summary` interval only from **10:00 to 10:01 Europe/Moscow**. The group
+is checked once per minute, allowing one scheduled snapshot in that minute.
+Outside it, even WARN/ALARM/NODATA transitions do not notify. The snapshot is the
+current set of active checks that have passed their rule holds, not a history of
+all incidents during the previous day. Existing `notify_nodata=false` exclusions
+and silences still apply; omitted checks remain visible in the dashboards.
+
+The 12-hour `repeat_interval` is shorter than one day so small timer-phase
+changes cannot suppress the next day's unchanged summary. The active interval
+prevents a separate 12-hour reminder. Keep the one-minute interval duration and
+`group_interval: 1m` together; increasing the interval length can permit multiple
+updates, while increasing the polling period can miss the daily window. Change
+`start_time`, `end_time` and `location` together to move the scheduled minute.
+The existing 120-hour notification-log retention is sufficient for this cadence.
+Alertmanager and the local VM must be running during the scheduled minute.
+A missed window is not replayed automatically; this uses native time intervals,
+not a persistent calendar-job service.
+
+NODATA inhibits other states of the same identity; ALARM inhibits OK/WARN.
+Use time-bounded silences with narrow stable labels, an owner and a reason.
+A silence cannot retract a request already in flight.
 
 The contract is **delivery of the current observed state**, including its Unix
-observation timestamp and the state's UTC start time. Notifications can be
+observation timestamp in the summary header. Notifications can be
 coalesced by grouping, inhibited, silenced, truncated at Telegram's limit or
 repeated. Observation time is not a claim that the state is still current when
 the chat reads it. In particular:
@@ -169,8 +188,9 @@ the chat reads it. In particular:
   resend current active alerts after restart.
 - This release retries Telegram errors, including 429, 5xx and request timeout,
   using the standard Alertmanager retry pipeline. Its Telegram receiver does
-  **not** apply `retry_after` as a durable chat-wide deadline. Distinct groups
-  can send concurrently; there is no global three-second chat pacer.
+  **not** apply `retry_after` as a durable chat-wide deadline. Failed in-flight
+  attempts can extend past the active minute; this is not an exactly-once daily
+  delivery guarantee. There is no separate delivery daemon or chat pacer.
 - The configured Telegram timeout is fifteen seconds. Failed attempts are visible
   in `alertmanager_notification_requests_failed_total{integration="telegram"}`;
   final failed notifications appear in `alertmanager_notifications_failed_total`.
@@ -185,10 +205,12 @@ the chat reads it. In particular:
 
 The application deliberately adopts the native Alertmanager contract. It does
 not promise equivalence to the removed outbox or delivery-time recovery query.
-A compact service summary lists each check, observation time, state start and
-node. A batch of 50 checks is covered by a native receiver test without message
-truncation. Grouping prevents a separate startup request for every check; it
-does not create a global delivery-rate guarantee across many clusters/services.
+A compact daily summary lists each check's current state and scope, with an
+observation timestamp in the header. A batch of 50 checks across services is
+covered by a native receiver test without message truncation. A separate native
+test keeps the real one-minute production cadence, shortens only the repeat
+horizon, and verifies one snapshot followed by silence through closure of the
+window. The tests use their own processes and a loopback Telegram peer.
 
 Tune grouping, holds, repeats and routing for Telegram rate limits; inspect
 failures instead of assuming that every short transition reaches the chat.

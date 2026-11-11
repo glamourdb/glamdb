@@ -14,6 +14,7 @@ import time
 import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -131,7 +132,11 @@ class NativeProcess:
         config = config.replace("/run/secrets/telegram_bot_token", str(self.token))
         config = config.replace("/run/secrets/telegram_chat_id", str(self.chat))
         config = config.replace("group_wait: 30s", "group_wait: 200ms")
-        config = config.replace("group_interval: 5m", "group_interval: 1s")
+        if not getattr(self, "daily_summary", False):
+            # Delivery/retry tests keep their fast, always-active protocol peer.
+            # The daily-summary tests below retain the production cadence/window.
+            config = config.replace("group_interval: 1m", "group_interval: 1s")
+            config = config.replace("      active_time_intervals: [daily-summary]\n", "")
         config = config.replace("timeout: 15s", "timeout: 250ms")
         self.am_config = self.root / "alertmanager.yml"
         self.am_config.write_text(config)
@@ -286,7 +291,7 @@ class NativeDeliveryTest(NativeProcess, unittest.TestCase):
     def test_grouping_batches_same_identity_and_repeats_at_configured_interval(self):
         self.am.terminate()
         self.am.wait(5)
-        config = self.am_config.read_text().replace("repeat_interval: 4h", "repeat_interval: 1s")
+        config = self.am_config.read_text().replace("repeat_interval: 12h", "repeat_interval: 1s")
         self.am_config.write_text(config)
         self.am = self.start_am()
         self.alert_start = datetime.now(timezone.utc).isoformat()
@@ -330,6 +335,72 @@ class NativeDeliveryTest(NativeProcess, unittest.TestCase):
         self.assertIn("NODATA GlamDB cpu", self.peer.calls[0][1]["text"])
         self.assertNotIn("WARN GlamDB", self.peer.calls[0][1]["text"])
         self.assertNotIn("ALARM GlamDB", self.peer.calls[0][1]["text"])
+
+
+@unittest.skipUnless(os.environ.get("ALERTMANAGER_BIN"), "set ALERTMANAGER_BIN or run tools/alerting/check.py")
+class DailySummaryTest(NativeProcess, unittest.TestCase):
+    daily_summary = True
+
+    def window(self, start, end):
+        import re
+        self.am.terminate()
+        self.am.wait(5)
+        config = self.am_config.read_text()
+        config = re.sub(r'start_time: "[0-9:]+"', f'start_time: "{start}"', config, count=1)
+        config = re.sub(r'end_time: "[0-9:]+"', f'end_time: "{end}"', config, count=1)
+        self.am_config.write_text(config)
+        self.am = self.start_am()
+
+    def test_state_changes_outside_daily_window_send_no_messages(self):
+        now = datetime.now(ZoneInfo("Europe/Moscow"))
+        hour = (now.hour + 12) % 24
+        self.window(f"{hour:02}:00", f"{hour:02}:01")
+        self.post("WARN")
+        wait_until(lambda: len(api(self.am_url + "/api/v2/alerts")) == 1)
+        time.sleep(.5)
+        self.post("WARN", resolved=True)
+        self.post("ALARM")
+        time.sleep(1.2)
+        self.assertEqual(len(self.peer.calls), 0, "A state change escaped the daily delivery window")
+
+    def test_daily_window_sends_one_combined_snapshot_and_then_stays_quiet(self):
+        now = datetime.now(ZoneInfo("Europe/Moscow"))
+        if now.second >= 54:
+            time.sleep(61 - now.second)
+            now = datetime.now(ZoneInfo("Europe/Moscow"))
+        next_minute = now + timedelta(minutes=1)
+        end = "24:00" if next_minute.date() != now.date() else next_minute.strftime("%H:%M")
+        self.window(now.strftime("%H:%M"), end)
+        # An expired repeat horizon is deliberate: only the active window and
+        # production one-minute cadence may prevent a second successful send.
+        self.am.terminate()
+        self.am.wait(5)
+        config = self.am_config.read_text().replace("repeat_interval: 12h", "repeat_interval: 1s")
+        # Let all identities enter the group, as the production 30s wait does.
+        # A 200ms protocol-test wait can race grouping under parallel test load.
+        self.am_config.write_text(config.replace("group_wait: 200ms", "group_wait: 2s"))
+        self.am = self.start_am()
+        # Old StartsAt bypasses group_wait in Alertmanager and flushes before
+        # the whole batch is dispatched. This fixture is a fresh startup batch.
+        self.alert_start = datetime.now(timezone.utc).isoformat()
+        alerts = []
+        states = ("OK", "WARN", "ALARM", "NODATA")
+        for index in range(50):
+            alerts += self.alerts(states[index % 4], check=f"check_{index:02}",
+                                  service="glamdb" if index % 2 else "monitoring")
+        api(self.am_url + "/api/v2/alerts", alerts)
+        wait_until(lambda: len(api(self.am_url + "/api/v2/alerts")) == 50)
+        wait_until(lambda: len(self.peer.calls) >= 1)
+        text = self.peer.calls[0][1]["text"]
+        for index in range(50):
+            self.assertIn(f"{states[index % 4]} GlamDB check_{index:02}", text)
+        self.assertLessEqual(len(text), 4096)
+        self.post("ALARM", check="new_problem_after_summary")
+        # Exercise a complete real production polling interval and closure of
+        # the one-minute window, without changing the host or VM clock.
+        time.sleep(31)
+        time.sleep(31)
+        self.assertEqual(len(self.peer.calls), 1, "A second message escaped the one-minute daily window")
 
 
 if __name__ == "__main__":

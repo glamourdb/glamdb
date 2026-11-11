@@ -2,16 +2,27 @@ global:
   resolve_timeout: 5m
 
 route:
-  receiver: telegram
-  group_by: [cluster, service]
+  receiver: visible-only
+  group_by: []
   group_wait: 30s
-  group_interval: 5m
-  repeat_interval: 4h
+  # Poll once per minute: the one-minute daily window admits one group send.
+  group_interval: 1m
+  # Below one day to tolerate timer phase/jitter on the next daily opening.
+  # Outside the active interval, even state changes cannot send Telegram.
+  repeat_interval: 12h
   routes:
     - matchers: ['state="NODATA"', 'notify_nodata="false"']
       receiver: visible-only
-    - matchers: ['state="OK"']
-      repeat_interval: 24h
+    - receiver: telegram
+      active_time_intervals: [daily-summary]
+
+time_intervals:
+  - name: daily-summary
+    time_intervals:
+      - times:
+          - start_time: "10:00"
+            end_time: "10:01"
+        location: Europe/Moscow
 
 receivers:
   - name: visible-only
@@ -23,13 +34,12 @@ receivers:
         send_resolved: false
         parse_mode: ""
         timeout: 15s
-        # Group by service to avoid one Telegram request per check at startup.
-        # Compact lines keep the usual service inventory within Telegram's limit.
+        # One combined daily snapshot across services, including healthy checks.
+        # Compact lines keep the usual inventory within Telegram's limit.
         message: |-
-          GlamDB {{ .CommonLabels.cluster }}/{{ .CommonLabels.service }}
+          GlamDB daily summary ({{ len .Alerts.Firing }} checks)
           {{ with index .Alerts 0 }}Observed at (Unix seconds): {{ .Annotations.observed_at }}{{ end }}
-          Each row: state / check / observed Unix seconds / state since UTC / node.
-          {{ range .Alerts.Firing }}{{ .Labels.state }} GlamDB {{ .Labels.check }} · {{ .Annotations.observed_at }} · {{ .StartsAt.UTC.Format "2006-01-02T15:04:05Z" }} {{ .Labels.node }}
+          {{ range .Alerts.Firing }}{{ .Labels.state }} GlamDB {{ .Labels.check }} · {{ .Labels.cluster }}/{{ .Labels.service }}{{ with .Labels.namespace }}/{{ . }}{{ end }}{{ with .Labels.pod }}/{{ . }}{{ end }}{{ with .Labels.node }} · {{ . }}{{ end }}
           {{ end }}
           {{ with index .Alerts 0 }}{{ .Annotations.runbook_url }}{{ end }}
         http_config:
