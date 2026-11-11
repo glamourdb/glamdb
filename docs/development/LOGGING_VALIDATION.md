@@ -1,3 +1,39 @@
+# Native server logging validation — 2026-11-12
+
+Rebased PR 14 onto main `0c5df05`. The native server now owns the logger,
+records HTTP completion and propagates correlation into synchronous engine
+storage/corruption and uncertain-commit observations. Admin read and quiesce
+commands use the same bounded event path. Installed core consumers link the
+private archive without exposing Quill headers.
+
+Executed on Linux x86-64 with Clang 18 and the existing pinned storage prefix:
+
+- The new real-server lifecycle test failed against the original binary with
+  zero startup events, then passed after integration.
+- The native SQLite VFS uncertainty test failed against the original binary
+  with zero recovery events, then passed with matching request IDs on core
+  `recovery_required` and HTTP 503 completion.
+- Six real server/admin logging tests passed: lifecycle, success sampling,
+  HTTP 400/401/404/408, redaction, append/scan, damaged Parquet and correlated
+  core failure, disconnected sessions, failed startup, `/dev/full`, admin
+  creation/inspection/quiescence and failed read classification.
+- `ctest --test-dir build/local -R '^glamdb.logging$' --output-on-failure` passed
+  all 17 underlying native/Python adapter cases.
+- The seven CTest entries `admin`, `native_http`, `native_http_fault`,
+  `http_review`, `http_security`, `server_logging`, and `installed_consumer`
+  passed. The installed consumer configures, links and executes actual writes
+  and fresh-process reads through the exported core package.
+- LLVM 18 format checking of 220 files and pinned-submodule verification passed.
+
+The following older collector/adapter evidence is historical and was not rerun
+for this integration. In particular, the separately configured producer below
+is external collection evidence, not a test of the server source in the old
+PR. Current native integration is established by the executable tests above.
+No power-loss durability, live Loki deployment or production retention claim
+is made by these tests.
+
+---
+
 # Logging validation — 2026-11-11
 
 Executed on macOS arm64, AppleClang 21.0.0, Python 3.14.3, CMake 4.4.4,

@@ -1,11 +1,35 @@
 # Operational logging
 
-The native CLI and Python control-plane adapter emit best-effort JSON to **stderr**.
-CLI stdout remains its machine-readable command result. The application has no
+The native server, offline administrator and Python adapter emit best-effort JSON to **stderr**.
+For a short operator guide, see [Reading server logs](READING_SERVER_LOGS.md).
+Server stdout remains its listening-address JSON; admin stdout remains its command result. The application has no
 file logging mode or file rotation. `GLAMDB_LOG_DIRECTORY` is no longer used.
 The normal path is application → runtime journal → Alloy → Loki → Grafana.
 Administrative audit and storage outcomes remain in transactional metadata;
 a log admission or Loki acknowledgment never authorizes a committed response.
+
+## Native integration
+
+The server owns one logger across startup, HTTP worker draining and database
+shutdown. HTTP session completion emits once on the I/O thread after the final
+response write, or on early connection closure. The fourteen stable route
+workers register on first use before entering the engine; with the I/O thread
+this stays below the sixteen-producer lifetime budget. No logger pointer is
+published globally. A scoped thread-local context passes generated request IDs
+and typed operations into synchronous engine calls, and restores the previous
+context on return. The scope itself never allocates a producer queue.
+
+The coordinator emits `recovery_required` for uncertain create/append commits
+and corruption that invalidates readiness. Its observed I/O/corruption paths
+emit `storage_failed`. These events share the HTTP request ID even if the client
+has disconnected before the engine call finishes. They do not replace durable
+outcomes or claim exhaustive tracing of every file operation. Embedded callers
+without a scope remain silent. The installed core package carries the private
+logging archive and thread dependency without requiring Quill headers.
+
+Admin commands wrap the synchronous engine call in the same context. Read and
+quiesce commands retain their stdout protocol. The network client is unchanged;
+the Python adapter is not wired into a production service in this repository.
 
 ## Libraries and event boundary
 

@@ -507,3 +507,11 @@ acceptance plus a standalone client build in the normal profile. MSan uses the
 ordinary standalone TLS client against the instrumented server; system OpenSSL
 is not instrumented. Test-only native HTTP VFS faults model COMMIT uncertainty
 and lifecycle draining; they do not establish physical power-loss durability.
+
+Server logging is connected to HTTP completion and synchronous core failure/recovery
+paths through a scoped request context. Preserve logger lifetime through worker and
+engine shutdown, and keep stable worker count within the sixteen lifetime producer
+budget. `glamdb.server_logging` tests real requests, stored-data corruption, redaction
+and admin stdout; the native HTTP fault suite checks uncertain-COMMIT correlation.
+See [Reading server logs](docs/development/READING_SERVER_LOGS.md) for sampling,
+status semantics and diagnostic commands. Embedded calls without a scope stay silent.
