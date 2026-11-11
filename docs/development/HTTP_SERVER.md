@@ -29,6 +29,10 @@ the API/UI listener does not serve `/metrics`. Its health gauge observes the
 owned engines rather than HTTP reachability. The metrics listener does not use
 the API bearer token; keep its bind address and network access private. See
 [monitoring](MONITORING.md#application-integration) for metric semantics.
+The same private listener includes finite HTTP request/status counters,
+duration histograms and in-flight gauges through response completion or
+cancellation. `--log-directory /path/to/private/logs` separately opts into Quill
+schema-1 JSONL operation/lifecycle records with bounded queues and file rotation.
 
 `glamdb-cli` is a standalone network client with DNS and verified HTTPS; it does
 not link the engine or storage libraries. `create-store --name analytics` calls
