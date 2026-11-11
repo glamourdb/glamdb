@@ -3,7 +3,8 @@
 Executed on macOS arm64, AppleClang 21.0.0, Python 3.14.3, CMake 4.4.4,
 Ninja 1.13.2 and LLVM format/tidy 18.1.8. These checks qualify the independent
 logging adapters and collection pipeline, not storage durability or a native
-HTTP/scanner server.
+HTTP server. The storage backend and scanner are implemented; their complete
+engine validation is separate from these logging component checks.
 
 ## Replacement and regression checks
 
@@ -15,11 +16,11 @@ availability and producer registration/budgets), then passing with the real
 libraries. File ownership/symlink/rotation tests were removed with application
 file mode; runtime journal quotas/rotation require the separate Linux gate below.
 
-Final executed commands/results:
+Final executed commands/results after rebasing onto main `6264b04`:
 
 - `cmake -S . -B build/logging-quill -G Ninja -DGLAMDB_IO_ONLY=ON -DBUILD_TESTING=ON -DPython3_EXECUTABLE="$PWD/.venv/bin/python"`,
   build, then `ctest --test-dir build/logging-quill --output-on-failure`:
-  **162/162 PASS**, including **17 logging tests** (sixteen pass on macOS; the Linux ENOSPC device test skips). The logging test uses the
+  **174/174 PASS**, including **17 logging tests** (sixteen pass on macOS; the Linux ENOSPC device test skips). The logging test uses the
   actual CMake-built Quill producer. It covers success sampling/rate limits,
   errors/lifecycle, maximum typed records, eight-producer saturation, sixty-four
   sequential/churning producer attempts constrained to sixteen lifetime queues,
@@ -32,20 +33,23 @@ Final executed commands/results:
   explicit unit doubles; native pipes and Quill are real.
 - The same configure/build/CTest with `GLAMDB_ENABLE_ASAN=ON` and
   `GLAMDB_ENABLE_UBSAN=ON` in `build/logging-quill-sanitized`:
-  **162/162 PASS**. This includes logger teardown/reopen and pipe failure.
+  **174/174 PASS**. This includes logger teardown/reopen and pipe failure.
 - `cmake --build build/logging-quill --target format-check quality-negative-check`:
-  **PASS**, LLVM 18 formatting of 68 IO-profile sources and intentional
+  **PASS**, LLVM 18 formatting of 75 IO-profile sources and intentional
   formatting/analyzer violations rejected. Focused LLVM 18 tidy of
   `structured_log.cpp`, `logging_probe.cpp` and CLI `main.cpp`: **PASS**, no
   project diagnostics, using the previously verified libc++ 18.1.8 source
   headers and the current SDK sysroot for analysis. The ordinary full `tidy-check`
   target cannot use this host's SDK/STL with LLVM 18 directly; that attempted run
   failed on missing standard headers and unrelated existing source diagnostics.
-  It is not recorded as a passing whole-project tidy gate.
-- Strict native CLI translation-unit compilation with
-  `-std=c++23 -Wall -Wextra -Wpedantic -Werror`: **PASS**. Its stdout generation
-  is unchanged; a fully linked storage CLI was not rebuilt because this worktree
-  has no installed Arrow/Iceberg/SQLite prefix.
+  It is not recorded as a passing whole-project tidy gate. A separate global
+  `python3 scripts/quality.py format-check` passed all **135** project files.
+- Strict native CLI and engine translation-unit compilation with
+  `-std=c++23 -Wall -Wextra -Wpedantic -Werror`: **PASS**, including
+  `GLAMDB_HAS_STORAGE=1` against the pinned Arrow/Iceberg source headers. CLI
+  stdout generation is unchanged. A fresh full-engine configure stops at
+  `find_package(SQLite3 CONFIG)`; this worktree has no installed
+  Arrow/Iceberg/SQLite prefix, so no fully linked engine/CLI test is claimed.
 - `cmake -P cmake/dependencies/VerifySubmodules.cmake`: **PASS**, including the
   exact Quill release commit. The installed formatter matches its pinned PyPI
   wheel. The upstream MIT/BSD licenses were inspected and dependency instructions
