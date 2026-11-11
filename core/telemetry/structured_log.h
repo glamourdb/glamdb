@@ -20,6 +20,8 @@ enum class ELogOperation : std::uint8_t {
     Other,
     CreateStore,
     InspectStore,
+    QuiesceStore,
+    Database,
     Health,
     Collections,
     Snapshots,
@@ -99,6 +101,39 @@ private:
     struct TImpl;
     explicit TStructuredLogger(std::unique_ptr<TImpl> impl);
     std::unique_ptr<TImpl> Impl_;
+};
+
+// Explicit synchronous call context. No process-global logger pointer and no
+// dependency on HTTP types. The owner must outlive this scope and its workers.
+class TLogScope
+{
+public:
+    TLogScope(TStructuredLogger* logger, ELogOperation operation, std::uint64_t requestID) noexcept;
+    ~TLogScope();
+    TLogScope(const TLogScope&) = delete;
+    TLogScope& operator=(const TLogScope&) = delete;
+    static void Emit(ELogEvent event, ELogOutcome outcome = ELogOutcome::Error) noexcept;
+
+private:
+    TStructuredLogger* Logger_;
+    ELogOperation Operation_;
+    std::uint64_t RequestID_;
+    TLogScope* Previous_;
+    static thread_local TLogScope* Current_;
+};
+
+// Best-effort process lifecycle; never makes startup fail if the sink cannot open.
+class TLogRuntime
+{
+public:
+    explicit TLogRuntime(const TLogOptions& options = {}) noexcept;
+    ~TLogRuntime();
+    TStructuredLogger* Get() const noexcept;
+    void SetResult(bool success) noexcept;
+
+private:
+    std::unique_ptr<TStructuredLogger> Logger_;
+    ELogOutcome Outcome_ = ELogOutcome::Error;
 };
 
 } // namespace NGlamDB::NTelemetry

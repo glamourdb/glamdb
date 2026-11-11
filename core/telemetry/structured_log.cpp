@@ -183,6 +183,10 @@ const char* GetOperationName(ELogOperation operation) noexcept
             return "create_store";
         case ELogOperation::InspectStore:
             return "inspect_store";
+        case ELogOperation::QuiesceStore:
+            return "quiesce_store";
+        case ELogOperation::Database:
+            return "database";
         case ELogOperation::Health:
             return "health";
         case ELogOperation::Collections:
@@ -434,6 +438,60 @@ void TStructuredLogger::Shutdown() noexcept
             Count(*Impl_->Stats, &TAtomicStats::AdapterErrors);
         }
     }
+}
+
+thread_local TLogScope* TLogScope::Current_ = nullptr;
+
+TLogScope::TLogScope(TStructuredLogger* logger, ELogOperation operation, std::uint64_t requestID) noexcept
+    : Logger_(logger)
+    , Operation_(operation)
+    , RequestID_(requestID)
+    , Previous_(Current_)
+{
+    Current_ = this;
+}
+
+TLogScope::~TLogScope()
+{
+    Current_ = Previous_;
+}
+
+void TLogScope::Emit(ELogEvent event, ELogOutcome outcome) noexcept
+{
+    if (Current_ && Current_->Logger_) {
+        Current_->Logger_->TryLog(
+            {.Event = event, .Operation = Current_->Operation_, .Outcome = outcome, .RequestID = Current_->RequestID_});
+    }
+}
+
+TLogRuntime::TLogRuntime(const TLogOptions& options) noexcept
+{
+    try {
+        auto opened = TStructuredLogger::Open(options);
+        if (opened) {
+            Logger_ = std::move(*opened);
+            Logger_->TryLog({.Event = ELogEvent::RuntimeStarted});
+        }
+    } catch (...) {
+        // Operational telemetry never prevents the application from running.
+    }
+}
+
+TLogRuntime::~TLogRuntime()
+{
+    if (Logger_) {
+        Logger_->TryLog({.Event = ELogEvent::RuntimeStopped, .Outcome = Outcome_});
+    }
+}
+
+TStructuredLogger* TLogRuntime::Get() const noexcept
+{
+    return Logger_.get();
+}
+
+void TLogRuntime::SetResult(bool success) noexcept
+{
+    Outcome_ = success ? ELogOutcome::Ok : ELogOutcome::Error;
 }
 
 } // namespace NGlamDB::NTelemetry

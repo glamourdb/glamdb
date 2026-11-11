@@ -127,28 +127,28 @@ try {
 int main(int argc, char** argv)
 try {
     using namespace NGlamDB::NTelemetry;
-    auto opened = TStructuredLogger::Open();
-    if (!opened) {
-        std::cerr << "Operational logging unavailable\n";
-        return RunCommand(argc, argv);
-    }
-    auto& logger = **opened;
-    const auto requestID = logger.NewRequestID();
+    TLogRuntime logging;
+    auto* logger = logging.Get();
+    const auto requestID = logger ? logger->NewRequestID() : 0;
     const auto operation = argc > 1 && std::string_view(argv[1]) == "create-store" ? ELogOperation::CreateStore
         : argc > 1 && std::string_view(argv[1]) == "inspect-store"                 ? ELogOperation::InspectStore
+        : argc > 1 && std::string_view(argv[1]) == "read"                          ? ELogOperation::Scan
+        : argc > 1 && std::string_view(argv[1]) == "quiesce-store"                 ? ELogOperation::QuiesceStore
                                                                                    : ELogOperation::Other;
-    logger.TryLog({.Event = ELogEvent::RuntimeStarted});
     const auto started = std::chrono::steady_clock::now();
+    TLogScope scope(logger, operation, requestID);
     const auto result = RunCommand(argc, argv);
     const auto duration =
         std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - started).count();
-    logger.TryLog({.Event = ELogEvent::RequestCompleted,
-        .Operation = operation,
-        .Outcome = result == 0 ? ELogOutcome::Ok : ELogOutcome::Error,
-        .RequestID = requestID,
-        .DurationUs = static_cast<std::uint64_t>(duration),
-        .StatusCode = static_cast<std::uint32_t>(result)});
-    logger.TryLog({.Event = ELogEvent::RuntimeStopped});
+    if (logger) {
+        logger->TryLog({.Event = ELogEvent::RequestCompleted,
+            .Operation = operation,
+            .Outcome = result == 0 ? ELogOutcome::Ok : ELogOutcome::Error,
+            .RequestID = requestID,
+            .DurationUs = static_cast<std::uint64_t>(duration),
+            .StatusCode = static_cast<std::uint32_t>(result)});
+    }
+    logging.SetResult(result == 0);
     return result;
 } catch (...) {
     return 100;

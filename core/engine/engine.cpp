@@ -1,4 +1,5 @@
 #include "storage/engine.h"
+#include "core/telemetry/structured_log.h"
 
 #include "core/api/binary.h"
 #include "core/api/canonical.h"
@@ -429,6 +430,8 @@ struct Engine::Impl
 
     CreateOutcome UnknownCreate(CreateRecoveryContext context, CommitPhase phase, ErrorDetail error)
     {
+        NGlamDB::NTelemetry::TLogScope::Emit(NGlamDB::NTelemetry::ELogEvent::RecoveryRequired,
+            NGlamDB::NTelemetry::ELogOutcome::Unknown);
         if (backend) {
             backend->InvalidateCache();
         }
@@ -608,6 +611,10 @@ struct Engine::Impl
 
     void CloseOnCorruption(const ErrorDetail& error)
     {
+        using namespace NGlamDB::NTelemetry;
+        if (error.code == "IO_ERROR" || error.code == "CORRUPTION" || error.code == "UNSUPPORTED_STORE_VERSION") {
+            TLogScope::Emit(ELogEvent::StorageFailed);
+        }
         if (error.code == "CORRUPTION" || error.code == "UNSUPPORTED_STORE_VERSION") {
             std::lock_guard gate(commit_gate);
             if (backend) {
@@ -616,6 +623,7 @@ struct Engine::Impl
             std::lock_guard lock(state_mutex);
             ready = false;
             ++health_generation;
+            TLogScope::Emit(ELogEvent::RecoveryRequired);
         }
     }
 
@@ -730,6 +738,8 @@ struct Engine::Impl
         ErrorDetail error,
         std::optional<AppendOutcome> failure = std::nullopt)
     {
+        NGlamDB::NTelemetry::TLogScope::Emit(NGlamDB::NTelemetry::ELogEvent::RecoveryRequired,
+            NGlamDB::NTelemetry::ELogOutcome::Unknown);
         if (backend) {
             backend->InvalidateCache();
         }
@@ -751,6 +761,9 @@ struct Engine::Impl
     AppendOutcome
     FailBound(const BoundOperation& binding, CommitPhase phase, ErrorDetail error, bool publication_started = false)
     {
+        if (error.code == "IO_ERROR") {
+            NGlamDB::NTelemetry::TLogScope::Emit(NGlamDB::NTelemetry::ELogEvent::StorageFailed);
+        }
         error.message = BoundedDiagnostic(error.message);
         // The bound ID is consumed either way. Capacity, corruption and an
         // unhealthy backend need operator action before a new ID can succeed.
