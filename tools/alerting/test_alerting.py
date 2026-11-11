@@ -21,6 +21,25 @@ def module(name):
 
 
 class RulesTest(unittest.TestCase):
+    def test_core_availability_and_readiness_require_live_distinct_sources(self):
+        config = json.loads((ROOT / "deploy/alerting/checks.json").read_text())
+        checks = {check["id"]: check for check in config["checks"]}
+        availability = checks["core_availability"]
+        readiness = checks["core_readiness"]
+        self.assertEqual(availability["query"], "1-min(up{$coretarget})")
+        self.assertEqual(readiness["query"], "1-min(glamdb_server_ready{$native})")
+        self.assertEqual(set(readiness["fresh"]),
+                         {"up{$coretarget}", "glamdb_server_ready{$native}"})
+        self.assertIn("min(up{$coretarget}) == 1", readiness["guards"])
+        rules = module("generate").rules(config)
+        for check in (availability, readiness):
+            self.assertEqual((check["warn"], check["alarm"]), (0.5, 1))
+            alerts = [rule for group in rules["groups"] for rule in group["rules"]
+                      if "alert" in rule and rule["labels"]["check"] == check["id"]]
+            self.assertEqual({rule["labels"]["state"] for rule in alerts},
+                             {"OK", "WARN", "ALARM", "NODATA"})
+            self.assertTrue(all(rule["labels"]["notify_nodata"] == "true" for rule in alerts))
+
     def test_all_checks_produce_exactly_four_states_and_never_resolved_ok(self):
         self.assertTrue(Path(__file__).with_name("generate.py").exists())
         generate = module("generate")

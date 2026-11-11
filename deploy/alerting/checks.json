@@ -28,6 +28,35 @@
   "runbook_url": "https://github.com/glamourdb/glamdb/blob/main/ALERTING.md",
   "checks": [
     {
+      "id": "core_availability",
+      "query": "1-min(up{$coretarget})",
+      "warn": 0.5,
+      "alarm": 1,
+      "fresh": [
+        "up{$coretarget}"
+      ],
+      "guards": [],
+      "summary": "Native core metrics scrape availability",
+      "description": "ALARM means the configured native core /metrics target cannot be scraped; missing or stale target data is NODATA. Scrape reachability does not establish engine write readiness; inspect core_readiness separately.",
+      "notify_nodata": true
+    },
+    {
+      "id": "core_readiness",
+      "query": "1-min(glamdb_server_ready{$native})",
+      "warn": 0.5,
+      "alarm": 1,
+      "fresh": [
+        "glamdb_server_ready{$native}",
+        "up{$coretarget}"
+      ],
+      "guards": [
+        "min(up{$coretarget}) == 1"
+      ],
+      "summary": "Native engine write readiness",
+      "description": "The live core aggregates Engine::GetHealth across open databases: readiness is 1 only when every open database is write-ready, and 0 when none are open, a health lookup fails, or any database is not ready. ALARM can occur while /metrics remains reachable. Missing or stale gauge data, or a failed core scrape, is NODATA.",
+      "notify_nodata": true
+    },
+    {
       "id": "gateway_availability",
       "query": "1-min(up{$gateway})",
       "warn": 0.5,

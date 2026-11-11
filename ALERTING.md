@@ -57,7 +57,16 @@ Prometheus client metrics. The separate Caddy outer-edge checks include requests
 rejected by OAuth2 Proxy before reaching the application, including 401/403,
 429/503 and 502/504. Configure both `glamdb-gateway` and `glamdb-edge` targets.
 Native metrics come from the live private `glamdb-core` endpoint, not a CLI
-snapshot file. System checks use node_exporter and kubelet/cAdvisor metrics.
+snapshot file. `core_availability` monitors that endpoint's scrape reachability;
+`core_readiness` separately monitors `glamdb_server_ready`, aggregated from
+`Engine::GetHealth` for the open databases. The gauge is 1 only when at least one
+database is open and all are write-ready. No open database, any health lookup
+failure, or any database not ready yields 0, even when `/metrics` remains
+reachable. Missing or stale readiness data, or a failed core scrape, yields
+NODATA rather than recovery. Both checks notify NODATA by default. Existing
+native admission, uncertain-commit and operation-error checks notify WARN and
+ALARM; their NODATA remains visible and muted by default.
+System checks use node_exporter and kubelet/cAdvisor metrics.
 Container checks require real namespace/pod/container labels, exporter
 availability and fresh timestamps on the raw CPU/memory samples. Preserve
 Prometheus's `honor_timestamps: true` for cAdvisor/kubelet: their raw statistics
