@@ -194,11 +194,45 @@ def require(condition, code):
         raise CheckError(code)
 
 
+def require_unsupported(request):
+    """An advertised missing feature must give its typed protocol rejection."""
+    from glamdb_sdk import HTTPError
+
+    try:
+        request()
+    except HTTPError as error:
+        require(
+            error.status_code == 501 and error.detail.code == "UNSUPPORTED_OPERATION",
+            "UNSUPPORTED_CAPABILITY_CONTRACT",
+        )
+    else:
+        raise CheckError("UNSUPPORTED_CAPABILITY_CONTRACT")
+
+
 def roundtrip(client, backend="native"):
     """Cover every SDK API route using only a fresh UUID collection."""
     from glamdb_sdk import Field, Schema, col
 
-    selected = require_backend(client.capabilities(), backend)
+    capabilities = client.capabilities()
+    selected = require_backend(capabilities, backend)
+    features = capabilities.get("features", {})
+    require(
+        isinstance(features, dict)
+        and all(type(value) is bool for value in features.values()),
+        "INVALID_CAPABILITIES",
+    )
+    missing = [
+        name
+        for name in (
+            "stats",
+            "snapshots",
+            "files",
+            "explain",
+            "pagination",
+            "zero_column_projection",
+        )
+        if features.get(name) is False
+    ]
     collection_id, operation_id = str(uuid4()), str(uuid4())
     # A space exercises exact-name query encoding through the deployment proxy.
     name = "system " + uuid4().hex
@@ -266,30 +300,80 @@ def roundtrip(client, backend="native"):
         collection_id, projection=["key"], predicate=col("n", "int64").gt(0)
     )
     require(filtered.rows == [{"key": "duplicate"}], "FILTER_OR_NULL_SEMANTICS_FAILED")
-    stats = client.stats(collection_id, snapshot_id=snapshot)
-    require(stats.get("rows") in (2, "2"), "HISTORICAL_STATS_CHANGED")
-    snapshots = client.snapshots(collection_id, page_size=1)
-    require(bool(snapshots.items), "SNAPSHOTS_EMPTY")
-    if snapshots.next_cursor:
-        require(
-            bool(
-                client.snapshots(
-                    collection_id, page_size=1, cursor=snapshots.next_cursor
-                ).items
-            ),
-            "SNAPSHOT_PAGINATION_FAILED",
+    checks = [
+        "create",
+        "resolve",
+        "get_collection",
+        "list",
+        "schema",
+        "append",
+        "idempotent_receipt",
+        "operation_lookup",
+        "historical_and_initial_views",
+        "typed_filter",
+    ]
+    if "stats" in missing:
+        require_unsupported(lambda: client.stats(collection_id, snapshot_id=snapshot))
+    else:
+        stats = client.stats(collection_id, snapshot_id=snapshot)
+        require(stats.get("rows") in (2, "2"), "HISTORICAL_STATS_CHANGED")
+        checks.append("stats")
+    if "snapshots" in missing:
+        require_unsupported(lambda: client.snapshots(collection_id, page_size=1))
+    else:
+        snapshots = client.snapshots(
+            collection_id, page_size=1000 if "pagination" in missing else 1
         )
-    files = client.files(collection_id, snapshot_id=snapshot, page_size=1)
-    require(bool(files.items), "FILES_EMPTY")
-    file_id = files.items[0]["file_id"]
-    require(
-        client.file(collection_id, file_id, snapshot_id=snapshot)["file_id"] == file_id,
-        "FILE_METADATA_FAILED",
-    )
-    require(
-        isinstance(client.explain(collection_id, snapshot_id=snapshot), dict),
-        "EXPLAIN_FAILED",
-    )
+        require(bool(snapshots.items), "SNAPSHOTS_EMPTY")
+        if features.get("pagination") is True:
+            require(bool(snapshots.next_cursor), "SNAPSHOT_PAGINATION_FAILED")
+        if snapshots.next_cursor:
+            require(
+                bool(
+                    client.snapshots(
+                        collection_id, page_size=1, cursor=snapshots.next_cursor
+                    ).items
+                ),
+                "SNAPSHOT_PAGINATION_FAILED",
+            )
+        checks.append("snapshots")
+    if "files" in missing:
+        require_unsupported(lambda: client.files(collection_id, snapshot_id=snapshot))
+        require_unsupported(
+            lambda: client.file(collection_id, str(uuid4()), snapshot_id=snapshot)
+        )
+    else:
+        files = client.files(collection_id, snapshot_id=snapshot, page_size=1)
+        require(bool(files.items), "FILES_EMPTY")
+        file_id = files.items[0]["file_id"]
+        require(
+            client.file(collection_id, file_id, snapshot_id=snapshot)["file_id"]
+            == file_id,
+            "FILE_METADATA_FAILED",
+        )
+        checks.extend(("files", "file_metadata"))
+    if "explain" in missing:
+        require_unsupported(lambda: client.explain(collection_id, snapshot_id=snapshot))
+    else:
+        require(
+            isinstance(client.explain(collection_id, snapshot_id=snapshot), dict),
+            "EXPLAIN_FAILED",
+        )
+        checks.append("explain")
+    if "pagination" in missing:
+        require_unsupported(
+            lambda: client.list_collections(
+                page_size=1, cursor="unsupported-profile-probe"
+            )
+        )
+    if "zero_column_projection" in missing:
+        require_unsupported(lambda: client.scan_json(collection_id, projection=[]))
+    elif features.get("zero_column_projection") is True:
+        require(
+            client.scan_json(collection_id, projection=[]).rows == [{}, {}, {}],
+            "ZERO_COLUMN_PROJECTION_CHANGED",
+        )
+        checks.append("zero_column_projection")
     with client.scan_batches(collection_id) as stream:
         arrow = [row for batch in stream for row in batch.to_pylist()]
         require(arrow == latest, "ARROW_ROWS_CHANGED")
@@ -303,28 +387,16 @@ def roundtrip(client, backend="native"):
             [row for batch in stream for row in batch.to_pylist()] == rows,
             "ARROW_HISTORY_CHANGED",
         )
-    return {
-        "status": "pass",
+    checks.append("arrow")
+    result = {
+        "status": "blocked" if missing else "pass",
         "backend": selected,
         "collection_id": collection_id,
-        "checks": [
-            "create",
-            "resolve",
-            "list",
-            "schema",
-            "append",
-            "idempotent_receipt",
-            "operation_lookup",
-            "historical_and_initial_views",
-            "typed_filter",
-            "stats",
-            "snapshots",
-            "files",
-            "file_metadata",
-            "explain",
-            "arrow",
-        ],
+        "checks": checks,
     }
+    if missing:
+        result.update(code="UNSUPPORTED_CAPABILITIES", missing_capabilities=missing)
+    return result
 
 
 def run(config, backend="native"):
@@ -354,7 +426,7 @@ def main():
     try:
         result = run(load_config(args.config), args.backend)
         print(json.dumps(result, sort_keys=True))
-        return 0
+        return 2 if result["status"] == "blocked" else 0
     except Exception as error:
         code = error.code if isinstance(error, CheckError) else "CHECK_FAILED"
         print(

@@ -491,7 +491,8 @@ def test_native_https_sdk_prefix_all_routes_and_arrow_roundtrip(native_identity)
     with fixture.sdk(0, fixture.owned(0)[0]) as client:
         result = checker().roundtrip(client, "mock")
     assert result["status"] == "pass" and result["backend"] == "explicit_mock"
-    assert len(result["checks"]) == 15
+    assert len(result["checks"]) == 16
+    assert "get_collection" in result["checks"]
 
 
 def test_native_organization_disable_and_enable_preserve_native_account_status(

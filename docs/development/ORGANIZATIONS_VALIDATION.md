@@ -75,6 +75,23 @@ with schema defaults, and redirected encoded paths before gateway validation.
 The corrected public flow passed the system harness's **15 route checks**.
 The same explicitly mock target was rejected by the default native mode.
 
+Capability-profile regressions run the real network SDK and CLI against an
+explicit disposable mock with test-only capability/unsupported-response
+middleware. They verify that supported create/collection/append/history/JSON/
+Arrow work still executes, while actual typed501 responses for advertised
+missing metadata/profile features produce `blocked` / `UNSUPPORTED_CAPABILITIES`
+and exit2 with the exact missing list. Legacy complete profiles still pass;
+claimed-supported failures, contradictory replies and malformed flags fail.
+Default native mode rejects the mock before writes. These tests do not execute
+a native storage server or qualify a partial feature profile.
+
+Native-protocol receipt regressions use explicit backend transport doubles
+through the actual gateway/catalog. They first reproduced the unresolved
+failed-create and 412/409 append-lookup cases, then verified terminal admission
+cleanup. Mismatched/missing IDs, unknown outcomes, incorrect native status/
+phase/retry hints, unknown codes and bare errors preserve durable uncertainty.
+The fixtures describe native serializer shapes, not actual native execution.
+
 ## Deployment and persistence evidence
 
 The production Python image built from the exact 46-package hash lock; binary

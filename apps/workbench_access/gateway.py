@@ -77,6 +77,65 @@ def receipt_schema(value):
     return {"schema_id": schema_id, "fields": normalized}
 
 
+def native_failure_receipt(value, status, *, operation_id=None):
+    """Recognize the native ToJson terminal-failure envelope, never a bare HTTP error."""
+    if not isinstance(value, dict):
+        return False
+    fields = {"outcome", "phase", "error"}
+    if operation_id is not None:
+        fields.add("operation_id")
+        if value.get("operation_id") != operation_id:
+            return False
+    if value.keys() != fields or value.get("outcome") != "definitely_not_committed":
+        return False
+    if value.get("phase") not in (
+        "validation",
+        "binding",
+        "data",
+        "metadata",
+        "catalog_transaction",
+        "catalog_commit",
+        "recording_failure",
+        "reconciling",
+    ):
+        return False
+    detail = value.get("error")
+    if (
+        not isinstance(detail, dict)
+        or detail.keys() != {"code", "message", "retry_hint"}
+        or not isinstance(detail.get("code"), str)
+        or not isinstance(detail.get("message"), str)
+        or detail.get("retry_hint")
+        not in ("SameIdAfterReconcile", "NewOperationId", "FixInput", "OperatorAction")
+    ):
+        return False
+    # Match the native serializer's ErrorStatus mapping. New/unknown error codes
+    # stay unresolved until their contract is reviewed, including default-500 codes.
+    statuses = {
+        "INVALID_ARGUMENT": 400,
+        "OPERATION_CONFLICT": 409,
+        "ALREADY_EXISTS": 409,
+        "SCHEMA_MISMATCH": 409,
+        "STALE_BASE": 409,
+        "PRECONDITION_FAILED": 412,
+        "RESOURCE_EXHAUSTED": 429,
+        "CAPACITY_EXCEEDED": 429,
+        "COLLECTION_NOT_FOUND": 404,
+        "NOT_FOUND": 404,
+        "RECOVERY_REQUIRED": 503,
+        "DEPENDENCY_UNAVAILABLE": 503,
+        "IO_ERROR": 500,
+        "CORRUPTION": 500,
+        "INTERNAL": 500,
+        "INVALID_STATE": 500,
+        "STATE_IN_USE": 500,
+        "UNSUPPORTED_STORE_VERSION": 500,
+        "DEADLINE_EXCEEDED": 500,
+        "INTERRUPTED": 500,
+    }
+    return statuses.get(detail["code"]) == status
+
+
 class JsonCSRF(CSRFMiddleware):
     def _get_error_response(self, request):
         return error(403, "PERMISSION_DENIED", "CSRF verification failed")
@@ -470,15 +529,22 @@ class Gateway:
                 )
             finally:
                 finish_stage(self.observe_stage, "proxy", started)
-            if response.status_code != 200 or len(response.content) > 1024 * 1024:
+            if len(response.content) > 1024 * 1024:
                 continue
             try:
                 result = response.json()
             except ValueError:
                 continue
-            if result.get("operation_id") == admission["operation_id"] and result.get(
-                "outcome"
-            ) in ("committed", "definitely_not_committed"):
+            if not isinstance(result, dict):
+                continue
+            matching = result.get("operation_id") == admission["operation_id"]
+            committed = (
+                response.status_code == 200 and result.get("outcome") == "committed"
+            )
+            failed = native_failure_receipt(
+                result, response.status_code, operation_id=admission["operation_id"]
+            )
+            if matching and (committed or failed):
                 self.catalog_call(
                     self.catalog.finish_write, admission["id"], result["outcome"]
                 )
@@ -656,6 +722,13 @@ class Gateway:
                         "outcome"
                     ) in ("committed", "definitely_not_committed"):
                         write["outcome"] = outcome["outcome"]
+                    elif route.kind == "create" and native_failure_receipt(
+                        outcome, upstream.status_code
+                    ):
+                        # Native failed creates have no collection_id field. This
+                        # synchronous reply belongs to the already admitted request
+                        # with its validated collection UUID; no ID/hash is inferred.
+                        write["outcome"] = "definitely_not_committed"
                     elif (
                         route.kind == "create"
                         and upstream.status_code in (200, 201)
