@@ -25,6 +25,12 @@ CivetWeb, pull enabled; push/tests/compression/TLS disabled), prometheus_client
   library ASGI response, actual library HTTP socket and thread/listener teardown,
   truthful logger snapshot families, pins and absence of synthetic source values.
   These are seven test methods; several assertions share a method.
+- A fresh non-recursive checkout and clean Python 3.13.5 environment reproduced
+  the missing `prometheus_client` import before setup. Workbench bootstrap now
+  installs the monitoring requirement fragment when present, retaining hash
+  verification, binary-only resolution and `--no-deps`. The exact workbench
+  Python check passed **420 tests**, the installed client was **0.26.0**, and
+  `python -m pip check` reported no broken requirements.
 - Native component compiles with strict warnings and ASan/UBSan. Eight threads
   record 80,000 committed outcomes; exact count=80,000, sum=800 seconds and the
   inclusive 0.01-second bucket are checked. Tests also cover incomplete scopes,
