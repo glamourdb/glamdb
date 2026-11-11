@@ -1,7 +1,8 @@
 # Operating GlamDB access with Keycloak and Cerbos
 
 The access deployment provides native Keycloak accounts and organizations,
-OAuth2 Proxy browser sessions, Cerbos policy checks, Caddy HTTPS, and a private
+OAuth2 Proxy browser sessions with a private ephemeral Valkey store,
+Cerbos policy checks, Caddy HTTPS, and a private
 GlamDB ownership catalog. It requires existing database HTTP servers. Registering
 a database connects one such server; deleting its mapping never deletes its data.
 The production HTTP transport connecting the native engine to this deployment
@@ -25,11 +26,13 @@ browser / SDK -> public Caddy HTTPS -> OAuth2 Proxy -> private gateway
 
 operator CLI -> owner-only Unix socket -> gateway lifecycle -> native Keycloak
                                          `-> SQLite ownership/audit/receipts
+
+OAuth2 Proxy -> private ephemeral Valkey session store
 ```
 
 Only Caddy publishes TCP 80/443 and UDP 443. Its private Keycloak administrative
 listener is published on host **127.0.0.1:18080**, with a separate internal-CA
-certificate for `keycloak-admin`. PostgreSQL, Keycloak 8080/9000, Cerbos
+certificate for `keycloak-admin`. PostgreSQL, Valkey 6379, Keycloak 8080/9000, Cerbos
 3592/3593, OAuth2 Proxy 4180, gateway 8080, Caddy 9095 metrics, and the operator
 socket have no public port mapping. Keep the host firewall closed to them.
 
@@ -70,12 +73,14 @@ The [Compose file](../../deploy/access/compose.yaml) and
 - Keycloak 26.8.2: `sha256:723b1d6e254c0fc96d5cffec860c7e0744d6a3277822b865bb538cf891575e41`.
 - PostgreSQL 18.6: `sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42`.
 - OAuth2 Proxy 7.15.6: `sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048`.
+- [Valkey 9.1.3](https://github.com/valkey-io/valkey/releases/tag/9.1.3) Alpine 3.24: `sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b`.
 - Cerbos 0.57.0: `sha256:e5e3b150b3cb0090975605254f255164567d67e233634199fb20972e3eaff300`.
 - Caddy 2.11.9 Alpine: `sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee`.
 - Python 3.13.11 slim Bookworm: `sha256:20080e807bfc404f8450b185cf0fc95d553462673598549613735f70a5b4d5d0`.
 
 Keycloak, OAuth2 Proxy, Cerbos and Caddy use Apache-2.0; PostgreSQL uses the
-PostgreSQL License and Python uses the PSF license. Preserve the upstream notices
+PostgreSQL License, Valkey uses [BSD-3-Clause](https://github.com/valkey-io/valkey/blob/9.1.3/COPYING),
+and Python uses the PSF license. Preserve the upstream notices
 when redistributing images and review the licenses of transitive packages.
 No paid service, enterprise policy feature or hosted control plane is required.
 
@@ -165,24 +170,31 @@ dc() {
 }
 ```
 
-## 3. Initial secrets and PostgreSQL
+## 3. Initial secrets, session authentication and PostgreSQL
 
 Generate initial secrets into new files without putting values in arguments,
 shell history or command output. The following refuses to overwrite files:
 
 ```sh
 python3 - <<'PY'
+import hashlib
 import os
 from pathlib import Path
 import secrets
 root = Path('/var/lib/glamdb/access/private')
 bootstrap = secrets.token_urlsafe(48)
+session_password = secrets.token_urlsafe(48)
 values = {
     'postgres.password': secrets.token_urlsafe(48),
     'bootstrap.password': bootstrap,
     'keycloak.env': 'KC_DB_PASSWORD=' + secrets.token_urlsafe(48) + '\n'
         + 'KC_BOOTSTRAP_ADMIN_USERNAME=bootstrap-admin\n'
         + 'KC_BOOTSTRAP_ADMIN_PASSWORD=' + bootstrap + '\n',
+    'secrets/session-store.password': session_password,
+    'secrets/session-store.acl': 'user default off\n'
+        + 'user oauth2-proxy on #' + hashlib.sha256(session_password.encode()).hexdigest()
+        + ' ~* +@connection +get +set +getrange +mget +mset +msetnx +del +exists +pttl +pexpire +eval +evalsha +script|load +info\n',
+    'oauth2-proxy.env': 'OAUTH2_PROXY_REDIS_PASSWORD=' + session_password + '\n',
 }
 for name, value in values.items():
     fd = os.open(root / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -199,6 +211,17 @@ into an issue, or save them in build/CI logs. The Keycloak env file is a runtime
 secret file, despite its `.env` extension. A full `docker compose config` can
 print resolved `env_file` values; use **`dc config --quiet`** for validation.
 
+The session store has one dedicated native ACL user; its ACL contains a password
+hash and grants only connection, session and refresh-lock commands. The health
+probe reads `session-store.password` into the native CLI's process environment.
+OAuth2 Proxy 7.15.6 accepts its Redis password through the private env file; it
+does not provide a Redis password-file option. The Redis URL contains no
+credentials. Runtime administrators can inspect container environments, so
+keep those inspection results private just like the existing Keycloak env file.
+The proxy mounts only its own client and cookie keys, rather than the control
+client's secrets. All three session-auth files must match and remain owned
+mode0600 files outside the UI tree.
+
 The `glamdb-observability` network is shared with the independently deployed
 logging, monitoring and alerting services. Create it once if it does not exist,
 or set `GLAMDB_OBSERVABILITY_NETWORK` to the reviewed existing equivalent:
@@ -207,7 +230,7 @@ or set `GLAMDB_OBSERVABILITY_NETWORK` to the reviewed existing equivalent:
 docker network inspect glamdb-observability >/dev/null 2>&1 || \
   docker network create glamdb-observability
 dc config --quiet
-dc pull postgres keycloak cerbos oauth2-proxy caddy
+dc pull postgres keycloak cerbos oauth2-proxy caddy session-store
 dc build gateway
 dc up -d postgres
 dc ps postgres
@@ -381,6 +404,51 @@ readable by the UI to supply its CSRF header. Do not confuse that required CSRF
 cookie with an exposed access token. Tokens and organization passwords must
 never enter localStorage/sessionStorage, URLs, screenshots, HAR, traces or logs.
 
+### Shared refresh state and ephemeral sessions
+
+OAuth2 Proxy uses its native Redis session store with Valkey on a dedicated
+internal `session` network. Only the proxy and store join that network; port 6379
+has no host mapping. The browser carries a short session ticket. OAuth2 Proxy
+encrypts the access/refresh/ID tokens in Valkey with the per-session ticket
+secret, obtains the native Redis refresh lock and reloads the latest session
+after obtaining it. Concurrent requests and already-issued stale-cookie
+requests then share the refreshed state. Keep Keycloak refresh-token rotation
+enabled with maximum reuse 0; switching back to cookie-only sessions would
+reintroduce refresh races. See the upstream
+[session-store contract](https://oauth2-proxy.github.io/oauth2-proxy/configuration/session_storage/).
+The pinned proxy uses a two-second refresh-lock lease. Qualify token-endpoint
+latency and concurrent refreshes under the intended load; the native regression
+does not establish consistency through arbitrary upstream stalls or failovers.
+
+This store is intentionally ephemeral. RDB snapshots and AOF are disabled,
+`/data` is tmpfs, core/crash/slow/ACL logs are disabled, and the ACL does not
+allow export, persistence, configuration, replication or monitor commands.
+Logs hide user data. Never run `MONITOR`, export keys, take RDB/AOF dumps or
+include session memory in support bundles/backups. Back up only the reviewed
+configuration and static authentication files through the existing secret
+manager. Session contents must not be restored from backups.
+
+A store restart, replacement or loss invalidates its tickets and requires a
+new Workbench sign-in. An existing native Keycloak SSO session may complete
+that sign-in without another password prompt. Losing application sessions does
+not revoke native Keycloak sessions or operator/SDK credentials; use the native
+revocation procedures when that is required. Store failure denies browser
+access; it does not enable cookie-only or Basic fallback. Bearer SDK requests
+retain their separate signed-token/introspection path.
+
+The example caps stored data at 64 MiB with `noeviction` and the container at 128 MiB.
+Exhaustion rejects session writes instead of silently evicting arbitrary users.
+Qualify these limits for the actual number and size of sessions. The store is
+co-located on a private single-host bridge; a remote store requires an explicit
+verified TLS design, not exposure of this private plaintext endpoint.
+
+For planned static session-password rotation, stop `oauth2-proxy` and
+`session-store`, replace the password, its ACL hash and `oauth2-proxy.env`
+together through the protected secret process, retaining owner/mode0600, then
+recreate both services. Do not put a replacement password in a command argument
+or Redis URL. This discards current Workbench sessions; users sign in again.
+Validate a fresh login and a due-time concurrent refresh after the change.
+
 The gateway checks revocation through live native introspection for each
 protected request. Access tokens are configured for 60 seconds; the gateway
 rejects lifetimes above its configured maximum (90 seconds by default). That
@@ -442,7 +510,7 @@ before admitting users to the new hostname.
 After realm bootstrap and catalog initialization/conversion:
 
 ```sh
-dc up -d gateway oauth2-proxy
+dc up -d session-store gateway oauth2-proxy
 dc ps
 dc exec gateway python -m apps.workbench_access.admin \
   --config /etc/glamdb/gateway.json --socket /state/operator.sock status
@@ -455,8 +523,8 @@ policy path as well as catalog access; it does not prove any registered backend
 can accept a write. A complete readiness decision also requires:
 
 1. Public TLS chains and hostnames validate from a client outside the host.
-2. Keycloak private health is ready, PostgreSQL is healthy, and Cerbos loads the
-   reviewed policies with no compilation errors.
+2. Keycloak private health is ready, PostgreSQL and the authenticated session
+   store are healthy, and Cerbos loads the reviewed policies without errors.
 3. Unauthenticated `/workbench/session` and `/databases/...` return JSON 401
    without a login HTML redirect. Invalid bearer access returns a JSON error;
    an authenticated foreign database is concealed as 404.
@@ -852,6 +920,12 @@ restarts. Do not recreate a custom outbox to imply that guarantee exists.
 
 ## 11. Consistent backup and restore
 
+Valkey holds ephemeral browser session tickets on a dedicated private network;
+it uses neither RDB nor AOF persistence. Exclude it from backup/restore. Losing
+the store requires fresh sign-in; restoring old tickets must not revive revoked
+sessions. Keep its authentication material in the secret manager independently
+of PostgreSQL/catalog backups, and recreate an empty session store during restore.
+
 Back up at least PostgreSQL's Keycloak database and role information, the access
 catalog including receipts/audit/admissions, Caddy certificate/CA state, reviewed
 configuration/policy revisions, private secret-manager references and required
@@ -1006,7 +1080,7 @@ single-host Compose proof does not certify an untested cluster configuration.
 
 Use a dedicated namespace and default-deny ingress/egress NetworkPolicies.
 Create one public TLS edge for Workbench and the permitted glamdb identity
-paths. Keycloak HTTP/management, PostgreSQL, PDP, gateway, operator API and
+paths. Keycloak HTTP/management, PostgreSQL, Valkey, PDP, gateway, operator API and
 metrics use ClusterIP/private networks only. A Service named `keycloak-admin`
 can select Caddy's port18080 for the existing private origin; it has no public
 Ingress/LoadBalancer. Operator access is an explicitly bound loopback
@@ -1021,7 +1095,8 @@ practical trusted proxy CIDR with enforced NetworkPolicy and a controlled edge
 workload; a broad CIDR by itself permits forged proxy headers from other pods.
 
 Allow only the required flows: edge -> OAuth2 Proxy/Keycloak; OAuth2 Proxy ->
-gateway and public issuer through the edge; gateway -> private Keycloak/Cerbos/
+gateway, its private Valkey session service and public issuer through the edge;
+gateway -> private Keycloak/Cerbos/
 registered backends; Keycloak -> PostgreSQL/approved SMTP; scrapers -> intended
 private metrics. Add DNS, certificate-renewal and explicitly approved telemetry
 egress. Keep the independent observer outside the cluster's failure domain.
@@ -1043,6 +1118,15 @@ Python adapter; build an optimized native image in CI if choosing that pattern.
 Use native health endpoints for probes and an authenticated synthetic check for
 end-to-end access readiness. Do not give a liveness probe the power to bypass
 an identity outage or delete durable uncertainty state.
+
+Run the pinned Valkey session service privately, with the same authenticated
+ACL, no RDB/AOF, no eviction, memory/client limits and dump restrictions as the
+single-host configuration. Its writable directory can be a bounded memory-backed
+emptyDir; do not attach a persistent data volume or restore old browser tickets.
+Allow only OAuth2 Proxy and an authorized health probe to reach it. A lost store
+requires fresh sign-in. Supply its ACL/password and the OAuth2 Proxy password
+environment through reviewed Secret projections; apply the actual container UID
+and namespace mapping rather than assuming the image can read root-owned files.
 
 Kubernetes Secret projections normally belong to root. `defaultMode: 0600`
 and `fsGroup` alone do **not** satisfy the gateway's current-UID owner check.
@@ -1101,6 +1185,36 @@ is currently the blocker for running that default system proof against GlamDB;
 do not relabel a mock result to make this gate green. Native engine/storage/
 scanner validation remains in the native suites, distinct from the network
 transport/access verification described here.
+
+The harness also checks the server's advertised capability profile. An explicit
+`false` for a required metadata/profile feature (`stats`, `snapshots`, `files`,
+`explain`, `pagination`, `zero_column_projection`) does not produce a passing
+qualification. It runs the supported create/resolve/collection/schema/append,
+idempotent lookup, fixed-view JSON/filter and latest/historical Arrow checks,
+and verifies that each missing feature actually returns HTTP501 with typed
+`UNSUPPORTED_OPERATION`. It then reports `status:"blocked"`,
+`code:"UNSUPPORTED_CAPABILITIES"`, the exact `missing_capabilities` list and
+completed `checks`, and exits **2**. `get_collection` is visible among those
+completed checks. Do not translate that partial evidence into full qualification.
+
+A claimed-supported feature that fails, a missing feature returning success or
+a different error/status, and malformed/nonboolean feature flags are failures
+(exit **1**). Boolean-looking strings or numbers are not feature flags. Servers
+without the legacy `features` object retain the full existing route checks;
+absence is not treated as a declaration that metadata is unavailable. A complete
+successful profile exits **0**. Default native mode rejects a mock identity
+before creating a collection, regardless of its feature flags.
+
+Native terminal-failure envelopes are distinct from HTTP/transport errors.
+A recognized synchronous failed-create receipt can clear its own admission
+using the original validated collection UUID, even when the native receipt
+has no collection-ID field. Append reconciliation accepts a matching original
+operation UUID and the exact terminal-failure envelope at its native error
+status (for example 412/409), as well as committed results. Missing/mismatched
+identity, unknown outcomes, unrecognized error codes, incorrect status/phase/
+retry hints and bare HTTP errors remain unresolved. This does not add an
+authoritative create lookup or permit guessing the outcome of a lost create
+response; that uncertainty still keeps transfer closed.
 
 Before public activation, record executed commands and environment, real-service
 versus mock boundaries, browser login/logout/MFA/reset/revoke behavior, foreign

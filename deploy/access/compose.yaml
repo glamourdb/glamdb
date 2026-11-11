@@ -115,6 +115,31 @@ services:
     restart: unless-stopped
     logging: *logging
 
+  session-store:
+    image: valkey/valkey:9.1.3-alpine3.24@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
+    command: [valkey-server, /config/valkey.conf]
+    user: ${GLAMDB_UID:?set GLAMDB_UID}:${GLAMDB_GID:?set GLAMDB_GID}
+    volumes:
+      - ./valkey.conf:/config/valkey.conf:ro
+      - ${GLAMDB_PRIVATE_DIR:?set GLAMDB_PRIVATE_DIR}/secrets/session-store.acl:/run/secrets/glamdb/session-store.acl:ro
+      - ${GLAMDB_PRIVATE_DIR:?set GLAMDB_PRIVATE_DIR}/secrets/session-store.password:/run/secrets/glamdb/session-store.password:ro
+    networks: [session]
+    healthcheck:
+      test: [CMD-SHELL, 'VALKEYCLI_AUTH="$$(cat /run/secrets/glamdb/session-store.password)" valkey-cli --no-auth-warning --user oauth2-proxy -e ping | grep -qx PONG']
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    read_only: true
+    tmpfs: [/data:size=96m,mode=1777]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ulimits:
+      core: 0
+    mem_limit: 128m
+    pids_limit: 64
+    restart: unless-stopped
+    logging: *logging
+
   oauth2-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6@sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048
     command: [--config=/config/oauth2-proxy.cfg]
@@ -123,14 +148,19 @@ services:
         condition: service_healthy
       caddy:
         condition: service_started
+      session-store:
+        condition: service_healthy
     user: ${GLAMDB_UID:?set GLAMDB_UID}:${GLAMDB_GID:?set GLAMDB_GID}
+    env_file:
+      - ${GLAMDB_PRIVATE_DIR:?set GLAMDB_PRIVATE_DIR}/oauth2-proxy.env
     environment:
       OAUTH2_PROXY_OIDC_ISSUER_URL: https://${GLAMDB_IDP_HOST:?set GLAMDB_IDP_HOST}/realms/glamdb
       OAUTH2_PROXY_REDIRECT_URL: https://${GLAMDB_SITE_HOST:?set GLAMDB_SITE_HOST}/oauth2/callback
     volumes:
       - ./oauth2-proxy.cfg:/config/oauth2-proxy.cfg:ro
-      - ${GLAMDB_PRIVATE_DIR:?set GLAMDB_PRIVATE_DIR}/secrets:/run/secrets/glamdb:ro
-    networks: [ingress]
+      - ${GLAMDB_PRIVATE_DIR:?set GLAMDB_PRIVATE_DIR}/secrets/workbench.secret:/run/secrets/glamdb/workbench.secret:ro
+      - ${GLAMDB_PRIVATE_DIR:?set GLAMDB_PRIVATE_DIR}/secrets/cookie.secret:/run/secrets/glamdb/cookie.secret:ro
+    networks: [ingress, session]
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -184,6 +214,8 @@ networks:
   identity:
     ipam:
       config: [{subnet: 172.30.82.0/24}]
+  session:
+    internal: true
   observability:
     external: true
     name: ${GLAMDB_OBSERVABILITY_NETWORK:-glamdb-observability}

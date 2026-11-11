@@ -99,7 +99,8 @@ no API token or shared backend: tab-local rows/operations disappear on reload.
 JSON export is available there; network SDK and Arrow IPC remain connected-server
 features. Do not present BrowserDemoAPI as the public HTTP or durable core API.
 The organization gateway (`apps/workbench_access/`) uses Keycloak accounts and
-organizations, OAuth2 Proxy browser sessions, Authlib/joserfc token verification
+organizations, OAuth2 Proxy browser sessions in a private ephemeral Valkey store,
+Authlib/joserfc token verification
 with live introspection, and the official Cerbos SDK with YAML policies. SQLite
 stores database ownership, transactional audit, idempotent lifecycle receipts and
 unresolved backend write admissions; it stores no passwords or password hashes.
