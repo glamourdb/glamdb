@@ -18,9 +18,10 @@ can create/open an empty catalog, and collection creation and scans report
 `DEPENDENCY_UNAVAILABLE`. Opening a populated store
 requires the storage validator. Coordinator test doubles are confined to
 `tests/`; they produce no real Parquet or Avro data. The separate storage
-component tests do exercise real Parquet, Avro and JSON files. There is no HTTP
-server, payload journal, background job queue, backup or automatic file
-deletion in this MVP.
+component tests do exercise real Parquet, Avro and JSON files. The
+[native HTTP server](HTTP_SERVER.md) adapts this same facade outside the embedded
+component. Payload journaling, background jobs, whole-store backup and general
+automatic file cleanup remain outside this MVP.
 
 ## Persistence and retry rules
 
@@ -101,6 +102,12 @@ bytes per key. Writer wait is at most five seconds; append deadline at most
 not measured simultaneous RSS or full-storage capacity guarantees. All limits,
 including the catalog limits, are validated before `CreateStore` creates the
 root, so a rejected configuration leaves the root and store UUID reusable.
+
+See the [shared resource budget contract](RESOURCE_BUDGETS.md) for the limit
+matrix, reservation/release ownership, retained-buffer lifetimes and protected
+completion/recovery requirements. The owned-input estimate does not cover HTTP
+decoding, all writer allocations or scan buffers; the current checks are
+store-local rather than a shared process-memory governor.
 
 ## Storage backend integration
 
@@ -206,3 +213,18 @@ coordinator-to-storage appends and scans are exercised in-process by
 `glamdb_vertical` and in fresh processes by `glamdb.scan_process` (see
 [SCANNER.md](SCANNER.md#validation-status)). Restore, combined capacity/RSS and
 OS-cache-loss/power-cut qualification remain NOT RUN.
+
+## Public health observation
+
+`Engine::GetHealth()` returns a point-in-time `StoreHealth` without catalog I/O
+or waiting for the writer. Recovery and corruption fences close new reads and
+writes. A local durable-I/O latch separately closes writes while confirmed reads
+remain available; `Reconcile()` does not clear it. Shutdown takes precedence over
+recovery in the reported state, including after a shutdown timeout. Closed
+engines remain observable. A missing storage backend advertises neither scans
+nor writes. The storage seam explicitly reports reader availability, so the
+coordinator test backend does not claim to support scans.
+
+The [HTTP contract](HTTP_SERVER.md) defines the state table, lifecycle overlays,
+and 200/503 readiness mapping. Every health snapshot remains durability-unqualified;
+backend availability and successful recovery are not qualification evidence.

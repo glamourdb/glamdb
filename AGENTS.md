@@ -31,7 +31,12 @@ coordinator StorageBackend and `core/scan/` implements a minimal `Engine::Scan`
 [the scanner guide](docs/development/SCANNER.md) for their contract and
 validation status, [the coordinator guide](docs/development/COORDINATOR.md)
 for the integration contract, and [the storage guide](docs/development/STORAGE_MODULE.md)
-for the file-layer contract. Full engine durability remains unqualified.
+for the file-layer contract. Full engine durability remains unqualified. `Engine::GetHealth()` exposes
+nonblocking read/write admission and recovery/shutdown state; HTTP
+`GET /databases/{id}/readyz` (or legacy `/readyz`) maps write readiness to
+200/503. A latched durable-I/O failure permits reads but requires reopen for
+new writes; successful reconciliation does not clear that latch. `/healthz`
+is process liveness only. Health never qualifies durability.
 
 Independent verification tools, a Python network SDK and a browser workbench
 are implemented. They can use the native Asio HTTP server over the public Engine facade.
@@ -78,6 +83,10 @@ schema evolution are outside the initial append scope. Consult
 
 Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before changing persistence,
 recovery, scan semantics, or resource ownership.
+For resource limits, read [the shared budget contract](docs/development/RESOURCE_BUDGETS.md):
+it names accounting units, owners, enforcement and release points across the
+engine and transport. Preserve its distinction between current local checks and
+required aggregate memory/device reservations; update the matrix when either changes.
 
 Preserve these boundaries when adding or changing engine behavior:
 

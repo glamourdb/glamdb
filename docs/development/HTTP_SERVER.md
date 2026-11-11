@@ -148,7 +148,8 @@ separate, broader development profile.
 
 | HTTP route | Public core operation | Availability |
 | --- | --- | --- |
-| `GET /capabilities` | Adapter inventory | Native features, predicates, transport limits |
+| `GET /capabilities` | Adapter inventory / `Engine::GetHealth` when scoped | Native features, predicates, transport limits; store health when selected |
+| `GET /databases/{id}/readyz` (legacy `/readyz`) | `Engine::GetHealth` plus lifecycle admission | Authenticated readiness snapshot; 200 when write-ready, otherwise 503 |
 | `GET /collections` | `ListCollections` | Complete bounded list; no pagination |
 | `POST /collections` | `CreateCollection` | Fixed-schema append collection |
 | `GET /collections:resolve?name=...` | `ResolveCollection` | Exact name |
@@ -172,11 +173,60 @@ snapshot selection. The adapter never reads core catalog tables or enumerates th
 warehouse; its separate registry stores only database lifecycle metadata. Metadata/explain must be added through public core methods, not
 synthetic values. The UI respects `features` and reports unavailable sections.
 
-`GET /healthz` is public process liveness, **not write readiness**. An opened
-engine has completed open/recovery, but core errors may subsequently prevent
-writes. `backend=local`, `mock=false` do not imply power-loss qualification;
-`durability_validation=designed` remains explicit. Database lifecycle state is not a per-write readiness guarantee. Global engine
-resource accounting remains a separate follow-up contract.
+`GET /healthz` is public process liveness, **not write readiness**. It continues
+to return 200 while a store is recovering, closed or failed. Readiness is
+store-specific: authenticated `GET /databases/{id}/readyz`, or `/readyz` in
+legacy single-store mode. A managed root `/readyz` requires database selection;
+there is no aggregate assertion that every registered store is writable.
+Unknown database IDs retain the normal 404 response.
+
+The readiness body contains `state`, `read_available`, `write_ready`,
+`storage_failure_latched`, `durability_qualified`, and the existing `backend`,
+`mock`, `durability_validation` identity fields. The same object appears as
+`health` in scoped `/databases/{id}/capabilities` and legacy `/capabilities`.
+Managed root `/capabilities` has `health: null`; it advertises installed features,
+not current store admission. Scoped capabilities return 200 even when the store
+is unavailable, so clients can inspect health without attempting a write.
+
+| State | New reads | New writes | Readiness HTTP status |
+| --- | --- | --- | --- |
+| `recovering` | No | No | 503 |
+| `ready` | Yes with a storage reader | Yes | 200 |
+| `recovery_required` | No | No | 503 |
+| `storage_failed` | Yes with a storage reader | No | 503 |
+| `unavailable` | Only if a reader is installed | No | 503 |
+| `stopping` | No | No | 503 |
+| `closed` | No | No | 503 |
+
+Opening and reconciliation report `recovering`. An unresolved commit,
+corruption, failed recovery, or registry admission fence reports
+`recovery_required`. A durable file-I/O write latch reports `storage_failed`
+when recovery has otherwise succeeded: confirmed reads remain available, but
+new writes need shutdown and reopen. Reconciliation does **not** clear the
+latch. The latch flag remains independently visible on an engine during
+recovery and shutdown. Closed managed databases no longer retain an engine,
+so their snapshot has no in-memory latch. Lifecycle draining reports `stopping`
+before waiting for active calls. Health observation never performs catalog/file
+I/O or waits for a writer or lifecycle operation.
+
+Availability is a point-in-time observation, not a reservation. A later call
+still checks admission and can fail due to resource limits, contention, or a
+newly detected fault. `read_available` describes new scans, not all metadata
+lookups or previously retained cursors; recovery outcome lookup keeps its
+existing contract. Synchronous C++ factories return an engine only after
+startup recovery succeeds; the managed HTTP lifecycle exposes runtime database
+opening progress. At initial process startup, registered databases are opened
+before the HTTP listener starts, so probes cannot connect during that phase.
+
+`backend=local` and `mock=false` do not imply power-loss qualification.
+`durability_validation=designed` and `durability_qualified=false` remain explicit
+for both local and mock backends. Neither a successful build, backend selection,
+recovery, nor a passing test changes qualification. No evidence-backed qualified
+environment is currently advertised. The disposable mock exposes `/readyz` for
+its in-memory operations with `backend=mock`, `mock=true`; its readiness does
+not promise persistent storage. Executable examples for every state are in
+`fixtures/http/health-states.json`, with the `storeHealth` schema in
+`fixtures/http/v0.schema.json`.
 
 ## Requests and results
 
@@ -247,7 +297,14 @@ Errors are `{error:{code,message,retry_hint}}`, with the core retry hint unchang
 400 invalid request, 401 authentication, 404 authoritative absence, 409 conflict,
 412 precondition, 413 oversized body or decoded input, 415 media type, 429 bounded resource admission,
 501 unsupported, 503 recovery/dependency/unresolved outcome, 504 deadline,
-507 storage capacity, 500 corruption/unexpected error. Database, collection and
+507 exhausted capacity, 500 corruption/unexpected error. Core `RESOURCE_EXHAUSTED`
+uses 429 for bounded admission (busy writer, pending budget) and
+507 when the core marks it `OperatorAction`: free-space reserves, store limits,
+`max_collections`/`max_operations`/catalog bytes, or failed allocation. `CAPACITY_EXCEEDED`
+is always 507. Writer preflight also currently emits `RESOURCE_EXHAUSTED` with
+`FixInput` (429) when its separate row/input estimate exceeds a bound; reduce the
+input instead of retrying it unchanged. The free-space reserve is the larger of 1 GiB and 5% of the data
+filesystem plus 512 MiB for an attempt and journal. Database, collection and
 operation absence have distinct codes; only `OPERATION_NOT_FOUND` proves an
 operation lookup absent. Transport errors carry the shared retry policy; unexpected
 write failures preserve the original ID for outcome resolution.
@@ -278,6 +335,12 @@ Transient accept failures retry with backoff. Header limit: 16 KiB; request/resp
 16 MiB; append: 10000 rows. JSON depth and event limits bound a single-pass parser
 and accommodate the full 256-field append schema. These transport bounds are not
 a qualified process-memory or storage budget.
+
+The [shared resource budget matrix](RESOURCE_BUDGETS.md) specifies which limits
+are per request, store or service, who reserves/releases them and which aggregate
+budgets remain required. HTTP body bytes, parsed JSON/Arrow allocations and core
+canonical bytes are different quantities; the per-store owned-input limit does
+not cover adapter allocations or all databases together.
 
 HTTP/1.1 uses Content-Length and closes each response connection. Duplicate
 headers, folded headers, Transfer-Encoding, compressed requests and pipelined bytes

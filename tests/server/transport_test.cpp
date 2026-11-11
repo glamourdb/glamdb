@@ -1,8 +1,31 @@
 #include "apps/transport/http.h"
 
+#include <filesystem>
+#include <fstream>
 #include <gtest/gtest.h>
 
 namespace glamdb::NTransport {
+TEST(Transport, HealthStateFixturesKeepReadinessSeparateFromDurability)
+{
+    std::ifstream input(
+        std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "fixtures/http/health-states.json");
+    const auto fixtures = TJson::parse(input);
+    const std::vector<StoreHealth> states{
+        {StoreState::Recovering},
+        {StoreState::Ready, true, true},
+        {StoreState::RecoveryRequired},
+        {StoreState::StorageFailed, true, false, true},
+        {StoreState::Unavailable},
+        {StoreState::Stopping},
+        {StoreState::Closed},
+    };
+    for (size_t index = 0; index < states.size(); ++index) {
+        const auto response = ReadinessResponse(states[index]);
+        EXPECT_EQ(response.Status, fixtures[index]["status"]);
+        EXPECT_EQ(TJson::parse(response.Body), fixtures[index]["response"]);
+    }
+}
+
 TEST(Transport, RejectsAmbiguousJsonAndFraming)
 {
     EXPECT_THROW(ParseJson(R"({"operation_id":"a","operation_id":"b"})"), TFailure);
@@ -171,6 +194,23 @@ TEST(Transport, ErrorPolicyPreservesOperationalRecovery)
             ErrorResponse(503, "INTERNAL", "unknown", RetryHint::SameIdAfterReconcile).Body)["error"]["retry_hint"],
         "SameIdAfterReconcile");
     EXPECT_THROW(ParseTarget("/databases/id%2Fcollections/healthz"), TFailure);
+}
+TEST(Transport, ExhaustedCapacityIs507AndAdmissionIs429)
+{
+    using enum RetryHint;
+    EXPECT_EQ(ErrorStatus(ErrorDetail{"RESOURCE_EXHAUSTED", "storage preflight", OperatorAction}), 507);
+    EXPECT_EQ(ErrorStatus(ErrorDetail{"CAPACITY_EXCEEDED", "catalog full", OperatorAction}), 507);
+    for (const auto hint : {SameIdAfterReconcile, NewOperationId, FixInput}) {
+        EXPECT_EQ(ErrorStatus(ErrorDetail{"RESOURCE_EXHAUSTED", "pending budget is full", hint}), 429);
+    }
+    EXPECT_EQ(ErrorStatus("RESOURCE_EXHAUSTED"), 429);
+    try {
+        Require(false, "scan session limit", "RESOURCE_EXHAUSTED");
+        FAIL();
+    } catch (const TFailure& error) {
+        EXPECT_EQ(ErrorStatus(error.Detail), 429);
+    }
+    EXPECT_EQ(ErrorStatus(ErrorDetail{"OPERATION_IN_PROGRESS", "busy", OperatorAction}), 503);
 }
 TEST(Transport, RejectsInvalidUtf8AndMalformedJsonTokens)
 {
