@@ -4,8 +4,8 @@ Executed for the library/client and standard-collector configuration on
 2026-11-11. Native component environment: Darwin arm64, AppleClang 21.0.0,
 Python 3.14.3; formatting uses clang-format 18.1.8. These are current replacement
 checks, not the earlier private collector/textfile tests. There is no claim of
-full native engine durability, production native HTTP integration, or hosted CI
-success from these component results. Native server integration checks below
+full native engine durability or hosted CI success from these component results.
+Native server integration checks below
 are separate from the earlier component gate.
 
 ## Native server integration
@@ -217,24 +217,16 @@ requirements. These Linux checks do not certify Kubernetes or a database.
 
 ## NOTRUN / operator prerequisites
 
-- Complete engine build and installed `glamdb::core` consumer: this checkout's
-  current dependency prefix has no SQLite3 package (configure stops at
-  `find_package(SQLite3 CONFIG)`) and no installed Arrow/Iceberg stack. The
-  Arrow/Iceberg source submodules are also uninitialized in this component
-  worktree, so whole-prefix submodule verification stops at Arrow. The
-  package config now discovers exact prometheus-cpp 1.3.0 so static consumers can
-  resolve the private metric library. Build the complete locked prefix, install
-  the engine and run the existing installed-consumer CTest before release.
-  A direct coordinator-test compile also stops at the missing generated
-  `arrow/util/config.h`; source headers alone do not provide a configured Arrow
-  installation.
+- Installed `glamdb::core` consumer with the telemetry-enabled installed package:
+  run the existing installed-consumer CTest before release. The earlier
+  component-only dependency blocker is superseded by the complete native build
+  above, using the cached pinned Arrow/Iceberg/SQLite and prometheus-cpp prefixes.
 - Combined optional native Quill/log metric lifecycle, Linux/GCC/TSan/MSan and
   full clang-tidy execution were not run. The compile-only stats compatibility
   check does not establish runtime teardown or sanitizer coverage.
-- Production native HTTP requests, authoritative native readiness/current-unknown
-  state and full gateway/native comparative load. The storage backend and scanner
-  are implemented; the native HTTP transport integration is absent. These
-  component checks do not exercise them through a production HTTP path.
+- Full gateway/native comparative load and a distinct current-unknown gauge.
+  Real native HTTP create/append, restart persistence and authoritative readiness
+  are covered above; the earlier component endpoint alone did not establish them.
 - Actual Kubernetes server dry-run/deployment, CSI PVC fill/free quantiles,
   kubelet certificate/RBAC/runtime checks and Kubernetes controller outages.
   Kubernetes is optional and was not introduced solely for a test.
