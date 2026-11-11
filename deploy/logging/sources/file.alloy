@@ -1,16 +1,11 @@
-// Follow only the native service's active file. Alloy's file tailer handles
-// rename/reopen; separately discovering numbered backups would replay them.
-local.file_match "application" {
-  path_targets = [{
+// A stable target preserves positions through rename/reopen and temporary
+// absence. Discovering numbered backups separately would replay their records.
+loki.source.file "application" {
+  targets = [{
     __path__ = sys.env("GLAMDB_LOG_DIRECTORY") + "/glamdb.jsonl",
     service = "glamdb",
     environment = sys.env("GLAMDB_ENVIRONMENT"),
   }]
-  sync_period = "5s"
-}
-
-loki.source.file "application" {
-  targets = local.file_match.application.targets
   tail_from_end = false
   forward_to = [loki.process.application.receiver]
 }

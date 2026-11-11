@@ -3,8 +3,11 @@
 This profile collects real native JSONL events. The producer must already emit
 schema-1 records into a dedicated directory with bounded application rotation;
 its active file is `glamdb.jsonl`, with numbered backups such as `glamdb.1.jsonl`.
-Only the active filename is discovered. Alloy's file tailer follows rotation;
-discovering each renamed backup separately could replay old records.
+Only the active filename is a static target. Alloy's file tailer follows
+rotation; discovering each renamed backup separately could replay old records.
+Dynamic discovery can also remove saved positions when a path briefly vanishes,
+so it is unnecessary for this fixed path. See the
+[Alloy file-source behavior](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.file/#component-behavior).
 Startup messages in an unrelated stdout file are not a replacement for this
 source. The collector applies the same allowlist, validation, field projection
 and trusted labels as the Linux journal profile.
