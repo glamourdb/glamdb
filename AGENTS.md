@@ -268,6 +268,11 @@ collectors/unsupported fields as NoData; exporter reachability does not establis
 native database health or durability. The short-lived CLI publishes no textfile.
 `GLAMDB_BUILD_METRICS=ON` enables the standalone metric target in IO-only mode;
 the normal engine build always includes its domain instrumentation.
+The native server's `--metrics-listen-address IP:port` opts into a separate private
+Exposer; omission disables the listener. `glamdb_server_ready` samples actual
+managed engine health, without database identifiers. Run `glamdb.native_metrics`
+for real storage/counter/readiness/restart coverage; `GLAMDB_TEST_TMPDIR` selects
+its disposable test parent when `/tmp` cannot meet the storage disk reserve.
 
 Client/mock development uses Python 3.13 and Node 22+:
 

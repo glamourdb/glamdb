@@ -15,7 +15,7 @@ target_include_directories(glamdb_io PRIVATE "${PROJECT_SOURCE_DIR}")
 
 find_package(Threads REQUIRED)
 if(NOT GLAMDB_IO_ONLY OR GLAMDB_BUILD_METRICS)
-    find_package(prometheus-cpp 1.3.0 EXACT CONFIG REQUIRED)
+    find_package(prometheus-cpp 1.3.0 EXACT CONFIG REQUIRED GLOBAL)
     add_library(glamdb_metrics STATIC telemetry/metrics.cpp)
     target_link_libraries(glamdb_metrics PRIVATE "$<BUILD_INTERFACE:glamdb_build_options>"
         Threads::Threads prometheus-cpp::core)

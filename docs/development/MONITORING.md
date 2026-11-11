@@ -21,14 +21,32 @@ prometheus-cpp handles replaces custom metric storage. The library owns the
 registry, counters, gauges, histograms, serialization and HTTP exposition.
 The private `GetMetricsCollectable()` seam can be registered with an
 **application-owned** `prometheus::Exposer`. No HTTP type or endpoint is added
-to installed `public/storage/` headers. A production native HTTP adapter is
-still absent; the endpoint test is an application-side component fixture.
+to installed `public/storage/` headers. The native `glamdb` server registers the
+actual process collectable on a separate, opt-in private listener:
+
+```sh
+glamdb --data-dir /path/to/service --metrics-listen-address 127.0.0.1:9094
+```
+
+Metrics are disabled when the flag is omitted. The main API/UI listener does
+not serve `/metrics`. The private endpoint has no bearer-token authentication;
+bind it to loopback or a trusted private interface and restrict access to the
+scraper. The application owns listener teardown; no textfile is published.
+
+`glamdb_server_ready{service_instance="core"}` observes actual `Engine::GetHealth`
+at scrape time. It is one only when at least one managed database is open and
+all open engines are write-ready. Registry/lifecycle errors, busy lifecycle gates,
+failed health observation and no open databases produce zero. Explicitly closed
+databases do not make another healthy open database unready. Legacy single-store
+mode observes that engine directly. Database names, IDs and paths are absent
+from metric labels. Readiness is a point-in-time observation, not a write
+reservation or a durability qualification.
 
 `glamdb_operations_total` counts calls, including retries. It is not the number
 of distinct durable writes. `glamdb_phase_duration_seconds` observes actual
 coordinator regions; `data` includes backend metadata work and is not a
 Parquet/Iceberg subspan. `commit_unknown` is a returned outcome counter, not
-current recovery state. No native readiness/current-unknown gauge is fabricated.
+current recovery state. No current-unknown gauge is fabricated.
 
 All native operation/outcome/phase/error combinations are registered once:
 714 domain time series, independent of request volume. The 15 finite duration
@@ -40,7 +58,7 @@ microseconds. Process restart resets cumulative counters. Initialization failure
 can disable instrumentation but never changes an engine operation result; an
 application requesting an unavailable collectable receives an error.
 
-The short-lived `glamdb` CLI does not start an exporter or publish a textfile.
+The short-lived `glamdb-cli` does not start an exporter or publish a textfile.
 `GLAMDB_METRICS_TEXTFILE`, `GLAMDB_METRICS_INSTANCE`, the snapshot timestamp
 metric and custom publisher thread are removed. CLI exit status, command
 output and process/service supervision are the observation model for these
@@ -218,11 +236,13 @@ cmake --build build/monitoring --target glamdb_metrics
 
 `check.py --helm PATH --chart PINNED_ARCHIVE` also verifies the chart's locked
 SHA-256, lints/renders it and rejects rendered TLS verification bypasses.
-The native tests exercise the actual prometheus-cpp Exposer over localhost and
-check listener teardown. The storage backend and scanner are implemented;
-production native HTTP integration is still absent. Building the installed
-engine consumer requires the complete locked dependency prefix. These component
-tests do not establish full engine or HTTP integration.
+The component tests exercise prometheus-cpp Exposer over localhost and check
+listener teardown. `ctest --preset local -R glamdb.native_metrics` separately
+checks the native server with actual temporary stores, committed operations,
+readiness transitions and restart. `GLAMDB_TEST_TMPDIR` selects a writable test
+parent on a filesystem with sufficient disk reserve; otherwise it uses `/tmp`.
+Building the server and installed engine consumer requires the complete locked
+dependency prefix. These checks do not qualify engine durability.
 
 `tools/monitoring/container_smoke.py` requires an explicitly selected disposable
 Podman connection/machine. It creates only its own bounded containers/network,
