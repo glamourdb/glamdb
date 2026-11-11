@@ -151,8 +151,8 @@ API response means acceptance by Telegram, not that a person read the message.
 
 ## Delivery, noise and restart semantics
 
-Alertmanager groups by cluster, service, check, namespace, pod and node, waits
-30 seconds initially, evaluates group changes every minute, and repeats problem
+Alertmanager groups by cluster and service, waits 30 seconds initially,
+evaluates group changes every five minutes, and repeats problem
 states every four hours. OK repeats every 24 hours. NODATA inhibits other states
 of the same identity; ALARM inhibits OK/WARN. These guards also limit noise during
 configuration transitions. Use time-bounded silences with narrow stable labels,
@@ -171,7 +171,7 @@ the chat reads it. In particular:
   using the standard Alertmanager retry pipeline. Its Telegram receiver does
   **not** apply `retry_after` as a durable chat-wide deadline. Distinct groups
   can send concurrently; there is no global three-second chat pacer.
-- The configured Telegram timeout is five seconds. Failed attempts are visible
+- The configured Telegram timeout is fifteen seconds. Failed attempts are visible
   in `alertmanager_notification_requests_failed_total{integration="telegram"}`;
   final failed notifications appear in `alertmanager_notifications_failed_total`.
   Also inspect requests, notification latency and suppressed-notification counts.
@@ -185,6 +185,11 @@ the chat reads it. In particular:
 
 The application deliberately adopts the native Alertmanager contract. It does
 not promise equivalence to the removed outbox or delivery-time recovery query.
+A compact service summary lists each check, observation time, state start and
+node. A batch of 50 checks is covered by a native receiver test without message
+truncation. Grouping prevents a separate startup request for every check; it
+does not create a global delivery-rate guarantee across many clusters/services.
+
 Tune grouping, holds, repeats and routing for Telegram rate limits; inspect
 failures instead of assuming that every short transition reaches the chat.
 

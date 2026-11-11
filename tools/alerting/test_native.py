@@ -131,8 +131,8 @@ class NativeProcess:
         config = config.replace("/run/secrets/telegram_bot_token", str(self.token))
         config = config.replace("/run/secrets/telegram_chat_id", str(self.chat))
         config = config.replace("group_wait: 30s", "group_wait: 200ms")
-        config = config.replace("group_interval: 1m", "group_interval: 1s")
-        config = config.replace("timeout: 5s", "timeout: 250ms")
+        config = config.replace("group_interval: 5m", "group_interval: 1s")
+        config = config.replace("timeout: 15s", "timeout: 250ms")
         self.am_config = self.root / "alertmanager.yml"
         self.am_config.write_text(config)
         self.am = self.start_am()
@@ -295,6 +295,25 @@ class NativeDeliveryTest(NativeProcess, unittest.TestCase):
         wait_until(lambda: len(self.peer.calls) == 1)
         self.assertEqual(self.peer.calls[0][1]["text"].count("ALARM GlamDB cpu"), 2)
         wait_until(lambda: len(self.peer.calls) >= 2)
+
+    def test_startup_batches_fifty_checks_in_one_service_without_truncation(self):
+        self.am.terminate()
+        self.am.wait(5)
+        self.am_config.write_text(self.am_config.read_text().replace("group_wait: 200ms", "group_wait: 2s"))
+        self.am = self.start_am()
+        self.alert_start = datetime.now(timezone.utc).isoformat()
+        alerts = []
+        for index in range(50):
+            alerts += self.alerts("ALARM", check=f"check_{index:02}")
+        api(self.am_url + "/api/v2/alerts", alerts)
+        wait_until(lambda: len(api(self.am_url + "/api/v2/alerts")) == 50)
+        wait_until(lambda: len(self.peer.calls) >= 1)
+        text = self.peer.calls[0][1]["text"]
+        for index in range(50):
+            self.assertIn(f"ALARM GlamDB check_{index:02}", text)
+        self.assertLessEqual(len(text), 4096)
+        time.sleep(1.1)
+        self.assertEqual(len(self.peer.calls), 1)
 
     def test_quick_states_can_coalesce_before_group_wait(self):
         self.am.terminate()
