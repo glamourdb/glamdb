@@ -1,6 +1,7 @@
 """SDK scenarios and conservative write outcome accounting."""
 
 import hashlib
+import hmac
 import ipaddress
 import json
 import os
@@ -81,18 +82,27 @@ def error_code(error):
     return type(error).__name__
 
 
-def _save_outcome(log, operation_id, outcome):
+def _save_outcome(log, request, outcome):
     code = outcome.error.code if outcome.error else None
+    state = outcome.outcome
+    if state == "committed":
+        if not hmac.compare_digest(
+            outcome.result["payload_hash"].lower(), request.payload_hash.lower()
+        ):
+            state, code = "conflict", "OPERATION_CONFLICT"
+        elif int(outcome.result["rows_appended"]) != len(request.to_dict()["rows"]):
+            state, code = "protocol_error", "RECEIPT_ROW_COUNT_MISMATCH"
     log.mark(
-        operation_id,
-        outcome.outcome,
+        request.operation_id,
+        state,
         error_code=code,
         outcome={
-            "outcome": outcome.outcome,
+            "server_outcome": outcome.outcome,
             "phase": outcome.phase,
-            "operation_id": operation_id,
+            "operation_id": request.operation_id,
         },
     )
+    return state, code
 
 
 def append_once(client, log, request, *, deadline=None):
@@ -120,10 +130,10 @@ def append_once(client, log, request, *, deadline=None):
         log.mark(request.operation_id, "transport_error", error_code="INTERRUPTED")
         raise
     elapsed = (time.perf_counter() - started) * 1000
-    _save_outcome(log, request.operation_id, outcome)
+    state, code = _save_outcome(log, request, outcome)
     return {
-        "state": outcome.outcome,
-        "error_code": outcome.error.code if outcome.error else None,
+        "state": state,
+        "error_code": code,
         "response_time_ms": elapsed,
     }
 
@@ -149,7 +159,7 @@ def resolve_ledger(client, log, *, retry=False, deadline=None):
             )
             continue
         if isinstance(outcome, AppendOutcome):
-            _save_outcome(log, operation_id, outcome)
+            _save_outcome(log, request, outcome)
             # A known terminal outcome is never re-sent. Unknown still requires
             # operator recovery; lookup is not an automatic reconciliation.
         elif outcome is None:

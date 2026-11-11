@@ -99,3 +99,34 @@ def test_zero_rows_and_no_overwrite(tmp_path):
     assert list(Dataset(out).iter_parts()) == []
     with pytest.raises((ValueError, FileExistsError)):
         generate(CONFIG, rows=1, seed=1, output=out)
+
+
+def test_generation_does_not_materialize_the_rowset(tmp_path):
+    import tracemalloc
+    from glamdb_workload.dataset import generate
+
+    config = {
+        "schema": {
+            "fields": [
+                {"name": "key", "type": "string", "nullable": False},
+                {"name": "text", "type": "string", "nullable": False},
+            ]
+        },
+        "generation": {"fields": {"text": {"length": 1024}}},
+    }
+    tracemalloc.start()
+    try:
+        manifest = generate(
+            config,
+            rows=10000,
+            seed=42,
+            output=tmp_path / "bounded",
+            part_rows=97,
+            part_bytes=128 * 1024,
+        )
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert sum(part["bytes"] for part in manifest["parts"]) > 10 * 1024**2
+    # Includes Mimesis startup allocations; the row data alone exceeds 10 MiB.
+    assert peak < 8 * 1024**2, f"generator materialized rows: peak={peak}"

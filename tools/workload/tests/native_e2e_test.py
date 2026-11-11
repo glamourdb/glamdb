@@ -30,6 +30,10 @@ options = argparse.ArgumentParser()
 options.add_argument("cli")
 options.add_argument("server")
 options.add_argument("--report-root", default="artifacts/workload-native")
+options.add_argument(
+    "--case",
+    help="Run one unittest case, e.g. NativeWorkload.test_interrupt_leaves_final_reports_and_no_child",
+)
 ARGS = options.parse_args()
 sys.argv[1:] = []
 CLI, SERVER = str(Path(ARGS.cli).resolve()), str(Path(ARGS.server).resolve())
@@ -88,6 +92,8 @@ def tls_proxy(upstream_port, directory):
                         self.connection.shutdown(socket.SHUT_RDWR)
                         self.close_connection = True
                         return
+                    if self.server.append_delay:
+                        time.sleep(self.server.append_delay)
                 self.send_response(reply.status)
                 for name, value in reply.getheaders():
                     if name.lower() not in {
@@ -113,6 +119,7 @@ def tls_proxy(upstream_port, directory):
 
     proxy = ThreadingHTTPServer(("127.0.0.1", 0), Proxy)
     proxy.lock, proxy.drop_once, proxy.append_calls = threading.Lock(), False, 0
+    proxy.append_delay = 0
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(cert, key)
     proxy.socket = ctx.wrap_socket(proxy.socket, server_side=True)
@@ -532,12 +539,18 @@ class NativeWorkload(unittest.TestCase):
         with socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))
             port = listener.getsockname()[1]
+        proxy_context = tls_proxy(self.port, self.tmp)
+        proxy, url, ca = proxy_context.__enter__()
+        self.addCleanup(proxy_context.__exit__, None, None, None)
+        proxy.append_delay = 2
         common = [
             CLI,
             "bench",
             "write",
             "--url",
-            self.direct,
+            url,
+            "--ca-file",
+            str(ca),
             "--database",
             self.db,
             "--collection",
@@ -549,7 +562,9 @@ class NativeWorkload(unittest.TestCase):
             "--users",
             "2",
             "--duration",
-            "3s",
+            "1s",
+            "--spawn-rate",
+            "20",
             "--master-port",
             str(port),
         ]
@@ -589,7 +604,14 @@ class NativeWorkload(unittest.TestCase):
             self.assertEqual(len(summary["operations"]["journals"]), 2)
             self.assertEqual(summary["operations"]["committed"], 2)
             self.assertEqual(summary["operations"]["confirmed_rows"], 4)
-            self.cli("bench", "verify", "--url", self.direct, "--run", run)
+            self.assertEqual(
+                sum(
+                    row["num_requests"]
+                    for row in json.loads((run / "locust.json").read_bytes())
+                ),
+                2,
+            )
+            self.cli("bench", "verify", "--url", url, "--ca-file", ca, "--run", run)
         finally:
             for process in processes:
                 if process.poll() is None:
@@ -602,4 +624,4 @@ class NativeWorkload(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    unittest.main(verbosity=2, defaultTest=ARGS.case)

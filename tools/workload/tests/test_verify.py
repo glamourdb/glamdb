@@ -58,3 +58,20 @@ def test_pending_is_incomplete_and_does_not_claim_failure_or_scan(tmp_path):
     client = ScanDouble(schema, [])
     result = verify_ledgers(client, tmp_path, schema, cid)
     assert result["status"] == "INCOMPLETE" and not client.closed
+
+
+def test_verification_counts_one_committed_id_across_two_journals_once(tmp_path):
+    from glamdb_workload.ledger import Ledger
+    from glamdb_workload.verification import verify_ledgers
+
+    schema = Schema([Field("key", "string")])
+    cid = str(uuid4())
+    rows = [{"key": "one server append"}]
+    req = AppendRequest.prepare(cid, str(uuid4()), schema, rows)
+    for name in ("worker-a.sqlite", "worker-b.sqlite"):
+        with Ledger(tmp_path / name) as log:
+            log.prepare(req)
+            log.mark(req.operation_id, "committed")
+    result = verify_ledgers(ScanDouble(schema, [rows]), tmp_path, schema, cid)
+    assert result["status"] == "PASS"
+    assert result["expected_rows"] == result["actual_rows"] == 1

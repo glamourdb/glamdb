@@ -111,6 +111,33 @@ class BridgeTest(unittest.TestCase):
                 process.kill()
                 process.communicate()
 
+    def test_ignored_termination_is_killed_within_timeout(self):
+        self.module.write_text(
+            "import os,signal,time\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\nprint(os.getpid(),flush=True)\nwhile True: time.sleep(.1)\n"
+        )
+        process = subprocess.Popen(
+            self.args(),
+            env=self.env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+        try:
+            self.assertTrue(select.select([process.stdout], [], [], 5)[0])
+            child = int(process.stdout.readline())
+            began = time.monotonic()
+            process.send_signal(signal.SIGINT)
+            _, err = process.communicate(timeout=9)
+            self.assertEqual(process.returncode, 130, err)
+            self.assertLess(time.monotonic() - began, 9)
+            with self.assertRaises(ProcessLookupError):
+                os.kill(child, 0)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate()
+
 
 if __name__ == "__main__":
     unittest.main()

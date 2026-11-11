@@ -53,6 +53,7 @@ def verify_ledgers(client, run, schema, collection_id, *, format="json", deadlin
             db.execute(
                 "CREATE TABLE counts (row BLOB PRIMARY KEY, n INTEGER NOT NULL) WITHOUT ROWID"
             )
+            db.execute("CREATE TABLE included_ops (id TEXT PRIMARY KEY) WITHOUT ROWID")
             for name in totals["journals"]:
                 with Ledger(Path(run) / name) as log:
                     for op in log.operations():
@@ -62,6 +63,12 @@ def verify_ledgers(client, run, schema, collection_id, *, format="json", deadlin
                         if req.collection_id != collection_id:
                             raise ValueError("journal collection differs from the run")
                         with db:
+                            included = db.execute(
+                                "INSERT INTO included_ops VALUES (?) ON CONFLICT(id) DO NOTHING",
+                                (req.operation_id,),
+                            )
+                            if not included.rowcount:
+                                continue
                             for row in req.to_dict()["rows"]:
                                 db.execute(
                                     "INSERT INTO counts VALUES (?,1) ON CONFLICT(row) DO UPDATE SET n=n+1",

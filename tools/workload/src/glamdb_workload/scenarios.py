@@ -94,6 +94,9 @@ class RunState:
         )
         self.fatal = None
         self.observed_workers = set()
+        self.finished_worker_clients = set()
+        self.drain_started = False
+        self.drain_complete = not self.master
 
     def quit_when_drained(self):
         if (
@@ -156,12 +159,37 @@ def on_usage(environment, cpu_usage, memory_usage, **kwargs):
 def on_report(client_id, data, **kwargs):
     if STATE is not None:
         data["glamdb_worker"] = STATE.worker
+        data["glamdb_finished"] = STATE.ended is not None
 
 
 @events.worker_report.add_listener
 def on_worker(client_id, data, **kwargs):
     if STATE is not None and data.get("glamdb_worker"):
         STATE.observed_workers.add(data["glamdb_worker"])
+        if data.get("glamdb_finished") is True:
+            STATE.finished_worker_clients.add(client_id)
+
+
+@events.test_stopping.add_listener
+def on_stopping(environment, **kwargs):
+    state = STATE
+    if state is None or not state.master or state.drain_started:
+        return
+    state.drain_started = True
+    clients = {client.id for client in environment.runner.clients.all}
+    # Keep Locust's RPC/stats receivers alive while workers drain. Their native
+    # quit handler sends a final standard stats report after test_stop, and our
+    # report_to_master flag acknowledges the durable journal/report snapshot.
+    for client_id in clients:
+        environment.runner.send_message("quit", client_id=client_id)
+    until = time.monotonic() + state.config["stop_timeout"] + 1
+    while (
+        not clients.issubset(state.finished_worker_clients) and time.monotonic() < until
+    ):
+        gevent.sleep(0.02)
+    state.drain_complete = len(clients) == state.config[
+        "expect_workers"
+    ] and clients.issubset(state.finished_worker_clients)
 
 
 @events.test_stop.add_listener
@@ -176,7 +204,11 @@ def on_quitting(environment, **kwargs):
     if state is None:
         return
     # Drain/interrupt users before taking a final SQLite snapshot.
-    environment.runner.stop()
+    if state.master:
+        with gevent.Timeout(state.config["stop_timeout"] + 1, False):
+            environment.runner.stop()
+    else:
+        environment.runner.stop()
     state.finish()
     if state.distributed_worker:
         environment.process_exit_code = 0 if not state.fatal else 1
@@ -195,6 +227,7 @@ def on_quitting(environment, **kwargs):
         len(workers) == expected
         and len(operations["journals"]) == expected
         and all(w["finished"] for w in workers)
+        and state.drain_complete
     )
     status = "PASS"
     if not complete or operations["pending"]:

@@ -195,3 +195,34 @@ def test_resolve_after_crash_does_not_require_finished_worker_report(
     assert _bench(args) == 0
     with Ledger(tmp_path / "worker-crashed.sqlite") as log:
         assert log.summary()["committed"] == 1
+
+
+@pytest.mark.parametrize("mismatch", ["hash", "rows"])
+def test_lookup_cannot_confirm_a_different_payload_after_conflict(tmp_path, mismatch):
+    from glamdb_workload.ledger import Ledger
+    from glamdb_workload.runtime import resolve_ledger
+
+    req = prepared()
+    other = committed(req)
+    if mismatch == "hash":
+        other["result"]["payload_hash"] = "f" * 64
+    else:
+        other["result"]["rows_appended"] = "2"
+    calls = []
+
+    def lookup(request):
+        calls.append(request.method)
+        return httpx.Response(200, json=other)
+
+    with Ledger(tmp_path / "worker.sqlite") as log, Client(
+        "https://test.invalid", "test-token", transport=httpx.MockTransport(lookup)
+    ) as client:
+        log.prepare(req)
+        log.mark(req.operation_id, "conflict", error_code="OPERATION_CONFLICT")
+        resolve_ledger(client, log, retry=True)
+        assert log.summary()["committed"] == 0
+        assert log.summary()["pending"] == 1
+        assert (
+            log.summary()["conflict" if mismatch == "hash" else "protocol_error"] == 1
+        )
+        assert calls == ["GET"]
