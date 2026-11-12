@@ -63,16 +63,18 @@ connections and unknown paths use `other`; methods outside the fixed domain use
 Idle histogram count/sum/buckets remain zero, so an idle quantile has no observed
 latency. The library registry owns all samples and concurrent updates.
 
-`--log-directory /path/to/private/logs` separately enables native operation and
-runtime lifecycle records through the existing Quill 13 structured logger. Its
+`--log-directory /path/to/private/logs` sends native operation and runtime
+lifecycle records through the existing Quill 13 structured logger to files. Its
 `RotatingJsonFileSink` appends schema-1 JSONL to `glamdb.jsonl`, rotating at 8 MiB
 with at most three indexed backups (`glamdb.1.jsonl`, etc.). Rotation and writing
 run on the Quill backend; the request thread uses its 64 KiB bounded dropping
-queue. Successful request records are capped at 20 per second; errors and
-lifecycle records bypass that success limit and can still be dropped when the
-queue is full. Native `glamdb_log_*` counters report those decisions.
-The server uses one registered producer (the I/O thread), drains the logger on
-shutdown, and leaves logging disabled when the flag is omitted. Newly created
+queue. Successful requests retain the default one-in-100 sampling and are capped
+at 20 per second; `--log-success-sample-every` and
+`--log-max-success-per-second` configure those limits. Errors and lifecycle
+records bypass the success limit and can still be dropped when the queue is full.
+Native `glamdb_log_*` counters report those decisions.
+The server registers its I/O and stable worker producers and drains the logger on
+shutdown. Omitting the directory retains the existing stderr sink. Newly created
 log directories have owner-only access; use a trusted private directory.
 Records contain fixed operation/outcome names, generated request IDs, measured
 duration and completed response status; they contain no database identities,
@@ -274,8 +276,10 @@ infrastructure dashboards and deployment generator.
 ## Verification
 
 Build the pinned client using `cmake/dependencies` with the other locked
-libraries, or build only that upstream component with tests/push/compression off
-and install its core/pull libraries into `.deps/install`. Then run:
+libraries. The recipe applies the recorded CivetWeb stop-flag patch to a
+build-private source copy; build only from that prepared copy when installing
+core/pull separately. An unpatched v1.3.0 listener races during shutdown.
+Then run:
 
 ```sh
 python3 tools/monitoring/check.py --promtool PATH_TO_VERIFIED_PROMTOOL

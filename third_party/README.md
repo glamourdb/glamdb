@@ -122,6 +122,11 @@ Upstream has no equivalent yet. Every written footer is checked against the
 requested codecs, so a pin bump that silently drops the patch fails appends
 instead of writing other codecs.
 
+`prometheus-cpp/0001-synchronize-civetweb-stop-flag.patch` uses real atomic
+stop-flag access for the bundled CivetWeb listener. Its volatile flag raced
+between `mg_stop` and the master/worker threads during Exposer teardown; the
+patch preserves the shutdown protocol and joins without a TSan suppression.
+
 After pulling changes to dependency recipes or patches, rerun the `deps-local`
 configure and build commands above before rebuilding the application. Building
 `local` alone uses the existing installed libraries and does not refresh them.

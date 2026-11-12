@@ -262,7 +262,8 @@ belong in theme.json. Asset URLs must support both / and /glamdb/.
 For real host/container/Kubernetes monitoring, private application endpoints,
 source gaps and deployment steps, read [MONITORING](docs/development/MONITORING.md).
 Install `tools/monitoring/requirements.txt` with hash verification and build the pinned
-prometheus-cpp core/pull installation before `python3 tools/monitoring/check.py
+prometheus-cpp core/pull installation through `cmake/dependencies` (including
+the recorded CivetWeb atomic stop-flag patch) before `python3 tools/monitoring/check.py
 --promtool PATH`. See the coverage matrix linked from that runbook. Keep missing
 collectors/unsupported fields as NoData; exporter reachability does not establish
 native database health or durability. The short-lived CLI publishes no textfile.
@@ -277,8 +278,8 @@ The listener includes bounded native HTTP request/status counters, duration and
 in-flight metrics through asynchronous response completion/cancellation.
 `--log-directory DIR` opts into the existing Quill 13 structured logger with
 8 MiB JSONL rotation and three backups; requests never log tokens, URLs or data.
-Normal native builds consume the pinned header-only `third_party/quill`; IO-only
-metrics builds retain no Quill dependency.
+Native builds, including IO-only metrics builds, consume the pinned header-only
+`third_party/quill` for the shared structured logger.
 
 Client/mock development uses Python 3.13 and Node 22+:
 
