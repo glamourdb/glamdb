@@ -54,9 +54,9 @@ Current work focuses on qualifying and improving the existing append engine:
 - Page-level and Bloom-filter pruning and broader scan memory qualification
   ([#46](https://github.com/glamourdb/glamdb/issues/46)).
 
-The embedded C++ API also supports [bounded streaming bulk append](docs/development/BULK_INGESTION.md):
+The C++ API, native HTTP service, Python SDK and CLI support [bounded streaming bulk append](docs/development/BULK_INGESTION.md):
 a replayable source produces multiple files with one atomic snapshot and receipt.
-Network upload adapters and 1 TiB qualification remain future work.
+Native uploads stream bounded batches through an anonymous disk spool. UI import and 1 TiB qualification remain future work.
 
 ### Planned
 - An explicit key-value mode with copy-on-write upserts, deletes, and batched
@@ -297,6 +297,13 @@ For a single Linux server, the [complete observability quickstart](deploy/observ
 provides one command for Prometheus, Grafana, Loki, Alloy, Alertmanager and host/container
 collectors. Real application endpoints and a dedicated Loki filesystem are inputs;
 repeated deployment preserves owned data and credentials.
+
+An opt-in [retained-history profile](docs/development/SCALABLE_HISTORY.md) lifts
+the default 4,096-operation/snapshot horizon with explicit aggregate storage and
+recovery budgets. The linked SF=10 recipe uses ordinary appends and preserves
+permanent outcomes, duplicate rows, historical views and exact retries.
+The [validation report](docs/development/SCALABLE_HISTORY_VALIDATION.md) records
+the measured campaign and its remaining limits.
 
 ### Client and UI tests
 
