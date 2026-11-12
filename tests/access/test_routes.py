@@ -38,3 +38,9 @@ def test_native_file_hash_is_metadata_but_arbitrary_paths_remain_denied():
     for file_id in ["a" * 63, "g" * 64, "a/b", "../secret"]:
         with pytest.raises(ValueError):
             classify("GET", f"/collections/{collection}/files/{file_id}")
+
+
+def test_write_settings_uses_database_write_policy_without_append_identity():
+    route = classify("POST", f"/collections/{uuid4()}/write-settings")
+    assert route.action == "write" and route.metric == "collection"
+    assert route.kind is None

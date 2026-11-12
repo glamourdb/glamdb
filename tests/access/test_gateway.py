@@ -610,3 +610,31 @@ async def test_fresh_assignment_stays_closed_until_policy_verification_succeeds(
         policy.unavailable = False
         assert (await service.run(request, actor))["state"] == "complete"
         assert catalog.assert_admission(target, second)[0]["state"] == "active"
+
+
+def test_write_settings_preserves_body_and_checks_current_database_policy(setup):
+    app, path, first, second, own, policy, seen = setup
+    collection = str(uuid4())
+    payload = {
+        "expected_version": "0",
+        "write_settings": {"parquet": {"compression": {"codec": "zstd", "level": 3}}},
+    }
+    actions = []
+    allowed = policy.allowed
+
+    async def record_action(principal, action, *args, **kwargs):
+        actions.append(action)
+        return await allowed(principal, action, *args, **kwargs)
+
+    policy.allowed = record_action
+    with TestClient(app, base_url="https://testserver") as client:
+        route = f"/databases/{own}/collections/{collection}/write-settings"
+        assert client.post(route, headers={"Authorization": "Bearer valid"}, json=payload).status_code == 200
+        assert actions == ["write"]
+        assert json.loads(seen[0].content) == payload
+        assert seen[0].url.path == f"/collections/{collection}/write-settings"
+        assert seen[0].headers["authorization"] == "Bearer backend-only-secret"
+        with ResourceCatalog(path) as catalog:
+            catalog.apply(operation("database.update", id=own, enabled=False))
+        assert client.post(route, headers={"Authorization": "Bearer valid"}, json=payload).status_code == 404
+        assert len(seen) == 1

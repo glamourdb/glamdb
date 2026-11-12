@@ -82,7 +82,8 @@ calls. The following suffixes are the current v0 HTTP adapter contract:
 - Read: POST `/collections/<UUID>/scan` and its `/open` and `/cancel` suffixes.
   Arrow is selected by `Accept` on the scan route. Snapshot, checksum, length
   and continuation response headers are preserved.
-- Write: POST `/collections` and `/collections/<UUID>/append`.
+- Write: POST `/collections`, `/collections/<UUID>/append` and
+  `/collections/<UUID>/write-settings` (version-checked Parquet compression settings).
 
 Unknown methods/routes are denied. Encoded database paths are rejected before
 OAuth proxy normalization; percent-encoded query values remain supported.

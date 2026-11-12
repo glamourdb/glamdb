@@ -35,6 +35,7 @@ ROUTES = (
     ("POST", rf"/collections/{UUID}/scan/open", Route("read", "scan")),
     ("POST", rf"/collections/{UUID}/scan/cancel", Route("read", "scan")),
     ("POST", rf"/collections/{UUID}/explain", Route("metadata", "scan")),
+    ("POST", rf"/collections/{UUID}/write-settings", Route("write", "collection")),
     ("POST", rf"/collections/{UUID}/append", Route("write", "append", "append")),
     (
         "GET",
