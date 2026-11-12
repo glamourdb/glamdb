@@ -825,9 +825,6 @@ void RunServer(TRoutes& routes,
     std::cout << TJson({{"address", address}, {"port", acceptor.local_endpoint().port()}, {"backend", "local"}}).dump()
               << '\n'
               << std::flush;
-    if (logger) {
-        logger->TryLog({.Event = NGlamDB::NTelemetry::ELogEvent::RuntimeStarted});
-    }
     // Individual callbacks contain exceptions. An allocation failure while
     // scheduling accept backoff must not permanently abandon the listener.
     for (;;) {
