@@ -22,6 +22,14 @@ async function checkTheme(page) {
     await expect(page.locator('#kc-login')).toHaveCSS('border-radius', '12px');
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
     expect(overflow).toBe(false);
+    if (page.viewportSize().width <= 760) {
+        const gap = await page.evaluate(
+            () =>
+                document.querySelector('.pf-v5-c-login__main').getBoundingClientRect().top -
+                document.querySelector('#kc-header').getBoundingClientRect().bottom,
+        );
+        expect(gap).toBeGreaterThanOrEqual(16);
+    }
     const image = await page
         .locator('.kc-logo-text')
         .evaluate((element) => getComputedStyle(element).backgroundImage.slice(5, -2));

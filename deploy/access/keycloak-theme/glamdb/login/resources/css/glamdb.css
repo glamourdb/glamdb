@@ -33,6 +33,7 @@
 }
 
 .pf-v5-c-login__container {
+    display: grid;
     width: min(100%, 1040px);
     margin: auto;
     grid-template-columns: minmax(0, 1fr) minmax(0, 460px);
@@ -241,7 +242,7 @@ a:hover,
     }
 
     #kc-header {
-        padding: 8px 10px 8px;
+        padding: 8px 10px 0;
         text-align: center;
     }
 
