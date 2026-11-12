@@ -45,6 +45,7 @@ def provision(admin, *, workbench_origin, output, test_mode=False):
     realm = {
         "realm": "glamdb",
         "enabled": True,
+        "loginTheme": "glamdb",
         "organizationsEnabled": True,
         "registrationAllowed": False,
         "resetPasswordAllowed": True,

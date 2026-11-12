@@ -147,6 +147,15 @@ deployment can reduce the shared-host impact. Rootless UID mapping and bind
 mount ownership require separate validation; the example does not assume they
 are identical to a rootful Docker host.
 
+Keycloak also mounts the inherited
+[GlamDB login theme](../../deploy/access/keycloak-theme/README.md) and the same
+unchanged brand PNG directory read-only. New realm bootstrap selects it for
+native sign-in, password and required-action screens. For an existing realm,
+mount the theme and select `glamdb` in its native Login theme setting; do not
+recreate the realm or reset credentials. The theme's CSS tokens can be edited
+without rebuilding application binaries; its guide describes cache refresh and
+desktop/mobile verification.
+
 ```sh
 ACCESS_ROOT=/var/lib/glamdb/access
 umask 077

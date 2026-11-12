@@ -1,0 +1,19 @@
+/* Runtime design tokens shared with the Workbench's pink palette. */
+:root {
+    --glamdb-background: #fff8fc;
+    --glamdb-surface: #ffffff;
+    --glamdb-ink: #46152f;
+    --glamdb-muted: #86546f;
+    --glamdb-accent: #c41472;
+    --glamdb-accent-hover: #a40b5d;
+    --glamdb-hot-pink: #ef3296;
+    --glamdb-blush: #fce0ef;
+    --glamdb-border: #f0d5e5;
+    --glamdb-danger: #aa174b;
+    --glamdb-radius: 28px;
+    --glamdb-control-radius: 12px;
+    --glamdb-brand-gap: 24px;
+    --glamdb-font: Arial, Helvetica, sans-serif;
+    --glamdb-display-font: Georgia, 'Times New Roman', serif;
+    --glamdb-wordmark: url('../img/wordmark-transparent.png');
+}

@@ -34,6 +34,9 @@ services:
     command: [start, --db=postgres]
     env_file:
       - ${GLAMDB_PRIVATE_DIR:?set GLAMDB_PRIVATE_DIR}/keycloak.env
+    volumes:
+      - ./keycloak-theme/glamdb:/opt/keycloak/themes/glamdb:ro
+      - ${GLAMDB_UI_DIR:?set GLAMDB_UI_DIR}/assets/brand:/opt/keycloak/themes/glamdb/login/resources/img:ro
     environment:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: keycloak

@@ -1,0 +1,275 @@
+:root {
+    color-scheme: light;
+    --keycloak-logo-url: var(--glamdb-wordmark);
+    --keycloak-logo-width: 300px;
+    --keycloak-logo-height: 116px;
+    --keycloak-card-top-color: var(--glamdb-hot-pink);
+    --pf-v5-global--FontFamily--text: var(--glamdb-font);
+    --pf-v5-global--FontFamily--heading: var(--glamdb-display-font);
+    --pf-v5-global--Color--100: var(--glamdb-ink);
+    --pf-v5-global--Color--200: var(--glamdb-muted);
+    --pf-v5-global--primary-color--100: var(--glamdb-accent);
+    --pf-v5-global--primary-color--200: var(--glamdb-accent-hover);
+    --pf-v5-global--link--Color: var(--glamdb-accent);
+    --pf-v5-global--link--Color--hover: var(--glamdb-accent-hover);
+    --pf-v5-global--BorderColor--100: var(--glamdb-border);
+    --pf-v5-global--danger-color--100: var(--glamdb-danger);
+}
+
+.login-pf body {
+    min-height: 100dvh;
+    height: auto;
+    color: var(--glamdb-ink);
+    font-family: var(--glamdb-font);
+    background:
+        radial-gradient(ellipse at 8% 16%, var(--glamdb-blush), transparent 55%),
+        var(--glamdb-background);
+}
+
+.pf-v5-c-login {
+    min-height: 100dvh;
+    padding: 56px 32px;
+    background: transparent;
+}
+
+.pf-v5-c-login__container {
+    width: min(100%, 1040px);
+    margin: auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 460px);
+    grid-template-areas: 'header main';
+    column-gap: 72px;
+    align-items: center;
+}
+
+#kc-header {
+    padding: 24px 0;
+    text-align: left;
+}
+
+#kc-header::before {
+    display: block;
+    margin-bottom: 18px;
+    color: var(--glamdb-accent);
+    content: 'THE DATA WORKBENCH';
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+}
+
+#kc-header::after {
+    display: block;
+    max-width: 350px;
+    margin-top: 22px;
+    color: var(--glamdb-ink);
+    content: 'Your data. Your world.';
+    font-family: var(--glamdb-display-font);
+    font-size: clamp(32px, 3.5vw, 45px);
+    line-height: 1.15;
+    letter-spacing: -0.025em;
+}
+
+#kc-header-wrapper {
+    padding: 0;
+    color: var(--glamdb-ink) !important;
+    text-align: left;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+div.kc-logo-text {
+    max-width: 100%;
+    margin: 0;
+    background-position: left center;
+}
+
+div.kc-logo-text span {
+    display: block;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.pf-v5-c-login__main {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    background: var(--glamdb-surface);
+    border: 1px solid var(--glamdb-border);
+    border-top: 4px solid var(--glamdb-hot-pink);
+    border-radius: var(--glamdb-radius);
+    box-shadow: 0 24px 64px #7c205c12;
+}
+
+.pf-v5-c-login__main-header {
+    padding: 36px 36px 18px;
+    border: 0;
+}
+
+#kc-page-title {
+    color: var(--glamdb-ink);
+    font-family: var(--glamdb-display-font);
+    font-size: 32px;
+    line-height: 1.2;
+    font-weight: 400;
+    letter-spacing: -0.025em;
+}
+
+.pf-v5-c-login__main-body {
+    padding: 8px 36px 32px;
+}
+
+.pf-v5-c-login__main-footer,
+.pf-v5-c-login__main-footer-band {
+    background: transparent;
+}
+
+.pf-v5-c-form__label,
+.pf-v5-c-check__label {
+    color: var(--glamdb-ink);
+    font-weight: 600;
+}
+
+.pf-v5-c-form-control {
+    --pf-v5-c-form-control--after--BorderBottomColor: var(--glamdb-border);
+    min-width: 0;
+    min-height: 46px;
+    color: var(--glamdb-ink);
+    background: var(--glamdb-surface);
+    border: 1px solid var(--glamdb-border);
+    border-radius: var(--glamdb-control-radius);
+}
+
+.pf-v5-c-form-control::before,
+.pf-v5-c-form-control::after {
+    border: 0;
+}
+
+.pf-v5-c-form-control:focus-within {
+    border-color: var(--glamdb-accent);
+    outline: 3px solid var(--glamdb-blush);
+    outline-offset: 1px;
+}
+
+.pf-v5-c-form-control.pf-m-error {
+    border-color: var(--glamdb-danger);
+}
+
+.pf-v5-c-form-control > :is(input, select, textarea) {
+    color: var(--glamdb-ink);
+    font-family: var(--glamdb-font);
+}
+
+.pf-v5-c-form-control > :is(input, select, textarea):focus-visible {
+    outline: 0;
+}
+
+.kc-login-tooltip .kc-tooltip-text {
+    top: calc(100% + 8px);
+    right: 0;
+    left: auto;
+    background: var(--glamdb-ink);
+    border-radius: 8px;
+}
+
+.kc-login-tooltip .kc-tooltip-text::after {
+    top: -5px;
+    right: 12px;
+    left: auto;
+    border-color: transparent transparent var(--glamdb-ink);
+}
+
+.pf-v5-c-button {
+    min-height: 44px;
+    font-family: var(--glamdb-font);
+    font-weight: 700;
+    border-radius: var(--glamdb-control-radius);
+}
+
+.pf-v5-c-button::after {
+    border-radius: inherit;
+}
+
+.pf-v5-c-button.pf-m-primary {
+    color: white;
+    background: var(--glamdb-accent);
+    border: 1px solid var(--glamdb-accent);
+    box-shadow: 0 5px 14px #c4147220;
+}
+
+.pf-v5-c-button.pf-m-primary:is(:hover, :focus-visible) {
+    background: var(--glamdb-accent-hover);
+    border-color: var(--glamdb-accent-hover);
+}
+
+.pf-v5-c-button.pf-m-control {
+    color: var(--glamdb-accent);
+    background: var(--glamdb-background);
+}
+
+a,
+.pf-v5-c-button.pf-m-link {
+    color: var(--glamdb-accent);
+}
+
+a:hover,
+.pf-v5-c-button.pf-m-link:hover {
+    color: var(--glamdb-accent-hover);
+}
+
+:is(a, button, input, select):focus-visible {
+    outline: 3px solid var(--glamdb-accent);
+    outline-offset: 3px;
+}
+
+.pf-v5-c-alert {
+    border-radius: var(--glamdb-control-radius);
+}
+
+@media (max-width: 760px) {
+    .pf-v5-c-login {
+        padding: 24px 16px 36px;
+    }
+
+    .pf-v5-c-login__container {
+        width: min(100%, 460px);
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: 'header' 'main';
+        row-gap: var(--glamdb-brand-gap);
+    }
+
+    #kc-header {
+        padding: 8px 10px 8px;
+        text-align: center;
+    }
+
+    #kc-header::before {
+        margin-bottom: 10px;
+    }
+
+    #kc-header::after {
+        margin: 10px auto 0;
+        font-size: 27px;
+    }
+
+    div.kc-logo-text {
+        --keycloak-logo-width: 238px;
+        --keycloak-logo-height: 90px;
+        margin: 0 auto;
+        background-position: center;
+    }
+
+    .pf-v5-c-login__main-header {
+        padding: 28px 24px 16px;
+    }
+
+    .pf-v5-c-login__main-body {
+        padding: 8px 24px 28px;
+    }
+
+    #kc-page-title {
+        font-size: 28px;
+    }
+}
