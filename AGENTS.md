@@ -129,13 +129,33 @@ under one atomic snapshot/receipt; ordinary append retains its old limits. Read
 [bulk ingestion](docs/development/BULK_INGESTION.md) for source lifetime, cancellation,
 explicit bulk I/O attempts, result receipt version 2, conservative device reservations
 and measured limits. Keep unmarked ordinary one-file guards strict and change
-publication/recovery bounds together. No bulk HTTP upload endpoint is provided.
+publication/recovery bounds together. Native `POST /collections/{id}/bulk-append` accepts bounded NDJSON through an anonymous
+transport spool; the SDK prepares replayable disk-backed requests and the standalone CLI
+streams regular files. Uploads are capped at 4 GiB wire bytes, two globally and one per
+database; shared disk/memory admission lasts through execution. See the bulk guide for
+framing, deadlines, retry, native-only availability and validation.
+
+Native append preparation retains one schema mapping per traversal and reuses
+inspected string sizes for its owned columns. Full validation remains per batch,
+and fresh post-admission inspection plus the owned-hash comparison remain before
+binding. See [append preparation](docs/development/APPEND_PREPARATION.md) for
+fragmented-input measurements, rejection scratch and remaining admission limits.
 
 The first milestone is an embedded, synchronous, durable **append store** on
 local disk. A store has one owning process and one serialized writer; reads may
 run concurrently. Collections are fixed-schema, unpartitioned Iceberg v2 tables.
 Append preserves every input row, including duplicate keys. It provides neither
 key uniqueness nor replacement semantics.
+
+Ordinary and bulk appends use the pinned Iceberg merge append in the existing
+atomic publication. Small manifests merge at the upstream threshold of 100,
+targeting 8 MiB; data files and historical views remain immutable. Publication
+and recovery compare every rewritten EXISTING entry exactly and count only
+ADDED entries as new data. The shared 32 MiB verification guard includes removed
+manifest inputs as well as new outputs, the list and the current root. Keep
+the eight-new-manifest guard and ordinary/bulk added-file limits unchanged.
+See [manifest merging](docs/development/STORAGE_MODULE.md#manifest-merging)
+for retained-history growth and compatibility.
 
 Collections carry Parquet write settings (collection-default compression codec
 and level, dictionary policy and page limit; per-column codec, dictionary and
@@ -519,6 +539,18 @@ deduplication uses a bounded temporary SQLite database, separate from the catalo
 See [qualification preparation](docs/development/QUALIFICATION.md) for commands,
 temporary-workspace prerequisites and the remaining qualification boundaries.
 
+The opt-in [scalable history profile](docs/development/SCALABLE_HISTORY.md)
+coordinates public engine/HTTP operation and retained-storage budgets, including
+recovery workspace and larger metadata roots. Defaults stay at 4,096 operations
+and snapshots. Catalog inventory/recovery use 256-record keyset pages; healthy
+outcome lookup remains indexed. `glamdb_history_bench` and `benchmarks/history.py`
+exercise all eight SF=10 tables through ordinary appends and verify exact typed
+row multisets in a fresh process with a bounded external-sort oracle.
+The [validation report](docs/development/SCALABLE_HISTORY_VALIDATION.md) records
+fresh-process checkpoint recovery, physical bytes, current-image RSS and review findings.
+`glamdb.history_campaign` covers duplicates, original failed/successful outcomes,
+retry/history, lowered budgets, restoration and oracle negative controls.
+
 `glamdb_capacity_bench` and `benchmarks/capacity.py` measure native aggregate
 ingestion, retained history/outcomes, physical orphan space, retained slices and
 fresh-process reopen. The default campaign budgets 5,000 attempts of 1,000 rows
@@ -565,6 +597,11 @@ Install the pinned formatter before Python/CTest: `python3 -m pip install
 inside the development virtualenv. Run `python3 -m unittest discover -s
 tests/logging -v` or `glamdb.logging` CTest. Tests exercise real Quill, blocked /
 closed stderr, overload, thread churn, shutdown and secret projection.
+
+The shared SHA-256 compressor uses runtime-gated x86 SHA-NI or ARMv8 SHA2,
+with a portable fallback and no new I/O-only dependency. Read
+[SHA-256 validation and measurements](docs/development/SHA256.md) for forced-path
+tests, compatibility checks and the manual `glamdb_sha256_bench` target.
 
 For dependency work, read [third_party/README.md](third_party/README.md).
 Verify checked-out revisions without building them:

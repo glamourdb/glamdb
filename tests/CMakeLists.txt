@@ -27,6 +27,11 @@ add_test(NAME glamdb.tooling
 set_tests_properties(glamdb.tooling PROPERTIES LABELS "tooling" TIMEOUT 240)
 
 if(NOT GLAMDB_IO_ONLY)
+    # Manual CPU-only comparison of both shared-compressor wrappers.
+    add_executable(glamdb_sha256_bench "${PROJECT_SOURCE_DIR}/benchmarks/sha256.cpp")
+    target_include_directories(glamdb_sha256_bench PRIVATE "${PROJECT_SOURCE_DIR}")
+    target_link_libraries(glamdb_sha256_bench PRIVATE glamdb::core glamdb_io glamdb_build_options)
+
     add_test(NAME glamdb.smoke COMMAND glamdb_cli)
     set_tests_properties(glamdb.smoke PROPERTIES LABELS "smoke" TIMEOUT 10)
 
@@ -81,6 +86,14 @@ if(NOT GLAMDB_IO_ONLY)
         target_include_directories(glamdb_capacity_bench PRIVATE "${PROJECT_SOURCE_DIR}")
         target_include_directories(glamdb_capacity_bench SYSTEM PRIVATE "${PROJECT_SOURCE_DIR}/third_party/json/single_include")
         target_link_libraries(glamdb_capacity_bench PRIVATE glamdb::core glamdb_storage glamdb_build_options)
+        add_executable(glamdb_history_bench "${PROJECT_SOURCE_DIR}/benchmarks/history.cpp")
+        set_target_properties(glamdb_history_bench PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/benchmarks")
+        target_include_directories(glamdb_history_bench PRIVATE "${PROJECT_SOURCE_DIR}")
+        target_include_directories(glamdb_history_bench SYSTEM PRIVATE "${PROJECT_SOURCE_DIR}/third_party/json/single_include")
+        target_link_libraries(glamdb_history_bench PRIVATE glamdb::core glamdb_storage glamdb_build_options)
+        add_test(NAME glamdb.history_campaign COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/integration/history_test.py" "$<TARGET_FILE:glamdb_history_bench>")
+        set_tests_properties(glamdb.history_campaign PROPERTIES LABELS "integration;capacity" TIMEOUT 180)
         add_test(NAME glamdb.capacity_campaign COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/integration/capacity_test.py" "$<TARGET_FILE:glamdb_capacity_bench>")
         set_tests_properties(glamdb.capacity_campaign PROPERTIES LABELS "integration;capacity" TIMEOUT 180)
@@ -210,6 +223,10 @@ if(TARGET glamdb_server)
         "${CMAKE_CURRENT_SOURCE_DIR}/server/native_scalar_types_test.py"
         "$<TARGET_FILE:glamdb_server>" "${glamdb_test_cli}" "${PROJECT_SOURCE_DIR}/ui")
     set_tests_properties(glamdb.native_scalar_types PROPERTIES LABELS "integration;http;scalar" TIMEOUT 180)
+    add_test(NAME glamdb.bulk_http COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/server/bulk_http_test.py"
+        "$<TARGET_FILE:glamdb_server>" "${glamdb_test_cli}" "${PROJECT_SOURCE_DIR}/ui")
+    set_tests_properties(glamdb.bulk_http PROPERTIES LABELS "integration;http;bulk" TIMEOUT 240)
     add_test(NAME glamdb.http_review COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/server/http_review_test.py"
         "$<TARGET_FILE:glamdb_server>" "${glamdb_test_cli}" "${PROJECT_SOURCE_DIR}/ui")
@@ -272,7 +289,7 @@ if(TARGET glamdb_routes)
     add_test(NAME glamdb.native_http_fault COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/server/native_fault_test.py" "$<TARGET_FILE:glamdb_native_fault_driver>")
     set_tests_properties(glamdb.native_http_fault PROPERTIES LABELS "integration;http;fault" TIMEOUT 180)
-    add_executable(glamdb_routes_test server/admission_test.cpp server/routes_test.cpp server/metadata_pages_test.cpp server/scan_sessions_test.cpp server/databases_test.cpp server/database_limits_test.cpp server/drop_store_test.cpp support/fake_storage.cpp support/journal_fault_vfs.cpp)
+    add_executable(glamdb_routes_test server/upload_job_test.cpp server/admission_test.cpp server/routes_test.cpp server/metadata_pages_test.cpp server/scan_sessions_test.cpp server/databases_test.cpp server/database_limits_test.cpp server/drop_store_test.cpp support/fake_storage.cpp support/journal_fault_vfs.cpp)
     target_link_libraries(glamdb_routes_test PRIVATE glamdb_routes glamdb_build_options GTest::gtest_main
         SQLite::SQLite3 iceberg::iceberg_sql_catalog_static)
     gtest_discover_tests(glamdb_routes_test TEST_PREFIX glamdb.routes.

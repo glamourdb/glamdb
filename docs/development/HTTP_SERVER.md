@@ -118,13 +118,19 @@ entry and open again with sufficient limits; data is never discarded.
 
 | Limit | Range | Default |
 | --- | --- | --- |
-| `max_operations` | 1–4096 | 4096 |
+| `max_operations` | 1–9223372036854775807 | 4096 |
 | `max_collections` | 1–64 | 8 |
-| `max_catalog_bytes` | 65536–268435456 | 268435456 |
+| `max_catalog_bytes` | 65536–1099511627776 | 268435456 |
 | `max_pending_calls` | 1–16 | 16 |
 | `max_owned_input_bytes` | 1–134217728 | 134217728 |
 | `writer_wait_ms` | 0–5000 | 5000 |
 | `append_deadline_ms` | 1–60000 | 60000 |
+
+`limits.history` configures aggregate snapshot, manifest, data-file, root,
+manifest-list and footer budgets, individual root/commit bytes and recovery
+workspace bytes. See the [field ranges and SF=10 profile](SCALABLE_HISTORY.md).
+Defaults remain conservative; normalized descriptors include every history field.
+Complete legacy persisted limits objects receive default history values.
 
 Values are JSON integers; booleans, fractions, unknown fields and values outside
 these bounds are rejected before reserving a database. Every database response
@@ -193,6 +199,7 @@ separate, broader development profile.
 | `GET /collections/{id}` | `GetCollection` | Identity and current schema |
 | `GET /collections/{id}/schema` | `GetCollection` / `Schema` | Stable field IDs |
 | `POST /collections/{id}/append` | `AppendDurable` | Synchronous native receipt |
+| `POST /collections/{id}/bulk-append` | `BulkAppendDurable` | Bounded NDJSON, anonymous disk replay, one atomic receipt |
 | `POST /collections/{id}/write-settings` | `UpdateWriteSettings` | Compare-and-set of Parquet settings for later appends |
 | `GET /collections/{id}/operations/{op}` | `FindAppendOutcome` | Original result or authoritative absence |
 | `POST /collections/{id}/scan/open` | `Scan` | Resolve a fixed view and return a cursor without consuming rows |
@@ -500,7 +507,13 @@ is acknowledged after authentication and body admission. Oversized headers retur
 431, malformed line endings 400, and read timeouts 408. JSON Content-Type accepts
 case-insensitive media names and UTF-8 charset parameters. Scan Accept supports
 media lists, wildcards and quality weights.
-Use ordinary buffered JSON requests. The server defaults to 127.0.0.1:8080.
+Ordinary routes use buffered JSON requests. The [native bulk route](BULK_INGESTION.md#native-http-sdk-and-cli)
+streams LF-terminated NDJSON with Content-Length through anonymous disk scratch:
+4 GiB total wire, 16 MiB per batch, ten-minute upload deadline, two global/one
+per-database spool permits retained through publisher completion. It uses separate
+spill workers and shared disk/memory reservations; partial uploads never enter
+core. Ordinary request and queue deadlines retain their existing values.
+The server defaults to 127.0.0.1:8080.
 `--listen` is explicit; terminate TLS and apply deployment limits at a trusted
 reverse proxy for remote access. There is one bearer identity, no user/RBAC layer.
 The token comes only from `GLAMDB_TOKEN`, never a URL, log, config response or UI
