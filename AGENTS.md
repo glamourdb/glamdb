@@ -295,6 +295,8 @@ For alerting setup and validation, read [ALERTING.md](ALERTING.md) and run
 on PATH or passed explicitly. Its process tests run real Prometheus/Alertmanager
 with a loopback Telegram protocol peer only.
 The native receiver owns delivery; there is no webhook/outbox service.
+Telegram uses one combined daily current-state summary in the 10:00–10:01
+Europe/Moscow window. State changes outside that window do not notify.
 `deploy/alerting/external-observer/` runs on a separate host/notification path.
 Gateway application metrics cover requests after the edge/OIDC proxy. Separate
 Caddy outer-edge counts include authentication rejections before the application.
