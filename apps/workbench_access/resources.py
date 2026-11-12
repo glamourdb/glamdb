@@ -140,9 +140,14 @@ def database_definition(params, *, test_mode=False):
             or parsed.password
             or parsed.query
             or parsed.fragment
-            or parsed.path not in ("", "/")
         ):
             raise ValueError()
+        backend_path = ""
+        if parsed.path not in ("", "/"):
+            scoped = re.fullmatch(r"/databases/([0-9a-f-]{36})/?", parsed.path)
+            if scoped is None:
+                raise ValueError()
+            backend_path = "/databases/" + identifier(scoped[1])
         try:
             local = ipaddress.ip_address(host).is_loopback
         except ValueError:
@@ -156,7 +161,7 @@ def database_definition(params, *, test_mode=False):
     except ValueError:
         raise CatalogError(
             "INVALID_ARGUMENT",
-            "backend requires a verified HTTPS origin or explicit loopback/test origin",
+            "backend requires verified HTTPS or explicit loopback/test HTTP, optionally scoped to /databases/<UUID>",
         ) from None
     if bool(params.get("token_env")) == bool(params.get("token_file")):
         raise CatalogError(
@@ -182,7 +187,7 @@ def database_definition(params, *, test_mode=False):
         if port is None or port == ({"https": 443, "http": 80}[parsed.scheme])
         else f":{port}"
     )
-    return {**params, "url": f"{parsed.scheme}://{host}{suffix}"}
+    return {**params, "url": f"{parsed.scheme}://{host}{suffix}{backend_path}"}
 
 
 class ResourceCatalog:

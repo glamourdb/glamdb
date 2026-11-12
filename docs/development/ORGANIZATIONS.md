@@ -75,13 +75,14 @@ are JSON without HTML login pages or redirects.
 Database requests retain `/databases/<database-UUID>` throughout JSON and Arrow
 calls. The following suffixes are the current v0 HTTP adapter contract:
 
-- Metadata: GET `/v0/capabilities`, `/v0/collections`,
-  `/v0/collections:resolve`, `/v0/collections/<UUID>`, and its `/schema`, `/stats`,
-  `/snapshots`, `/files`, `/files/<UUID>` and `/operations/<UUID>` suffixes.
-- Metadata: POST `/v0/collections/<UUID>/explain`.
-- Read: POST `/v0/collections/<UUID>/scan`; Arrow is selected by `Accept` on
-  this same route. Snapshot/checksum response headers are preserved.
-- Write: POST `/v0/collections` and `/v0/collections/<UUID>/append`.
+- Metadata: GET `/capabilities`, `/collections`,
+  `/collections:resolve`, `/collections/<UUID>`, and its `/schema`, `/stats`,
+  `/snapshots`, `/files`, `/files/<opaque-ID>` and `/operations/<UUID>` suffixes.
+- Metadata: POST `/collections/<UUID>/explain`.
+- Read: POST `/collections/<UUID>/scan` and its `/open` and `/cancel` suffixes.
+  Arrow is selected by `Accept` on the scan route. Snapshot, checksum, length
+  and continuation response headers are preserved.
+- Write: POST `/collections` and `/collections/<UUID>/append`.
 
 Unknown methods/routes are denied. Encoded database paths are rejected before
 OAuth proxy normalization; percent-encoded query values remain supported.
@@ -145,7 +146,9 @@ components return unavailable rather than fabricated healthy values. Workbench
 is the database UI, Keycloak the account UI, and private Grafana/Alertmanager the
 operator interfaces. Grafana folders do not provide tenant data isolation.
 
-Current `main` implements the embedded backend and a minimal scanner. Production
-HTTP transport remains absent. The gateway contract and explicit mock adapter
-tests therefore do not qualify native HTTP integration or storage durability.
+The native HTTP server and embedded scanner are implemented. A native backend
+URL includes its canonical `/databases/<UUID>` scope; an origin-only URL remains
+available for the explicit mock adapter. The gateway keeps that scope on every
+metadata, scan and write request. Test identity/policy doubles do not qualify a
+production identity deployment or storage durability.
 See [validation](ORGANIZATIONS_VALIDATION.md) for exact commands and boundaries.

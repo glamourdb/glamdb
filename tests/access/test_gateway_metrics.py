@@ -80,7 +80,7 @@ def test_http_failures_csrf_readiness_and_series_bound(setup):
         assert sample(metrics.registry, "glamdb_gateway_ready") == 0
         policy.unavailable = False
         client.cookies.set("__Host-glamdb-session_0", "opaque")
-        route = f"/databases/{own}/v0/collections/{uuid4()}/scan"
+        route = f"/databases/{own}/collections/{uuid4()}/scan"
         assert (
             client.post(
                 route, headers={"X-Forwarded-Access-Token": "valid"}, json={}
@@ -142,7 +142,7 @@ async def test_stream_completion_and_admission_backpressure(setup, cancelled):
             "scheme": "https",
             "server": ("testserver", 443),
             "client": ("127.0.0.1", 1),
-            "path": f"/databases/{own}/v0/collections/{uuid4()}/scan",
+            "path": f"/databases/{own}/collections/{uuid4()}/scan",
             "query_string": b"",
             "headers": [(b"authorization", b"Bearer valid")],
             "http_version": "1.1",
@@ -188,7 +188,7 @@ async def test_stream_completion_and_admission_backpressure(setup, cancelled):
                 transport=httpx.ASGITransport(app), base_url="https://testserver"
             ) as client:
                 rejected = await client.get(
-                    f"/databases/{own}/v0/capabilities",
+                    f"/databases/{own}/capabilities",
                     headers={"Authorization": "Bearer valid"},
                 )
             assert rejected.status_code == 429
@@ -433,18 +433,18 @@ def test_operator_requires_json_object(setup, body):
 def test_actual_sdk_route_paths_and_arrow_negotiation():
     cid = str(uuid4())
     assert (
-        authorization.classify("GET", "/v0/collections:resolve").metric == "collection"
+        authorization.classify("GET", "/collections:resolve").metric == "collection"
     )
     assert (
-        authorization.classify("GET", f"/v0/collections/{cid}/stats").metric
+        authorization.classify("GET", f"/collections/{cid}/stats").metric
         == "statistics"
     )
     assert (
-        authorization.classify("POST", f"/v0/collections/{cid}/scan").action == "read"
+        authorization.classify("POST", f"/collections/{cid}/scan").action == "read"
     )
     for unsupported in (
-        f"/v0/collections/{cid}/statistics",
-        f"/v0/collections/{cid}/scan/arrow",
+        f"/collections/{cid}/statistics",
+        f"/collections/{cid}/scan/arrow",
     ):
         with pytest.raises(ValueError):
             authorization.classify(

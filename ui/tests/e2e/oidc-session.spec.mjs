@@ -67,7 +67,7 @@ async function gateway(page) {
         await route.fulfill({ json: { signed_out: true, redirect: '/oauth2/sign_out?rd=%2F' } });
     });
     await page.route('**/oauth2/sign_out?rd=%2F', (route) => route.fulfill({ status: 204 }));
-    await page.route('**/databases/*/v0/**', async (route) => {
+    await page.route('**/databases/*/**', async (route) => {
         const request = route.request();
         fixture.calls.push(request);
         const headers = request.headers();

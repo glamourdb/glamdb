@@ -149,7 +149,12 @@ function resetSession({ access, databaseId = null, database } = {}) {
         for (const controller of controllers) controller?.abort();
         state = database === undefined ? resetConnection(state) : switchDatabase(state, database);
     }
-    connectionController = viewController = queryController = countController = accessPollController = null;
+    connectionController =
+        viewController =
+        queryController =
+        countController =
+        accessPollController =
+            null;
     queryGeneration++;
     creationFields = [];
     $('#modal').close();
@@ -477,7 +482,7 @@ async function connectDatabase(databaseId) {
     state.databaseLoading = true;
     chrome();
     try {
-        const capabilities = await api.json('/v0/capabilities', { signal: controller.signal });
+        const capabilities = await api.json('/capabilities', { signal: controller.signal });
         if (api !== state.api || controller.signal.aborted) return;
         state.capabilities = capabilities;
         await refreshWorkspace();
@@ -1898,7 +1903,8 @@ document.addEventListener('click', async (event) => {
             if (pendingEntries(true).length) openRecovery(true);
             else {
                 resetSession();
-                if (accessGateway) accessLogin('Workspace cleared. Reload access to open a database.');
+                if (accessGateway)
+                    accessLogin('Workspace cleared. Reload access to open a database.');
                 else login();
             }
         } else if (action === 'disconnect-clear') {

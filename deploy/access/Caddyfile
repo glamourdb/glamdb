@@ -35,7 +35,7 @@
 			expression `{http.request.orig_uri}.matches('^[^?]*%')`
 		}
 		respond @encoded_database_path 404
-		@private path /operator /operator/* /metrics /metrics/* /v0 /v0/* /admin /admin/* /ping /ready
+		@private path /operator /operator/* /metrics /metrics/* /v0 /v0/* /capabilities /collections /collections/* /collections:resolve /readyz /admin /admin/* /ping /ready
 		respond @private 404
 		@api path /databases /databases/* /workbench /workbench/*
 		handle @api {

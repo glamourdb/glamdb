@@ -108,12 +108,12 @@ def test_same_policy_for_list_and_direct_route_fail_closed(setup):
         assert session.json()["databases"] == [{"id": own, "name": "Database"}]
         assert (
             client.get(
-                f"/databases/{uuid4()}/v0/capabilities", headers=headers
+                f"/databases/{uuid4()}/capabilities", headers=headers
             ).status_code
             == 404
         )
         assert (
-            client.get(f"/databases/{own}/v0/capabilities", headers=headers).status_code
+            client.get(f"/databases/{own}/capabilities", headers=headers).status_code
             == 200
         )
         assert seen[0].headers["authorization"] == "Bearer backend-only-secret"
@@ -124,7 +124,7 @@ def test_same_policy_for_list_and_direct_route_fail_closed(setup):
         with ResourceCatalog(path) as catalog:
             catalog.apply(operation("organization.update", id=first, enabled=False))
         assert (
-            client.get(f"/databases/{own}/v0/capabilities", headers=headers).status_code
+            client.get(f"/databases/{own}/capabilities", headers=headers).status_code
             == 404
         )
         policy.unavailable = True
@@ -141,7 +141,7 @@ def test_cookie_csrf_and_mixed_credentials_and_encoded_path(setup):
         assert response.status_code == 200
         csrf = client.cookies.get("__Host-glamdb-csrf")
         assert csrf
-        route = f"/databases/{own}/v0/collections/{uuid4()}/scan"
+        route = f"/databases/{own}/collections/{uuid4()}/scan"
         assert client.post(route, headers=headers, json={}).status_code == 403
         assert (
             client.post(
@@ -175,7 +175,7 @@ def test_cookie_csrf_and_mixed_credentials_and_encoded_path(setup):
         )
         assert (
             client.get(
-                f"/databases/{own}/v0/%63apabilities", headers=headers
+                f"/databases/{own}/%63apabilities", headers=headers
             ).status_code
             == 404
         )
@@ -208,7 +208,7 @@ def test_plain_create_receipt_is_terminal_only_for_matching_definition(setup, ma
     app.app.state.gateway.backend_transport = httpx.MockTransport(backend)
     with TestClient(app, base_url="https://testserver") as client:
         response = client.post(
-            f"/databases/{own}/v0/collections",
+            f"/databases/{own}/collections",
             headers={"Authorization": "Bearer valid"},
             json=payload,
         )
@@ -228,18 +228,23 @@ def test_arrow_snapshot_and_integrity_headers_survive_proxy(setup):
                 "Content-Type": "application/vnd.apache.arrow.stream",
                 "X-GlamDB-Snapshot-Id": "17",
                 "X-Content-SHA256": "a" * 64,
+                "X-GlamDB-Next-Cursor": "opaque-next-page",
+                "Content-Encoding": "identity",
             },
         )
 
     app.app.state.gateway.backend_transport = httpx.MockTransport(backend)
     with TestClient(app, base_url="https://testserver") as client:
         response = client.post(
-            f"/databases/{own}/v0/collections/{uuid4()}/scan",
+            f"/databases/{own}/collections/{uuid4()}/scan",
             headers={"Authorization": "Bearer valid"},
             json={},
         )
         assert response.headers["X-GlamDB-Snapshot-Id"] == "17"
         assert response.headers["X-Content-SHA256"] == "a" * 64
+        assert response.headers["Content-Length"] == "5"
+        assert response.headers["Content-Encoding"] == "identity"
+        assert response.headers["X-GlamDB-Next-Cursor"] == "opaque-next-page"
 
 
 @pytest.mark.anyio
@@ -329,9 +334,9 @@ async def test_proxy_failures_close_backend_and_release_admission(setup, failure
 
     gateway.backend_transport = httpx.MockTransport(backend)
     path_suffix = (
-        f"v0/collections/{collection_id}/append"
+        f"collections/{collection_id}/append"
         if failure == "write"
-        else "v0/collections"
+        else "collections"
     )
     route = f"/databases/{own}/{path_suffix}"
     scope = {

@@ -295,6 +295,9 @@ def test_token_provider_preserves_prefix_and_real_arrow_stream_ownership():
         provider_calls.append(1)
         return "fresh-token"
     def handler(request):
+        if request.url.path.endswith("/scan/open"):
+            assert request.url.path == f"/databases/{CID}/collections/{CID}/scan/open"
+            return httpx.Response(404, json={"error": {"code": "ROUTE_NOT_FOUND", "message": "legacy adapter"}})
         seen.append(request)
         assert request.headers["authorization"] == "Bearer fresh-token"
         assert request.headers["accept-encoding"] == "identity"
@@ -306,7 +309,7 @@ def test_token_provider_preserves_prefix_and_real_arrow_stream_ownership():
         with client.scan_batches(CID) as stream:
             batches = list(stream)
             assert stream.integrity == "verified"
-    assert len(seen) == len(provider_calls) == 1
-    assert seen[0].url.path == f"/databases/{CID}/v0/collections/{CID}/scan"
+    assert len(seen) == 1 and len(provider_calls) == 2
+    assert seen[0].url.path == f"/databases/{CID}/collections/{CID}/scan"
     assert seen[0].method == "POST" and body.closed
     assert batches[0].column(0)[0].as_py() == 9007199254740993

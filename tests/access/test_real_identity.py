@@ -416,7 +416,7 @@ def test_native_organizations_isolate_every_database_and_empty_account(native_id
         counts.append(len(actual))
         for database in fixture.databases:
             result = fixture.request(
-                index, "GET", f"/databases/{database['id']}/v0/capabilities"
+                index, "GET", f"/databases/{database['id']}/capabilities"
             )
             assert result.status_code == (200 if database["id"] in expected else 404)
             if result.status_code == 200:
@@ -432,12 +432,12 @@ def test_native_api_never_redirects_credentials_or_accepts_forged_identity(
     fixture = native_identity
     own = fixture.owned(0)[0]["id"]
     foreign = fixture.owned(1)[0]["id"]
-    for route in ("/workbench/session", f"/databases/{own}/v0/capabilities"):
+    for route in ("/workbench/session", f"/databases/{own}/capabilities"):
         response = fixture.http.get(fixture.base + route)
         assert response.status_code in (401, 403)
         assert response.headers["content-type"].startswith("application/json")
         assert not response.is_redirect
-    for route in ("/operator", "/metrics", "/v0/capabilities"):
+    for route in ("/operator", "/metrics", "/capabilities"):
         assert fixture.request(0, "GET", route).status_code == 404
     forged = {
         "X-Forwarded-User": fixture.organizations[1]["user_id"],
@@ -446,14 +446,14 @@ def test_native_api_never_redirects_credentials_or_accepts_forged_identity(
     }
     assert (
         fixture.request(
-            0, "GET", f"/databases/{foreign}/v0/capabilities", headers=forged
+            0, "GET", f"/databases/{foreign}/capabilities", headers=forged
         ).status_code
         == 404
     )
     for path in (
-        "v0/%63apabilities",
-        "v0/collections%2f..%2fcapabilities",
-        "v0/%252e%252e/capabilities",
+        "%63apabilities",
+        "collections%2f..%2fcapabilities",
+        "%252e%252e/capabilities",
     ):
         assert fixture.request(0, "GET", f"/databases/{own}/{path}").status_code == 404
     response = fixture.request(
@@ -559,9 +559,9 @@ def test_native_strict_transfer_waits_for_authoritative_mock_outcome_and_replays
     from glamdb_sdk import Field, Schema
 
     schema = Schema([Field("key", "string", False), Field("n", "int64", True)])
-    path = f"/v0/collections/{collection_id}/append"
+    path = f"/collections/{collection_id}/append"
     resolution = (
-        f"/v0/development/collections/{collection_id}/operations/{operation_id}:resolve"
+        f"/development/collections/{collection_id}/operations/{operation_id}:resolve"
     )
     admitted = False
     transfer_started = False
@@ -609,13 +609,13 @@ def test_native_strict_transfer_waits_for_authoritative_mock_outcome_and_replays
         for index in (0, 1):
             assert (
                 fixture.request(
-                    index, "GET", f"/databases/{database['id']}/v0/capabilities"
+                    index, "GET", f"/databases/{database['id']}/capabilities"
                 ).status_code
                 == 404
             )
         assert (
             fixture.request(
-                0, "GET", f"/databases/{fixture.owned(0)[0]['id']}/v0/capabilities"
+                0, "GET", f"/databases/{fixture.owned(0)[0]['id']}/capabilities"
             ).status_code
             == 200
         )
@@ -638,13 +638,13 @@ def test_native_strict_transfer_waits_for_authoritative_mock_outcome_and_replays
         )
         assert (
             fixture.request(
-                0, "GET", f"/databases/{database['id']}/v0/capabilities"
+                0, "GET", f"/databases/{database['id']}/capabilities"
             ).status_code
             == 404
         )
         assert (
             fixture.request(
-                1, "GET", f"/databases/{database['id']}/v0/capabilities"
+                1, "GET", f"/databases/{database['id']}/capabilities"
             ).status_code
             == 200
         )
@@ -672,13 +672,13 @@ def test_native_strict_transfer_waits_for_authoritative_mock_outcome_and_replays
             ).raise_for_status()
     assert (
         fixture.request(
-            0, "GET", f"/databases/{database['id']}/v0/capabilities"
+            0, "GET", f"/databases/{database['id']}/capabilities"
         ).status_code
         == 200
     )
     assert (
         fixture.request(
-            1, "GET", f"/databases/{database['id']}/v0/capabilities"
+            1, "GET", f"/databases/{database['id']}/capabilities"
         ).status_code
         == 404
     )
@@ -764,7 +764,7 @@ def test_native_dependency_outage_fails_closed_and_restores_service(
         command("stop")
         for path in (
             "/workbench/session",
-            f"/databases/{database['id']}/v0/capabilities",
+            f"/databases/{database['id']}/capabilities",
         ):
             response = fixture.request(0, "GET", path)
             assert response.status_code == 503 and not response.is_redirect
@@ -772,7 +772,7 @@ def test_native_dependency_outage_fails_closed_and_restores_service(
         response = fixture.request(
             0,
             "POST",
-            f"/databases/{database['id']}/v0/collections",
+            f"/databases/{database['id']}/collections",
             json={
                 "collection_id": collection_id,
                 "name": "denied_" + uuid4().hex,
@@ -804,7 +804,7 @@ def test_native_dependency_outage_fails_closed_and_restores_service(
                 "Explicit disposable dependency did not recover; diagnostics suppressed"
             )
     assert (
-        fixture.backend(database, "GET", f"/v0/collections/{collection_id}").status_code
+        fixture.backend(database, "GET", f"/collections/{collection_id}").status_code
         == 404
     )
 
@@ -950,7 +950,7 @@ try{
     ensure(alternate);await page.locator('#database-selector').selectOption(alternate.id);await expect(page.locator('#database-selector')).toHaveValue(alternate.id);
     await expect(page.locator('.collection-list button').first()).toBeVisible();
     await page.locator('#database-selector').selectOption(original);await expect(page.locator('.collection-list button').first()).toBeVisible();result.database_switch=true;
-    stage='browser_csrf';const csrf=await page.evaluate(async database=>{const r=await fetch('/databases/'+database+'/v0/collections',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',redirect:'error'});return {status:r.status,json:r.headers.get('content-type')?.startsWith('application/json')};},original);
+    stage='browser_csrf';const csrf=await page.evaluate(async database=>{const r=await fetch('/databases/'+database+'/collections',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',redirect:'error'});return {status:r.status,json:r.headers.get('content-type')?.startsWith('application/json')};},original);
     ensure(csrf.status===403&&csrf.json);result.csrf_rejected=true;
     stage='browser_write';const name='browser_'+crypto.randomUUID().replaceAll('-','');
     await page.getByRole('button',{name:'New collection',exact:true}).click();await page.getByLabel('Collection name').fill(name);await page.getByRole('button',{name:'Create collection',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();

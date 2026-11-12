@@ -32,10 +32,10 @@ CREATE_FAILURE = {
 def test_noncanonical_original_write_identity_never_reaches_backend(setup, kind):
     app, path, _, _, own, _, seen = setup
     if kind == "create":
-        route = f"/databases/{own}/v0/collections"
+        route = f"/databases/{own}/collections"
         payload = {"collection_id": "not-a-uuid", "name": "Invalid original"}
     else:
-        route = f"/databases/{own}/v0/collections/{uuid4()}/append"
+        route = f"/databases/{own}/collections/{uuid4()}/append"
         payload = {"operation_id": "not-a-uuid", "rows": [{"key": "original"}]}
     with TestClient(app, base_url="https://testserver") as client:
         response = client.post(
@@ -114,7 +114,7 @@ def test_native_failed_create_uses_exact_terminal_envelope(setup, mutation):
     app.app.state.gateway.backend_transport = httpx.MockTransport(backend)
     with TestClient(app, base_url="https://testserver") as client:
         response = client.post(
-            f"/databases/{own}/v0/collections",
+            f"/databases/{own}/collections",
             headers={"Authorization": "Bearer valid"},
             json=payload,
         )
@@ -162,7 +162,7 @@ def test_conflicting_append_response_never_establishes_the_original_outcome(
     app.app.state.gateway.backend_transport = httpx.MockTransport(backend)
     with TestClient(app, base_url="https://testserver") as client:
         response = client.post(
-            f"/databases/{own}/v0/collections/{collection}/append",
+            f"/databases/{own}/collections/{collection}/append",
             headers={"Authorization": "Bearer valid"},
             json=payload,
         )
@@ -275,7 +275,7 @@ def test_native_failed_append_lookup_resolves_only_matching_authoritative_receip
                 "explicit lost native-protocol response", request=request
             )
         assert (
-            request.url.path == f"/v0/collections/{collection}/operations/{operation}"
+            request.url.path == f"/collections/{collection}/operations/{operation}"
         )
         return httpx.Response(status, json=envelope)
 
@@ -284,7 +284,7 @@ def test_native_failed_append_lookup_resolves_only_matching_authoritative_receip
         app, base_url="https://testserver", raise_server_exceptions=False
     ) as client:
         lost = client.post(
-            f"/databases/{own}/v0/collections/{collection}/append",
+            f"/databases/{own}/collections/{collection}/append",
             headers={"Authorization": "Bearer valid"},
             json=payload,
         )

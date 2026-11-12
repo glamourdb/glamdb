@@ -5,9 +5,9 @@ OAuth2 Proxy browser sessions with a private ephemeral Valkey store,
 Cerbos policy checks, Caddy HTTPS, and a private
 GlamDB ownership catalog. It requires existing database HTTP servers. Registering
 a database connects one such server; deleting its mapping never deletes its data.
-The production HTTP transport connecting the native engine to this deployment
-is not yet available. A running identity stack, SDK checks against an explicitly
-selected mock, or a successful image build does not establish that integration.
+The native HTTP server is available; register its explicit database scope. A
+running identity stack, SDK checks against an explicitly selected mock, or a
+successful image build does not establish production identity integration.
 
 Run commands from the checkout root. The single-host instructions target Linux
 with Docker Engine and Docker Compose v2. The gateway image uses Python 3.13.11.
@@ -613,9 +613,12 @@ new operation ID and current revision around these action/params:
 }
 ```
 
-Backend URLs identify exactly one store. They contain no credentials, query,
-fragment or path prefix. Different mappings cannot alias the same origin. HTTPS
-verification is required; loopback HTTP is a deliberate local topology only.
+Backend URLs identify exactly one database. For the native managed server use
+`https://host/databases/<canonical-lowercase-UUID>`; origin-only URLs remain
+available for explicit mock adapters. Credentials, queries, fragments and other
+path prefixes are rejected. Different mappings cannot alias the same canonical
+endpoint. HTTPS verification is required; loopback HTTP is a deliberate local
+topology only.
 Keep backend ports private and authenticated so they cannot bypass organization
 policy. Do not expose the backend's administrative APIs through a data path.
 
@@ -627,7 +630,7 @@ The supported action/params combinations are:
 - `database.create`: `id`, `name`, `url`; optional `organization_id`, `enabled`,
   and one of `token_file`/`token_env`, plus optional `ca_file`. A credential
   source is required even when a mapping is disabled or unassigned.
-- `database.update`: `id` plus reviewed changes to name, origin, credential
+- `database.update`: `id` plus reviewed changes to name, backend endpoint, credential
   source, CA or `enabled`. Switching credential sources replaces the previous
   selection. A pure `{id, enabled:false}` is the emergency disable form.
 - `database.assign`: `id`, `organization_id`, for an unassigned mapping.
@@ -704,8 +707,8 @@ does not contain a secret and has device authorization enabled. Request
 verification URL to the user, and keep token acquisition/renewal in process
 memory through the SDK's `DeviceAuthorizationClient`. See the
 [SDK guide](../../sdk/python/README.md) for the complete API. Direct data URLs
-use `/databases/<database-UUID>/v0/...`; never send backend credentials to the
-browser or substitute an unscoped `/v0` URL.
+use `/databases/<database-UUID>/...`; never send backend credentials to the
+browser or substitute an unscoped backend URL.
 
 For automation, create a **separate confidential client** in the glamdb realm
 with service accounts enabled and direct/password/standard browser grants off.
@@ -1190,11 +1193,10 @@ fresh collection on the explicitly designated disposable backend:
 ```
 
 Its default is the **native** backend. An explicit `--backend mock` is a separate
-development check and cannot prove native integration. Production HTTP transport
-is currently the blocker for running that default system proof against GlamDB;
-do not relabel a mock result to make this gate green. Native engine/storage/
-scanner validation remains in the native suites, distinct from the network
-transport/access verification described here.
+development check and cannot prove native integration. Run the default proof
+against a configured native database endpoint and retain any unsupported-feature
+result; do not relabel a mock result to make this gate green. Native engine/
+storage/scanner validation remains distinct from the network and access checks.
 
 The harness also checks the server's advertised capability profile. An explicit
 `false` for a required metadata/profile feature (`stats`, `snapshots`, `files`,

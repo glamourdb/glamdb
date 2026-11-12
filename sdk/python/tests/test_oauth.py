@@ -74,7 +74,7 @@ def test_provider_refreshes_header_before_each_call_without_changing_database_pr
         client.capabilities()
         assert "first-token" not in repr(client)
     assert [r.headers["Authorization"] for r in seen] == ["Bearer first-token", "Bearer second-token"]
-    assert all(r.url.path == "/databases/00112233-4455-6677-8899-aabbccddeeff/v0/capabilities" for r in seen)
+    assert all(r.url.path == "/databases/00112233-4455-6677-8899-aabbccddeeff/capabilities" for r in seen)
 
 
 def test_provider_error_or_invalid_result_never_sends_or_renders_secret():
@@ -215,7 +215,7 @@ def test_provider_does_not_replay_a_mutating_post_after_401():
             client.create_collection("same", Schema([Field("n", "int64", False)]), collection_id=collection)
     assert len(calls) == len(acquired) == 1
     assert calls[0].method == "POST"
-    assert calls[0].url.path == "/databases/" + collection + "/v0/collections"
+    assert calls[0].url.path == "/databases/" + collection + "/collections"
 
 
 def test_provider_delay_consumes_caller_deadline_before_post():

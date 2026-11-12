@@ -41,7 +41,7 @@ unit tests do not require credentials or reach an external identity host.
 - Gateway: actual JOSE cryptography and live-introspection transport, signature,
   issuer/audience/type/time rejection, changed roles/membership, same policy for
   list and direct resource, CSRF/Origin and mixed-credential denial.
-- Ownership: stable UUIDs, unique canonical origins, disabled/pending states,
+- Ownership: stable UUIDs, unique canonical backend endpoints, disabled/pending states,
   concurrent/stale revisions and content-bound retries, external-effect markers,
   emergency-disable superseding, restart-persistent uncertain writes and audit.
 - Fencing: admitted reads/streams, unknown write resolution, failed policy probes,
@@ -155,9 +155,9 @@ live checks and explicit mock backend, with the same diagnostic limitations.
 
 ## Qualification limits
 
-The embedded engine/backend/scanner now exist on `main`; a production native
-HTTP adapter is still missing. These identity and mock-protocol checks do not
-prove that adapter, native data durability, power-loss behavior or throughput.
+The embedded engine, backend, scanner and native HTTP server exist on `main`.
+Identity and mock-protocol checks do not prove the assembled production identity
+deployment, native data durability, power-loss behavior or throughput.
 No public DNS/ACME certificate, SMTP server, real notification destination or
 Kubernetes cluster was configured. The complete assembled production Compose
 runtime remains an operator deployment gate even though its real components,

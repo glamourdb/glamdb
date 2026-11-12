@@ -528,7 +528,7 @@ class Gateway:
             # Create has no durable operation-lookup contract yet; absence is never proof.
             if admission["kind"] != "append":
                 continue
-            target = f"{db['url']}/v0/collections/{admission['collection_id']}/operations/{admission['operation_id']}"
+            target = f"{db['url']}/collections/{admission['collection_id']}/operations/{admission['operation_id']}"
             started = time.perf_counter()
             try:
                 response = await self.backend(db).get(
@@ -647,7 +647,7 @@ class Gateway:
                 cid = identifier(
                     body["collection_id"]
                     if route.kind == "create"
-                    else path.split("/")[3]
+                    else path.split("/")[2]
                 )
                 op = identifier(body["operation_id"]) if route.kind == "append" else cid
             except (TypeError, KeyError, ValueError):
@@ -704,7 +704,10 @@ class Gateway:
                 if name.lower()
                 in (
                     "content-type",
+                    "content-length",
+                    "content-encoding",
                     "x-content-sha256",
+                    "x-glamdb-next-cursor",
                     "x-glamdb-request-id",
                     "x-glamdb-snapshot-id",
                 )

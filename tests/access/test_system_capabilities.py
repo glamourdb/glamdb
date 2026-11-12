@@ -47,7 +47,7 @@ def profile_server(
         seen.append((path, request.headers.get("accept"), body))
         if request.headers.get("authorization") != "Bearer " + TOKEN:
             return await call_next(request)
-        if path == "/v0/capabilities":
+        if path == "/capabilities":
             value = dict(CAPABILITIES)
             if features is not LEGACY:
                 value["features"] = features
@@ -55,7 +55,7 @@ def profile_server(
         feature = path.rsplit("/", 1)[-1]
         if "/files/" in path:
             feature = "files"
-        if path == "/v0/collections" and "cursor" in request.query_params:
+        if path == "/collections" and "cursor" in request.query_params:
             feature = "pagination"
         if feature == "scan" and body.get("projection") == []:
             feature = "zero_column_projection"
@@ -150,7 +150,7 @@ def test_false_native_profile_flags_block_after_supported_network_checks(tmp_pat
     assert not set(MISSING) & set(report["checks"])
     assert len(store.collections) == 1
     assert (
-        len([item for item in seen if item[1] == "application/vnd.apache.arrow.stream"])
+        len([item for item in seen if item[1] == "application/vnd.apache.arrow.stream" and item[0].endswith("/scan")])
         == 2
     )
     for feature in ("stats", "snapshots", "files", "explain"):

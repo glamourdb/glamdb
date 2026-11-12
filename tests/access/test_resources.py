@@ -186,3 +186,34 @@ def test_workflow_revision_requires_integer_not_boolean(catalog):
     request["expected_revision"] = True
     with pytest.raises(CatalogError):
         catalog.begin_workflow(request)
+
+
+def test_native_database_endpoint_is_scoped_and_canonical(catalog):
+    owner = organization(catalog)
+    backend = str(uuid4())
+    first = str(uuid4())
+    catalog.apply(
+        operation(
+            "database.create", id=first, organization_id=owner, name="Native",
+            url=f"https://DATABASE.example:443/databases/{backend}/", token_env="DATABASE_TOKEN",
+        )
+    )
+    assert catalog.database(first)["url"] == f"https://database.example/databases/{backend}"
+    with pytest.raises(CatalogError):
+        catalog.apply(
+            operation(
+                "database.create", id=str(uuid4()), name="Alias",
+                url=f"https://database.example/databases/{backend}", token_env="OTHER",
+            )
+        )
+    for suffix in [
+        "/admin", f"/databases/{backend}/collections", f"/databases/{backend}/../other",
+        f"/databases/{backend.upper()}", "/databases/%2e%2e", "/databases/not-a-uuid",
+    ]:
+        with pytest.raises(CatalogError):
+            catalog.apply(
+                operation(
+                    "database.create", id=str(uuid4()), name="Invalid",
+                    url="https://database.example" + suffix, token_env="OTHER",
+                )
+            )

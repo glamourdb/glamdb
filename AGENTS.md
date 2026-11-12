@@ -112,8 +112,9 @@ leave explicit pending receipts; emergency disables supersede older pending gran
 See [ORGANIZATIONS.md](docs/development/ORGANIZATIONS.md) and the detailed
 [operator guide](docs/development/SSO_OPERATIONS.md) for setup, native account
 management, migration, recovery and secret rotation. The former Basic and static
-group modes have been removed. Production native HTTP transport remains
-pending; explicit mock-backend tests do not qualify that integration or durability.
+group modes have been removed. Production deployment of the gateway with the
+native HTTP transport remains unqualified; explicit mock-backend tests do not
+qualify that identity integration or durability.
 
 The first milestone is an embedded, synchronous, durable **append store** on
 local disk. A store has one owning process and one serialized writer; reads may
