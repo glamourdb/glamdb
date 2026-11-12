@@ -133,7 +133,7 @@ class ServerMetrics(unittest.TestCase):
 
     def test_opt_in_logs_use_bounded_schema_for_real_requests_and_lifecycle(self):
         logs = Path(self.tmp.name).resolve() / 'logs'
-        self.start(True, '--log-directory', str(logs))
+        self.start(True, '--log-directory', str(logs), '--log-success-sample-every', '1')
         self.api('/databases', status=401, token='private-token-marker')
         database = self.api('/databases', {'name': 'private-database-marker'})
         base = '/databases/' + database['database_id']
@@ -164,7 +164,7 @@ class ServerMetrics(unittest.TestCase):
         limit = 8 * 1024 * 1024
         for name in ('glamdb.jsonl', 'glamdb.1.jsonl', 'glamdb.2.jsonl', 'glamdb.3.jsonl', 'glamdb.4.jsonl'):
             (logs / name).write_bytes(b'{}\n' * (limit // 3))
-        self.start(True, '--log-directory', str(logs))
+        self.start(True, '--log-directory', str(logs), '--log-success-sample-every', '1')
         self.api('/databases', status=401, token='denied')
         self.stop()
         files = list(logs.glob('glamdb*.jsonl'))

@@ -594,7 +594,7 @@ private:
         const auto elapsed =
             std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - Started_).count();
         State_.Logger->TryLog({.Event = ELogEvent::RequestCompleted,
-            .Operation = outcome == ELogOutcome::Denied ? ELogOperation::Auth : Operation_,
+            .Operation = StatusCode_ == 401 || StatusCode_ == 403 ? ELogOperation::Auth : Operation_,
             .Outcome = outcome,
             .RequestID = RequestID_,
             .DurationUs = static_cast<std::uint64_t>(elapsed),
