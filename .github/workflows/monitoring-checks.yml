@@ -36,7 +36,11 @@ jobs:
         run: |
           git submodule update --init third_party/prometheus-cpp
           git -C third_party/prometheus-cpp submodule update --init 3rdparty/civetweb
-          cmake -S third_party/prometheus-cpp -B build/prometheus-cpp \
+          cmake -DSOURCE="$PWD/third_party/prometheus-cpp" \
+            -DDESTINATION="$PWD/build/prometheus-src" \
+            -DPATCH_DIR="$PWD/cmake/dependencies/patches/prometheus-cpp" \
+            -P cmake/dependencies/PrepareSource.cmake
+          cmake -S build/prometheus-src -B build/prometheus-cpp \
             -DCMAKE_INSTALL_PREFIX="$PWD/.deps/install" -DCMAKE_INSTALL_LIBDIR=lib \
             -DCMAKE_BUILD_TYPE=Release -DENABLE_PUSH=OFF -DENABLE_TESTING=OFF \
             -DENABLE_COMPRESSION=OFF -DTHIRDPARTY_CIVETWEB_WITH_SSL=OFF \

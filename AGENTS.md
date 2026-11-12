@@ -286,7 +286,8 @@ Native operation counters measure actual core operations.
 For real host/container/Kubernetes monitoring, private application endpoints,
 source gaps and deployment steps, read [MONITORING](docs/development/MONITORING.md).
 Install `tools/monitoring/requirements.txt` with hash verification and build the pinned
-prometheus-cpp core/pull installation before `python3 tools/monitoring/check.py
+prometheus-cpp core/pull installation through `cmake/dependencies` (including
+the recorded CivetWeb atomic stop-flag patch) before `python3 tools/monitoring/check.py
 --promtool PATH`. See the coverage matrix linked from that runbook. Keep missing
 collectors/unsupported fields as NoData; exporter reachability does not establish
 native database health or durability. The short-lived CLI publishes no textfile.

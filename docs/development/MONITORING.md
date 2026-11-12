@@ -274,8 +274,10 @@ infrastructure dashboards and deployment generator.
 ## Verification
 
 Build the pinned client using `cmake/dependencies` with the other locked
-libraries, or build only that upstream component with tests/push/compression off
-and install its core/pull libraries into `.deps/install`. Then run:
+libraries. The recipe applies the recorded CivetWeb stop-flag patch to a
+build-private source copy; build only from that prepared copy when installing
+core/pull separately. An unpatched v1.3.0 listener races during shutdown.
+Then run:
 
 ```sh
 python3 tools/monitoring/check.py --promtool PATH_TO_VERIFIED_PROMTOOL
