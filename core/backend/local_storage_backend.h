@@ -98,6 +98,7 @@ public:
 
     Health GetHealth() const override;
     EngineCapabilities GetCapabilities() const override;
+    Result<StorageFootprint> GetStorageFootprint() override;
 
     Result<std::unique_ptr<StagedCreate>>
     PrepareCreate(const StoreInfo& store, const CreateCollectionRequest& request, std::string_view attempt_id) override;

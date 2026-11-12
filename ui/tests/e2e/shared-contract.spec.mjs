@@ -96,13 +96,15 @@ async function login(page) {
     await page.getByLabel('Access token').fill(token);
     await page.getByRole('button', { name: 'Open my workspace' }).click();
     if (native) {
-        const created = page.waitForResponse(
-            (response) =>
-                response.request().method() === 'POST' && response.url().endsWith('/databases'),
-        );
+        const created = page
+            .waitForResponse(
+                (response) =>
+                    response.request().method() === 'POST' && response.url().endsWith('/databases'),
+            )
+            .then((response) => response.json());
         await page.getByLabel('Database name').fill(`conformance_${Date.now()}`);
         await page.getByRole('button', { name: 'Create database', exact: true }).click();
-        databaseId = (await (await created).json()).database_id;
+        databaseId = (await created).database_id;
     }
     await expect(page.getByRole('heading', { name: 'A little overview' })).toBeVisible();
     await nav(page, 'Data studio');
@@ -114,12 +116,14 @@ async function nav(page, name) {
 async function createCollection(page, name) {
     await page.getByRole('button', { name: 'New collection', exact: true }).first().click();
     await page.getByLabel('Collection name').fill(name);
-    const created = page.waitForResponse(
-        (response) =>
-            response.request().method() === 'POST' && response.url().endsWith('/collections'),
-    );
+    const created = page
+        .waitForResponse(
+            (response) =>
+                response.request().method() === 'POST' && response.url().endsWith('/collections'),
+        )
+        .then((response) => response.json());
     await page.getByRole('button', { name: 'Create collection' }).click();
-    collectionId = (await (await created).json()).collection_id;
+    collectionId = (await created).collection_id;
     await expect(page.getByRole('dialog')).not.toBeVisible();
     await expect(page.locator('.breadcrumb strong')).toHaveText(name);
 }
