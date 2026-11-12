@@ -348,7 +348,7 @@ struct TStructuredLogger::TImpl
     quill::LoggerImpl<TFrontendOptions>* Logger = nullptr;
     std::atomic<bool> Stopped{false};
     std::atomic<std::uint64_t> InFlight{0};
-    std::atomic<std::uint64_t> Sequence{0};
+    std::array<std::atomic<std::uint64_t>, 2> Sequences{};
     std::atomic<std::uint64_t> RequestID{0};
     // One packed monotonic second/count permits a bounded CAS admission attempt.
     std::atomic<std::uint64_t> SuccessWindow{0};
@@ -359,9 +359,10 @@ struct TStructuredLogger::TImpl
         : Options(std::move(options))
     { }
 
-    bool AdmitSuccess() noexcept
+    bool AdmitSuccess(ELogEvent event) noexcept
     {
-        if (Sequence.fetch_add(1, std::memory_order_relaxed) % Options.SuccessSampleEvery != 0) {
+        const auto index = event == ELogEvent::OperationCompleted ? 1U : 0U;
+        if (Sequences[index].fetch_add(1, std::memory_order_relaxed) % Options.SuccessSampleEvery != 0) {
             Count(*Stats, &TAtomicStats::Sampled);
             return false;
         }
@@ -490,7 +491,7 @@ bool TStructuredLogger::TryLog(const TLogEvent& event) noexcept
         return false;
     }
     if ((event.Event == ELogEvent::RequestCompleted || event.Event == ELogEvent::OperationCompleted) &&
-        event.Outcome == ELogOutcome::Ok && !impl.AdmitSuccess())
+        event.Outcome == ELogOutcome::Ok && !impl.AdmitSuccess(event.Event))
     {
         return false;
     }

@@ -126,7 +126,8 @@ The admission lock is acquired without waiting; `QueueHandler` uses
 
 Successful request and native engine completion events share a success budget.
 Stderr defaults to one candidate per 100 successes and at most twenty candidates
-per monotonic second. Native file mode defaults to every success, still capped
+per monotonic second. HTTP and core completions have independent sampling
+sequences and share this per-second cap. Native file mode defaults to every success, still capped
 at twenty per second. The server exposes `--log-success-sample-every` and
 `--log-max-success-per-second` to configure these limits. Runtime lifecycle,
 administrative events, denied/unknown outcomes and errors bypass success

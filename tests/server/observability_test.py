@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import select
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -159,8 +160,8 @@ class ServerObservability(unittest.TestCase):
         self.assertTrue(any(event['event'] == 'runtime_started' for event in self.records))
         self.assertTrue(any(event['event'] == 'runtime_stopped' for event in self.records))
 
-    def test_body_admission_overload_is_observed_before_running_a_handler(self):
-        self.start(timeout=5000)
+    def test_queued_body_cancellation_is_observed_before_running_a_handler(self):
+        self.start(timeout=30000)
         held = []
         try:
             for _ in range(16):
@@ -170,22 +171,30 @@ class ServerObservability(unittest.TestCase):
                     'Authorization: Bearer ' + TOKEN + '\r\nContent-Length: 2\r\n'
                     'Expect: 100-continue\r\n\r\n').encode())
                 self.assertIn(b'100 Continue', connection.recv(4096))
-            self.api('/databases', {}, status=503)
-            self.wait_metric('glamdb_http_requests_total', 1, route='databases',
-                method='POST', status_class='5xx')
-            self.assertEqual(self.metric('glamdb_http_responses_total', status_code='503'), 1)
+            queued = socket.create_connection(('127.0.0.1', self.port), timeout=5)
+            held.append(queued)
+            queued.sendall(('POST /databases HTTP/1.1\r\nHost: localhost\r\n'
+                'Authorization: Bearer ' + TOKEN + '\r\nContent-Length: 2\r\n'
+                'Expect: 100-continue\r\n\r\n').encode())
+            self.assertFalse(select.select([queued], [], [], .1)[0], 'queued body was admitted')
+            queued.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
         finally:
             for connection in held:
                 connection.close()
+        self.wait_metric('glamdb_http_requests_total', 17, route='databases',
+            method='POST', status_class='cancelled')
+        self.assertEqual(self.api('/databases'), {'items': [], 'next_cursor': None})
         self.stop()
-        self.assertTrue(any(event['event'] == 'request_completed' and int(event['status_code']) == 503
-                            and event['outcome'] == 'error' for event in self.records))
+        cancelled = [event for event in self.records if event['event'] == 'request_completed'
+                     and event['outcome'] == 'cancelled']
+        self.assertEqual(len(cancelled), 17)
+        self.assertTrue(all(int(event['status_code']) == 0 for event in cancelled))
 
     def test_prometheus_counts_every_request_despite_log_sampling(self):
         self.start()
         encoded_bytes = 0
         for _ in range(150):
-            self.api('/capabilities?private=' + PRIVATE)
+            self.api('/capabilities')
             encoded_bytes += self.last_body_bytes
         self.wait_metric('glamdb_http_requests_total', 150, route='capabilities', method='GET', status_class='2xx')
         self.assertEqual(self.metric('glamdb_http_responses_total', status_code='200'), 150)
@@ -231,7 +240,7 @@ class ServerObservability(unittest.TestCase):
         self.assertEqual(len(requests), 8)
         self.assertEqual(len({event['request_id'] for event in requests}), 8)
         self.assertEqual({event['operation'] for event in requests},
-            {'create_store', 'create_collection', 'append', 'scan_open', 'scan_next', 'scan_cancel', 'reconcile'})
+            {'create_store', 'create_collection', 'append', 'scan_open', 'scan', 'scan_cancel', 'database'})
         core = [event for event in self.records if event['event'] == 'operation_completed' and event['operation'] == 'append']
         http = [event for event in self.records if event['event'] == 'request_completed' and event['operation'] == 'append']
         self.assertEqual(len(core), 2)

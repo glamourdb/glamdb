@@ -5,7 +5,7 @@ int main()
 {
     using namespace NGlamDB::NTelemetry;
     TLogOptions options;
-    options.SuccessSampleEvery = 1;
+    options.SuccessSampleEvery = 100;
     options.MaxSuccessPerSecond = 1000;
     auto opened = TStructuredLogger::Open(options);
     if (!opened) {
@@ -46,7 +46,8 @@ int main()
         RecordReadFinished(EReadOperation::ScanNext, "CORRUPTION", .003);
         RecordReadFinished(EReadOperation::Reconcile, "private-diagnostic-canary", .004);
     }
+    logger.TryLog({.Event = ELogEvent::RequestCompleted, .RequestID = 11});
     const auto stats = logger.GetStats();
     logger.Shutdown();
-    return stats.Accepted == 4 && stats.DroppedUnregistered == 0 ? 0 : 2;
+    return stats.Accepted == 5 && stats.DroppedUnregistered == 0 ? 0 : 2;
 }

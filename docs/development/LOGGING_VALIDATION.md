@@ -1,5 +1,28 @@
 # Native server logging validation — 2026-11-12
 
+## Current server integration on main `dce0c5a`
+
+The rebased native telemetry build passed on macOS arm64 with AppleClang 21
+and Python 3.13. Nine focused CTest entries passed: `server_observability`,
+`native_metrics`, `logging`, `server_logging`, `native_metadata`, `native_http`,
+`http_review`, `http_security` and `http_lifecycle`. They cover actual HTTP/core
+correlation, receipt-replay publication counts, unsampled metrics, queued-body
+cancellation and preserving admin completion logs alongside sampled core events.
+HTTP and core completions use separate sampling sequences with one shared rate cap.
+
+The monitoring validator passed nine Python tests, its ASan/UBSan component and
+real listener checks, 879 fixed series, 152 dashboard queries and the pinned chart
+checksum/lint/render. LLVM 18 formatting passed all 251 project C++ files;
+actionlint and zizmor reported no findings. The CivetWeb teardown race reproduced
+under TSan before the build-private patch; its patched Exposer passed 20 fresh
+start/scrape/shutdown processes.
+
+These are focused integration checks. Broader local multi-store fixtures exceed
+the dedicated test filesystem's capacity; Linux `/proc` and `/dev/full` cases
+require Linux. Required hosted sanitizer checks remain separate merge gates.
+
+## Earlier native integration
+
 Rebased PR 14 onto main `0c5df05`. The native server now owns the logger,
 records HTTP completion and propagates correlation into synchronous engine
 storage/corruption and uncertain-commit observations. Admin read and quiesce
