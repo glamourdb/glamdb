@@ -66,6 +66,14 @@ Current work focuses on qualifying and improving the existing append engine:
 These extensions are not part of the current API. Development is tracked in
 [GitHub issues](https://github.com/glamourdb/glamdb/issues).
 
+**[Open the public demo](https://nnrpi.github.io/glamdb/)** — anyone can try it.
+The [organization workbench](docs/development/ORGANIZATIONS.md) uses Keycloak
+sign-in, OAuth2 Proxy sessions and Cerbos policies for isolated database access.
+See the [deployment and operating guide](docs/development/SSO_OPERATIONS.md)
+for HTTPS hosting, native account management and database ownership workflows.
+The static Pages demo contains disposable sample data and remains a separate
+publication; it does not connect to protected database servers.
+
 ## Get started
 
 Clone the repository and start a local server:
@@ -283,6 +291,8 @@ bash scripts/check-workbench.sh
 
 On Linux, add `--with-deps` to the Playwright install command to install browser
 system dependencies. Tests use localhost sockets and disposable stores.
+
+See [Metrics, Grafana dashboards and operator setup](docs/development/MONITORING.md) for monitoring.
 
 ## Contributing
 

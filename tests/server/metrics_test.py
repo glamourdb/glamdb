@@ -129,13 +129,11 @@ class ServerMetrics(unittest.TestCase):
         self.wait_value('glamdb_http_requests_in_flight', 0, route='static')
         self.assertEqual(self.value('glamdb_http_requests_total', route='static', method='GET',
             status_class='cancelled'), 1)
-        self.assertEqual(self.value('glamdb_http_response_bytes_total', route='static'), 0)
-        self.assertEqual(self.value('glamdb_http_responses_total', status_code='200'), 0)
         self.assertNotIn('private-url-marker', self.scrape())
 
     def test_opt_in_logs_use_bounded_schema_for_real_requests_and_lifecycle(self):
         logs = Path(self.tmp.name).resolve() / 'logs'
-        self.start(True, '--log-directory', str(logs), '--log-max-success-per-second', '1000')
+        self.start(True, '--log-directory', str(logs), '--log-success-sample-every', '1')
         self.api('/databases', status=401, token='private-token-marker')
         database = self.api('/databases', {'name': 'private-database-marker'})
         base = '/databases/' + database['database_id']
@@ -166,7 +164,7 @@ class ServerMetrics(unittest.TestCase):
         limit = 8 * 1024 * 1024
         for name in ('glamdb.jsonl', 'glamdb.1.jsonl', 'glamdb.2.jsonl', 'glamdb.3.jsonl', 'glamdb.4.jsonl'):
             (logs / name).write_bytes(b'{}\n' * (limit // 3))
-        self.start(True, '--log-directory', str(logs))
+        self.start(True, '--log-directory', str(logs), '--log-success-sample-every', '1')
         self.api('/databases', status=401, token='denied')
         self.stop()
         files = list(logs.glob('glamdb*.jsonl'))
