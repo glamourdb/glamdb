@@ -111,6 +111,8 @@ Authlib/joserfc token verification
 with live introspection, and the official Cerbos SDK with YAML policies. SQLite
 stores database ownership, transactional audit, idempotent lifecycle receipts and
 unresolved backend write admissions; it stores no passwords or password hashes.
+The inherited Keycloak login theme in `deploy/access/keycloak-theme/` uses the
+unchanged Workbench PNGs and editable CSS tokens for native sign-in and required actions.
 Every list and direct database route uses current server-owned policy attributes.
 A strict transfer closes admission, waits for requests and streams, and requires
 terminal authoritative backend write outcomes before moving ownership. Unknown
