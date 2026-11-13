@@ -2,6 +2,7 @@
 #include "core/engine/storage_mapping.h"
 #include "storage/resources.h"
 #include "storage/write_session.h"
+#include "tests/support/checked.h"
 #include "tests/support/staging_fault_vfs.h"
 #include "tests/vertical/vertical_support.h"
 
@@ -121,7 +122,7 @@ TEST_F(WriteSession, CanonicalPartRetryIgnoresBatchBoundariesAndRejectsChanges)
     ASSERT_TRUE(original);
     auto split = Sessions->PutPart(ID,
         {3, 2, 1},
-        [rows, i = size_t{0}]() mutable -> Result<std::shared_ptr<arrow::RecordBatch>> {
+        [&rows, i = size_t{0}]() mutable -> Result<std::shared_ptr<arrow::RecordBatch>> {
             if (i == rows.size()) {
                 return nullptr;
             }
@@ -164,7 +165,7 @@ TEST_F(WriteSession, KvLastWinsUsesTaskPartAndRowOrderAcrossParts)
     auto outcome = Sessions->CommitWrite(id);
     ASSERT_TRUE(outcome);
     ASSERT_TRUE(outcome->result);
-    EXPECT_EQ(outcome->result->input_rows, 5);
+    EXPECT_EQ(test::Present(outcome->result).input_rows, 5);
     auto cursor = Store->Scan({.collection_id = SecondCollection});
     ASSERT_TRUE(cursor);
     auto next = (*cursor)->Next();
@@ -218,7 +219,7 @@ TEST_F(WriteSession, StalePreconditionIsPermanentAndCleanupPreservesReceipt)
     auto receipt = Sessions->GetWriteOutcome(ID);
     ASSERT_TRUE(receipt);
     ASSERT_TRUE(*receipt);
-    EXPECT_EQ(**receipt, *outcome);
+    EXPECT_EQ(test::Present(*receipt), *outcome);
     ASSERT_TRUE(Sessions->Cleanup());
     auto retry = Sessions->CommitWrite(ID);
     ASSERT_TRUE(retry);
@@ -367,7 +368,8 @@ namespace glamdb {
 namespace {
 TEST_F(WriteSession, ExpiredUnstartedSessionAbortsAndRetainsBeginIdentity)
 {
-    ASSERT_TRUE(Sessions->BeginWrite({ID, MutationKind::None, {}, std::chrono::seconds(1)}));
+    // Expiry is forced below; setup must not race the wall clock.
+    ASSERT_TRUE(Sessions->BeginWrite({ID, MutationKind::None, {}, std::chrono::minutes(10)}));
     ASSERT_TRUE(Sessions->PutPart(ID, {0, 0, 0}, Once({{"expired", 1, {}, {}, {}}})));
     // Adjust persisted wall-clock expiry as a deterministic expired-state fixture.
     Sessions.reset();
@@ -384,7 +386,7 @@ TEST_F(WriteSession, ExpiredUnstartedSessionAbortsAndRetainsBeginIdentity)
     auto part = Sessions->GetPartReceipt(ID, {0, 0, 0});
     ASSERT_TRUE(part);
     EXPECT_FALSE(*part);
-    auto begin = Sessions->BeginWrite({ID, MutationKind::None, {}, std::chrono::seconds(1)});
+    auto begin = Sessions->BeginWrite({ID, MutationKind::None, {}, std::chrono::minutes(10)});
     ASSERT_TRUE(begin);
     EXPECT_EQ(begin->State, EWriteState::Aborted);
     EXPECT_FALSE(Sessions->BeginWrite({ID}));
